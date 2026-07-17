@@ -1,0 +1,31 @@
+{
+  "name": "oh-my-exam-official-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync:databases": "python ../tools/sync_web_databases.py",
+    "predev": "npm run sync:databases",
+    "dev": "vite --host 0.0.0.0",
+    "predev:lan": "npm run sync:databases",
+    "dev:lan": "vite --host 0.0.0.0 --port 4173 --strictPort",
+    "prebuild": "npm run sync:databases",
+    "build": "vite build",
+    "test": "node --test src/services/cropGeometry.test.js src/services/device.test.js server/clientProxy.test.js",
+    "preview": "vite preview --host 127.0.0.1",
+    "preview:lan": "vite preview --host 0.0.0.0 --port 4173 --strictPort"
+  },
+  "dependencies": {
+    "@tesseract.js-data/eng": "^1.0.0",
+    "pdfjs-dist": "^5.4.624",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "sql.js": "^1.14.1",
+    "tesseract.js": "^7.0.0",
+    "undici": "^6.21.3"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  }
+}

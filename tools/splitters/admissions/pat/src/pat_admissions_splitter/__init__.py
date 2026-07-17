@@ -1,0 +1,1 @@
+"""PAT admissions paper splitter."""

@@ -1,0 +1,16 @@
+[project]
+name = "oh-my-exam-uat-admissions-splitter"
+version = "0.1.0"
+description = "ENGAA and NSAA question/answer-key geometry splitter for Oh-My-Exam."
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow>=10.0.0",
+    "PyMuPDF>=1.24.0",
+]
+
+[project.scripts]
+ome-uat-admissions-splitter = "uat_admissions_splitter.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

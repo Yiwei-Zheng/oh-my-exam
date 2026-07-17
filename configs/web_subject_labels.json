@@ -1,0 +1,20 @@
+{
+  "qualifications": {
+    "a_level": { "zh": "A Level", "en": "A Level" },
+    "admissions": { "zh": "大学入学考试", "en": "Admissions" }
+  },
+  "exam_boards": {
+    "cie": { "zh": "剑桥国际考试局（CIE）", "en": "Cambridge International (CIE)" },
+    "ocr": { "zh": "牛津剑桥和 RSA 考试局（OCR）", "en": "Oxford, Cambridge and RSA (OCR)" },
+    "pearson_vue": { "zh": "Pearson VUE", "en": "Pearson VUE" },
+    "uat": { "zh": "英国大学入学考试（UAT）", "en": "University Admissions Tests (UAT)" }
+  },
+  "courses": {
+    "9231": { "zh": "进阶数学 9231", "en": "Further Mathematics 9231" },
+    "9709": { "zh": "数学 9709", "en": "Mathematics 9709" },
+    "engaa": { "zh": "ENGAA 工程入学评估", "en": "ENGAA" },
+    "nsaa": { "zh": "NSAA 自然科学入学评估", "en": "NSAA" },
+    "pat": { "zh": "PAT 物理能力测试", "en": "PAT Physics Aptitude Test" },
+    "step": { "zh": "STEP 数学考试", "en": "STEP Mathematics" }
+  }
+}

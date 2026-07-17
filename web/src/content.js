@@ -1,0 +1,38 @@
+export const translations = {
+  zh: {
+    skip: '跳到主要内容', metaDescription: 'Oh My Exam 本地智能搜题：选科、识别题目并从真题数据库定位题目与答案。',
+    brand: { name: 'OH MY EXAM', homeLabel: 'Oh My Exam 首页' },
+    nav: { label: '主要导航', home: '首页', search: '搜题' },
+    home: { documentTitle: 'Oh My Exam｜Checkmate your exam', title: 'Oh My Exam', lead: '把每一张试卷，变成更清晰的下一步。', footer: '© 2026 OH MY EXAM', search: '搜题', searchHint: '从图片定位原题', paper: '组卷', paperHint: 'Start', openMenu: '打开功能菜单', closeMenu: '关闭功能菜单', transition: 'Checkmate your exam' },
+    start: { documentTitle: 'Start｜Oh My Exam', title: '组卷，从这里开始。', lead: '组卷功能仍在准备中。这个入口已经为下一步实现预留。', back: '返回首页' },
+    search: {
+      documentTitle: '搜题｜Oh My Exam', eyebrow: 'QUESTION FINDER / BETA', title: '从一张图片，回到原题。', lead: '先选择科目，再上传或拍摄题目。识别与匹配在你的设备上完成。', workspaceLabel: '搜题工作台', ready: '就绪',
+      subject: { title: '选择题库', qualificationLabel: 'Qualification', qualificationPlaceholder: '请选择 Qualification', examBoardLabel: '考试局', examBoardPlaceholder: '请选择考试局', courseLabel: '科目', coursePlaceholder: '请选择科目', helper: '请依次选择 Qualification、考试局与科目。', loading: '正在载入科目数据库…', loaded: '已载入 {subject}，共 {count} 道可检索题目。' },
+      upload: { title: '上传题目', button: '上传、拍照或粘贴图片', helper: '支持 JPG、PNG、WebP；手机端可选择相册或现场拍照，电脑端可粘贴图片。', previewAlt: '待识别的题目图片', sourceEyebrow: '图片来源', sourceTitle: '选择图片来源', sourceDescription: '从本地相册选择已有图片，或打开相机现场拍摄。', gallery: '从本地相册选择', galleryHint: '选择手机中已有的题目图片', camera: '现场拍照', cameraHint: '打开后置相机拍摄题目', cancel: '取消' },
+      submit: '识别并搜题',
+      empty: { title: '结果会显示在这里', body: '' },
+      matchesLabel: '匹配结果', matches: '候选结果', bestMatch: '最佳匹配', confidence: '匹配度', ocrText: '查看识别文字', question: '题目', answer: '答案', loadingPaper: '正在定位并载入原卷…', noQuestionCrop: '没有可用的题目坐标。', noAnswerCrop: '此题没有可配对的答案。', openQuestion: '在原卷中定位题目', openAnswer: '在原卷中定位答案',
+      noResults: { title: '暂时没有找到', body: '请让题干占据画面主体、减少阴影后再拍一次。' },
+      errors: { subjects: '无法读取科目列表。请先同步网页题库，并使用 npm run dev 启动（不要使用 Go Live）。', database: '科目数据库载入失败，请重试。', ocrEmpty: '没有识别到清晰的印刷文字，请重新拍摄。', search: '识别或匹配失败，请换一张更清晰的图片。', paper: '已找到题目，但原卷暂时无法下载或裁切，请重试。' },
+    },
+    sourcePdf: { documentTitle: '源 PDF 定位｜Oh My Exam', eyebrow: 'SOURCE PDF', title: '源 PDF 定位', question: '已定位到题目区域', answer: '已定位到答案区域', page: '第 {page} / {count} 页', previous: '上一页', next: '下一页', loading: '正在载入并定位源 PDF…', error: '无法打开源 PDF，请返回搜题页重试。', back: '返回搜题' },
+  },
+  en: {
+    skip: 'Skip to main content', metaDescription: 'Oh My Exam local question search: choose a subject, recognize a question, and locate the original paper and answer.',
+    brand: { name: 'OH MY EXAM', homeLabel: 'Oh My Exam home' },
+    nav: { label: 'Primary navigation', home: 'Home', search: 'Find a question' },
+    home: { documentTitle: 'Oh My Exam | Checkmate your exam', title: 'Oh My Exam', lead: 'Turn every paper into a clearer next move.', footer: '© 2026 OH MY EXAM', search: 'Search', searchHint: 'Find a question from an image', paper: 'Build', paperHint: 'Start', openMenu: 'Open action menu', closeMenu: 'Close action menu', transition: 'Checkmate your exam' },
+    start: { documentTitle: 'Start | Oh My Exam', title: 'Paper building starts here.', lead: 'The paper builder is still in preparation. This entry is reserved for the next release.', back: 'Back home' },
+    search: {
+      documentTitle: 'Question finder | Oh My Exam', eyebrow: 'QUESTION FINDER / BETA', title: 'From one image, back to the source.', lead: 'Choose a subject, then upload or capture a question. Recognition and matching run on your device.', workspaceLabel: 'Question search workspace', ready: 'Ready',
+      subject: { title: 'Choose a database', qualificationLabel: 'Qualification', qualificationPlaceholder: 'Select a qualification', examBoardLabel: 'Exam board', examBoardPlaceholder: 'Select an exam board', courseLabel: 'Subject', coursePlaceholder: 'Select a subject', helper: 'Choose a qualification, exam board, then subject.', loading: 'Loading subject database…', loaded: '{subject} loaded with {count} searchable questions.' },
+      upload: { title: 'Upload a question', button: 'Upload, capture or paste a photo', helper: 'JPG, PNG or WebP. On mobile, choose your library or camera; on desktop, you can also paste.', previewAlt: 'Question image ready for recognition', sourceEyebrow: 'Image source', sourceTitle: 'Choose an image source', sourceDescription: 'Select an existing image from your library or open the camera to capture one now.', gallery: 'Choose from library', galleryHint: 'Select an existing question image', camera: 'Take a photo', cameraHint: 'Open the rear camera to capture the question', cancel: 'Cancel' },
+      submit: 'Recognize and search',
+      empty: { title: 'Your result will appear here', body: '' },
+      matchesLabel: 'Matched questions', matches: 'Candidates', bestMatch: 'Best match', confidence: 'match', ocrText: 'View recognized text', question: 'Question', answer: 'Answer', loadingPaper: 'Locating and loading the source paper…', noQuestionCrop: 'No question crop is available.', noAnswerCrop: 'No matching answer is available for this item.', openQuestion: 'Locate in question paper', openAnswer: 'Locate in mark scheme',
+      noResults: { title: 'No close match yet', body: 'Fill the frame with the printed question, reduce shadows, and try again.' },
+      errors: { subjects: 'Could not read the subject list. Sync the web databases, then use npm run dev (not Go Live).', database: 'The subject database could not be loaded. Please retry.', ocrEmpty: 'No clear printed text was recognized. Please capture the question again.', search: 'Recognition or matching failed. Try a clearer image.', paper: 'The match was found, but the source paper could not be downloaded or cropped. Please retry.' },
+    },
+    sourcePdf: { documentTitle: 'Source PDF | Oh My Exam', eyebrow: 'SOURCE PDF', title: 'Source PDF location', question: 'Located at the question region', answer: 'Located at the answer region', page: 'Page {page} / {count}', previous: 'Previous', next: 'Next', loading: 'Loading and locating the source PDF…', error: 'The source PDF could not be opened. Return to search and try again.', back: 'Back to search' },
+  },
+};

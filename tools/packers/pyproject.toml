@@ -1,0 +1,15 @@
+[project]
+name = "oh-my-exam-metadata-packer"
+version = "0.1.0"
+description = "Package Oh-My-Exam splitter metadata into per-subject SQLite databases."
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+gui = [
+    "flet>=0.25.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
