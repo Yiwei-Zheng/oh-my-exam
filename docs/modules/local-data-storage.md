@@ -42,6 +42,8 @@ Runtime data and local persistence boundaries.
 ## Database Rule
 
 - SQLite is the local database default.
-- Do not require a global database service for local processing.
+- Do not require a global database service for local processing tools.
 - Schema changes must be upgradeable through migrations.
 - Schema design must remain normalized.
+- PostgreSQL is the target database for the hosted multi-user service. This does
+  not change SQLite ownership for local tools and portable subject packages.

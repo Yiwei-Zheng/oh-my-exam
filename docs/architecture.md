@@ -34,20 +34,26 @@ Stable repository-level architecture for Oh-My-Exam.
 
 ## Project Goal
 
-Oh-My-Exam is a local-first exam question search, marking, and paper-generation project.
+Oh-My-Exam is a hosted, multi-user exam question search, tutoring, marking, and
+paper-generation project. Its initial product focus is admissions tests,
+especially ENGAA, NSAA, TMUA, and STEP.
 
-The repository must support multiple exam types, exam boards, subjects, and tools without forcing their details into global documents or shared code.
+The repository must support multiple exam types, exam boards, subjects, and
+tools without forcing their details into global documents or shared code.
+Local processing remains supported, but the hosted service is the authority for
+user state and published catalog data.
 
 ## Top-Level Boundaries
 
 - `tools/`: local processing tools, grouped by responsibility, qualification, and exam board.
 - `tools/shared/`: small tool-neutral helper packages used by multiple local tools.
 - `tools/packers/`: local packers that convert processed public metadata into portable subject databases.
+- `server/`: hosted API, service adapters, and future multi-user application persistence.
 - `configs/`: source-controlled configuration and manifests.
 - `resources/`: source-controlled external metadata and reference resources.
 - `data/`: runtime output and local generated state.
 - `docs/`: agent-facing project documentation.
-- `web/`: primary React/Vite end-user client, official website, and local-first question-search surface for desktop and mobile browsers.
+- `web/`: primary React/Vite end-user client and official website for desktop and mobile browsers.
 - `temp/`: user scratch input only. Project code must not depend on it.
 - `tmp/`: temporary local runtime files.
 
@@ -69,11 +75,16 @@ The repository must support multiple exam types, exam boards, subjects, and tool
 - Classifiers/taggers annotate processed questions.
 - Storage code persists normalized local data.
 - Packers convert processed question metadata into compact per-subject runtime databases for search and PDF recropping, including exact per-document source URLs.
-- Clients consume public interfaces or portable subject packages, not Python tool internals.
-- The website may load a selected portable subject SQLite package in a Web Worker.
-  OCR, matching, and PDF crop replay stay in standalone client services rather
-  than React components. A replaceable HTTP API remains the boundary for future
-  hosted search, accounts, marking, and protected data.
+- The server may import portable subject packages, but must not import downloader
+  or splitter internals.
+- Clients consume versioned HTTP APIs and must not import server or Python tool internals.
+- Portable SQLite packages remain valid import/export and optional offline assets;
+  they are not the hosted multi-user source of truth.
+- The website may temporarily load a selected portable subject SQLite package in
+  a Web Worker during migration. New accounts, progress, marking, AI, protected
+  PDFs, and hosted search must use the server API.
+- OCR, matching, and PDF crop replay remain standalone services rather than React
+  component logic, regardless of whether they run in the browser or server.
 
 ## Forbidden Coupling
 
@@ -85,6 +96,10 @@ The repository must support multiple exam types, exam boards, subjects, and tool
 - Runtime output must not be treated as source configuration.
 - Website code must not import Python tool internals. It may consume documented,
   portable per-subject database packages through the runtime asset boundary.
+- Website code must not connect directly to the hosted database, object store,
+  RAGFlow, or model providers.
+- RAGFlow and language models must not become authoritative stores for exam data,
+  permissions, user state, or citations.
 - No scripts, source files, or project docs may be placed in `.venv/` or `tools/.venv/`.
 
 ## Directory Responsibilities
@@ -101,7 +116,24 @@ The repository must support multiple exam types, exam boards, subjects, and tool
 - `data/reports/`: runtime reports.
 - `data/databases/`: generated per-subject SQLite databases.
 - `data/*.sqlite3`: local databases.
+- `server/`: versioned hosted API and adapters for catalog, identity, paper
+  storage, retrieval, language models, and deterministic math tools.
 - `web/`: bilingual responsive marketing and local question-search surface. It
-  owns browser adapters and client-side search services, while reusable source
-  processing remains under `tools/`. It is the maintained end-user client for
-  phone, tablet, and desktop form factors.
+  owns browser adapters and presentation services, while reusable source
+  processing remains under `tools/` and hosted business logic remains under
+  `server/`. It is the maintained end-user client for phone, tablet, and desktop.
+
+## Hosted Runtime Direction
+
+- Start as a modular monolith rather than independent business microservices.
+- PostgreSQL will own normalized published catalog data, users, attempts,
+  progress, conversations, citations, and usage records.
+- Original PDFs are server-owned assets behind a `PaperStore` boundary. Local
+  filesystem storage is supported for development; production targets an
+  S3-compatible object store.
+- API requests identify papers by internal ids. The server must never act as an
+  unrestricted proxy for a client-supplied URL.
+- RAGFlow is a replaceable retrieval adapter. DeepSeek is a replaceable model
+  adapter. Both are called only from the server.
+- Mathematical tools run through typed, restricted contracts in an isolated
+  execution environment. Model-generated arbitrary code is not executed.
