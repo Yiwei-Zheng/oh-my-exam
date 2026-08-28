@@ -8,7 +8,18 @@ describe('frontend environment', () => {
     expect(i18n.global.availableLocales).toEqual(['en', 'zh-CN'])
   })
 
-  it('does not define product routes before the website is designed', () => {
-    expect(router.getRoutes()).toEqual([])
+  it('registers the homepage and not-found routes', () => {
+    expect(
+      router.getRoutes().map(({ name, path }) => ({
+        name,
+        path,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { name: 'home', path: '/' },
+        { name: 'not-found', path: '/:pathMatch(.*)*' },
+      ]),
+    )
+    expect(router.getRoutes()).toHaveLength(2)
   })
 })

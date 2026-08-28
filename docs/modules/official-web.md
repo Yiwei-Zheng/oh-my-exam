@@ -9,9 +9,17 @@ only through versioned HTTP APIs.
 ## Current state
 
 The previous React website and browser-side SQLite, OCR, matching, PDF rendering,
-and source-URL proxy implementation have been removed. The repository currently
-contains an intentionally empty Vue application environment; no replacement
-product page or business workflow is implemented yet.
+and source-URL proxy implementation have been removed. The Vue application now
+contains a bilingual promotional homepage and branded not-found page. The
+homepage is intentionally a product statement rather than an application entry:
+it does not expose registration, authentication, search, marking, or other
+unfinished workflows. The long-term requirement for a clear question-search
+entry remains outstanding until that workflow is implemented.
+
+The homepage supports system-aware light and dark themes, persistent language and
+theme preferences, an optional session intro, reduced-motion fallbacks, and
+keyboard controls for pausing or replaying motion. Its event-horizon artwork is
+generated with SVG and CSS rather than bundled reference imagery or WebGL.
 
 The backend exposes question-level PDF routes at
 `/api/v1/exams/{exam_id}/questions/{question_id}/{question|answer}.pdf`. The
@@ -30,6 +38,8 @@ viewing.
 - Vitest, Vue Test Utils, ESLint, vue-tsc, and Prettier for quality checks.
 - Vite proxies `/api` to `http://127.0.0.1:8000` by default. Override the target
   with `VITE_API_PROXY_TARGET`.
+- Production hosting must rewrite unknown browser paths to `index.html` so Vue
+  Router can render the branded not-found route on direct visits.
 
 Dependencies install into `web/frontend/node_modules/`. The project `.npmrc`
 places npm cache under `web/frontend/.npm-cache/`; global package installation is
@@ -45,6 +55,12 @@ not part of the workflow. `.node-version` pins the expected Node runtime.
 - Frontend modules must not import backend or Python tool internals.
 - The browser must not connect directly to PostgreSQL, object storage, retrieval,
   or model providers.
+- Analytics is disabled. If a provider is selected later, integrate it behind a
+  provider-neutral boundary in the application shell only after its event model,
+  consent requirements, data retention, and privacy documentation are approved.
+  Do not place provider calls inside feature components.
+- Brand, hero, and academic orbit copy intentionally remains English across both
+  locales and is centralized under `src/i18n/invariantContent.ts`.
 
 ## Verification
 
