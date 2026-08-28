@@ -4,6 +4,7 @@ from pathlib import Path
 import sqlite3
 
 from fastapi.testclient import TestClient
+import pymupdf
 
 from oh_my_exam_server.config import Settings
 from oh_my_exam_server.main import create_app
@@ -36,7 +37,8 @@ def _create_subject_database(path: Path) -> None:
                 x0 REAL, y0 REAL, x1 REAL, y1 REAL, render_dpi INTEGER, join_gap_px INTEGER,
                 post_left INTEGER, post_top INTEGER, post_right INTEGER, post_bottom INTEGER
             );
-            INSERT INTO crop_regions VALUES (7, 0, 0, 1, 1, 2, 3, 4, 180, 0, NULL, NULL, NULL, NULL);
+            INSERT INTO crop_regions VALUES (7, 0, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
+            INSERT INTO crop_regions VALUES (7, 1, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
             """
         )
 
@@ -46,10 +48,20 @@ def _client(tmp_path: Path) -> TestClient:
     paper_root = tmp_path / "raw_papers"
     _create_subject_database(database_root / "admissions" / "uat" / "uat_admissions_engaa.sqlite")
     paper_root.mkdir(parents=True)
-    (paper_root / "engaa_2023_s1_qp.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
-    (paper_root / "engaa_2023_s1_ms.pdf").write_bytes(b"%PDF-1.4\n%%EOF\n")
+    _write_pdf(paper_root / "engaa_2023_s1_qp.pdf", "Question page", "Find the acceleration")
+    _write_pdf(paper_root / "engaa_2023_s1_ms.pdf", "Answer page", "Acceleration is 2")
     settings = Settings(tmp_path, database_root, paper_root)
     return TestClient(create_app(settings))
+
+
+def _write_pdf(path: Path, first_page: str, second_page: str) -> None:
+    document = pymupdf.open()
+    try:
+        document.new_page(width=200, height=100).insert_text((10, 20), first_page)
+        document.new_page(width=200, height=100).insert_text((10, 20), second_page)
+        document.save(path)
+    finally:
+        document.close()
 
 
 def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
@@ -67,6 +79,21 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     question = client.get("/api/v1/exams/admissions:uat:engaa/questions/7")
     assert question.status_code == 200
     assert question.json()["crop_regions"][0]["render_dpi"] == 180
+
+    question_pdf = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/question.pdf")
+    assert question_pdf.status_code == 200
+    assert question_pdf.headers["content-type"] == "application/pdf"
+    assert question_pdf.headers["content-disposition"] == 'inline; filename="engaa_2023_s1_qp_q07.pdf"'
+    with pymupdf.open(stream=question_pdf.content, filetype="pdf") as cropped:
+        assert cropped.page_count == 1
+        assert cropped[0].rect.width == 200
+        assert cropped[0].rect.height == 50
+        assert "Find the acceleration" in cropped[0].get_text()
+
+    answer_pdf = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/answer.pdf")
+    assert answer_pdf.status_code == 200
+    with pymupdf.open(stream=answer_pdf.content, filetype="pdf") as cropped:
+        assert "Acceleration is 2" in cropped[0].get_text()
 
     paper = client.get("/api/v1/exams/admissions:uat:engaa/papers/1/question")
     assert paper.status_code == 200

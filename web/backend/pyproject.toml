@@ -9,6 +9,7 @@ description = "Hosted API for the Oh-My-Exam question bank"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115,<1",
+  "pymupdf>=1.24,<2",
   "uvicorn[standard]>=0.30,<1",
 ]
 

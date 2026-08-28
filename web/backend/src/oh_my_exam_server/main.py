@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from .catalog import CatalogNotFoundError, SubjectCatalog
 from .config import Settings
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
+from .question_document import QuestionDocumentError, crop_question_pdf
 
 
 class PlaceholderRequest(BaseModel):
@@ -73,6 +74,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return catalog.get_question(exam_id, question_id)
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/{kind}.pdf")
+    def get_question_pdf(exam_id: str, question_id: int, kind: str) -> Response:
+        try:
+            document = catalog.get_question_document(exam_id, question_id, kind)
+            source_path = papers.find_by_stem(document.stem)
+            content = crop_question_pdf(source_path, document.crop_regions)
+        except (CatalogNotFoundError, PaperNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QuestionDocumentError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{document.filename}"',
+                "Cache-Control": "private, max-age=3600",
+            },
+        )
 
     @app.get("/api/v1/exams/{exam_id}/papers/{paper_id}/{kind}")
     def get_paper(exam_id: str, paper_id: int, kind: str) -> FileResponse:

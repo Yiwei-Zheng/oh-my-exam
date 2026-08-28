@@ -13,6 +13,14 @@ and source-URL proxy implementation have been removed. The repository currently
 contains an intentionally empty Vue application environment; no replacement
 product page or business workflow is implemented yet.
 
+The backend exposes question-level PDF routes at
+`/api/v1/exams/{exam_id}/questions/{question_id}/{question|answer}.pdf`. The
+server resolves the source paper by internal catalog identity and returns only
+the recorded crop regions as a compact vector PDF. Clients do not receive an
+upstream URL or need to download the complete source paper to display one
+question. The full-paper endpoint remains available for explicit source-paper
+viewing.
+
 ## Toolchain
 
 - Vue 3 with TypeScript and Vite.

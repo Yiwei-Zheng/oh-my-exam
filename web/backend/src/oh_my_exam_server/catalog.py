@@ -19,6 +19,13 @@ class CatalogNotFoundError(LookupError):
     pass
 
 
+@dataclass(frozen=True)
+class QuestionDocument:
+    stem: str
+    filename: str
+    crop_regions: tuple[dict[str, object], ...]
+
+
 class SubjectCatalog:
     """Read-only adapter over the existing portable subject databases."""
 
@@ -108,6 +115,44 @@ class SubjectCatalog:
         if row is None or not row[0]:
             raise CatalogNotFoundError(f"paper not found: {paper_id}")
         return str(row[0])
+
+    def get_question_document(self, exam_id: str, question_id: int, kind: str) -> QuestionDocument:
+        if kind not in {"question", "answer"}:
+            raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
+        database = self.get_exam(exam_id)
+        source_type = 0 if kind == "question" else 1
+        stem_column = "p.qp_stem" if kind == "question" else "p.ms_stem"
+        with self._connect(database) as connection:
+            question = connection.execute(
+                f"""
+                SELECT q.local_question_key, {stem_column} AS stem
+                FROM questions q
+                JOIN papers p ON p.id = q.paper_id
+                WHERE q.id = ?
+                """,
+                (question_id,),
+            ).fetchone()
+            if question is None or not question["stem"]:
+                raise CatalogNotFoundError(f"question document not found: {question_id}/{kind}")
+            regions = connection.execute(
+                """
+                SELECT region_order, page_index, x0, y0, x1, y1, render_dpi,
+                       post_left, post_top, post_right, post_bottom
+                FROM crop_regions
+                WHERE question_id = ? AND source_type = ?
+                ORDER BY region_order
+                """,
+                (question_id, source_type),
+            ).fetchall()
+        if not regions:
+            raise CatalogNotFoundError(f"question crop regions not found: {question_id}/{kind}")
+        stem = str(question["stem"])
+        local_key = str(question["local_question_key"])
+        return QuestionDocument(
+            stem=stem,
+            filename=f"{stem}_{local_key}.pdf",
+            crop_regions=tuple(dict(region) for region in regions),
+        )
 
     def get_exam(self, exam_id: str) -> ExamDatabase:
         for database in self._scan():
