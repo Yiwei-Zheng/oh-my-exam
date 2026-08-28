@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "sync:databases": "python ../tools/sync_web_databases.py",
+    "sync:databases": "python ../../tools/sync_web_databases.py",
     "predev": "npm run sync:databases",
     "dev": "vite --host 0.0.0.0",
     "predev:lan": "npm run sync:databases",

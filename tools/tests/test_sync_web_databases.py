@@ -25,7 +25,7 @@ def _database(path: Path, qualification: str, exam_board: str, course_code: str)
 
 def test_sync_databases_copies_assets_writes_manifest_and_removes_stale_files(tmp_path: Path) -> None:
     source = tmp_path / "data" / "databases"
-    runtime = tmp_path / "web" / "public" / "runtime"
+    runtime = tmp_path / "web" / "frontend" / "public" / "runtime"
     labels = tmp_path / "labels.json"
     labels.write_text(
         json.dumps({

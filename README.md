@@ -4,7 +4,7 @@ This repository is starting with the local exam paper processing pipeline.
 
 ## Hosted API
 
-The first hosted server slice lives in `server/`. It exposes the existing
+The first hosted server slice lives in `web/backend/`. It exposes the existing
 admissions-test subject packages through a read-only API and serves locally
 retained PDFs by internal exam and paper ids. Authentication, PostgreSQL,
 RAGFlow/DeepSeek, and the deterministic math harness currently return explicit
@@ -13,9 +13,9 @@ placeholder capability states rather than pretending to be available.
 Create a separate environment and run the API from the repository root:
 
 ```powershell
-python -m venv server\.venv
-server\.venv\Scripts\python -m pip install -e .\server[test]
-server\.venv\Scripts\python -m uvicorn oh_my_exam_server.main:app --reload --host 127.0.0.1 --port 8000
+python -m venv web\backend\.venv
+web\backend\.venv\Scripts\python -m pip install -e .\web\backend[test]
+web\backend\.venv\Scripts\python -m uvicorn oh_my_exam_server.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Useful endpoints:
@@ -31,13 +31,15 @@ authentication is still a documented placeholder.
 
 ## Official Web
 
-The bilingual responsive product and question-search client lives in `web/`.
+The bilingual responsive product and question-search client lives in
+`web/frontend/`. The hosted API is its sibling under `web/backend/`; the two
+communicate only through versioned HTTP APIs.
 It uses React/Vite, loads portable subject databases on demand, and performs
 image OCR and question matching locally in the browser. Automatic marking and
 paper generation remain future capabilities.
 
 ```powershell
-Set-Location web
+Set-Location web\frontend
 npm install
 npm run dev
 ```

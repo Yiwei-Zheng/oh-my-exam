@@ -8,7 +8,7 @@ import { Agent, ProxyAgent, fetch as fetchWithProxySupport } from 'undici';
 import { resolveClientProxyUrl } from './server/clientProxy.js';
 
 const webRoot = dirname(fileURLToPath(import.meta.url));
-const projectRoot = resolve(webRoot, '..');
+const projectRoot = resolve(webRoot, '../..');
 const videoPath = join(projectRoot, 'assets', 'web', 'background_video', '1783750570912_clean_temporal_2x.mp4');
 const databaseRoot = join(projectRoot, 'data', 'databases');
 const subjectLabels = JSON.parse(readFileSync(join(projectRoot, 'configs', 'web_subject_labels.json'), 'utf8'));

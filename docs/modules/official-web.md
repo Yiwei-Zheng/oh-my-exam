@@ -2,7 +2,7 @@
 
 ## Scope
 
-`web/` owns the bilingual responsive website and the browser adapters needed for local question search.
+`web/frontend/` owns the bilingual responsive website and the browser adapters needed for local question search. Its sibling `web/backend/` owns the hosted API; the frontend consumes that backend only through versioned HTTP APIs.
 
 ## User flow
 
@@ -27,7 +27,7 @@
 
 ## Runtime assets
 
-`tools/sync_web_databases.py` validates `data/databases/**/*.sqlite`, copies current subject packages into the ignored `web/public/runtime/databases/` directory, removes stale copies, and atomically regenerates `subjects.json`. Development and production build commands run this sync automatically. Subject labels are configured in `configs/web_subject_labels.json`; generated runtime files are not source configuration.
+`tools/sync_web_databases.py` validates `data/databases/**/*.sqlite`, copies current subject packages into the ignored `web/frontend/public/runtime/databases/` directory, removes stale copies, and atomically regenerates `subjects.json`. Development and production build commands run this sync automatically. Subject labels are configured in `configs/web_subject_labels.json`; generated runtime files are not source configuration.
 
 The production build copies `assets/web/background_video/1783750570912_clean_temporal_2x.mp4` unchanged to `runtime/hero-video.mp4`, and includes the synchronized subject databases, SQLite WASM, PDF worker, and local English OCR runtime/model files. OCR and PDF modules are route/action split so the landing page does not load them.
 

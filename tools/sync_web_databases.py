@@ -14,7 +14,7 @@ from typing import Sequence
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = PROJECT_ROOT / "data" / "databases"
-DEFAULT_RUNTIME = PROJECT_ROOT / "web" / "public" / "runtime"
+DEFAULT_RUNTIME = PROJECT_ROOT / "web" / "frontend" / "public" / "runtime"
 DEFAULT_LABELS = PROJECT_ROOT / "configs" / "web_subject_labels.json"
 
 MESSAGES = {

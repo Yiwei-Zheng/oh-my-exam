@@ -48,12 +48,13 @@ user state and published catalog data.
 - `tools/`: local processing tools, grouped by responsibility, qualification, and exam board.
 - `tools/shared/`: small tool-neutral helper packages used by multiple local tools.
 - `tools/packers/`: local packers that convert processed public metadata into portable subject databases.
-- `server/`: hosted API, service adapters, and future multi-user application persistence.
+- `web/backend/`: hosted API, service adapters, and future multi-user application persistence.
 - `configs/`: source-controlled configuration and manifests.
 - `resources/`: source-controlled external metadata and reference resources.
 - `data/`: runtime output and local generated state.
 - `docs/`: agent-facing project documentation.
-- `web/`: primary React/Vite end-user client and official website for desktop and mobile browsers.
+- `web/`: web product boundary containing sibling frontend and backend applications.
+- `web/frontend/`: primary browser client and official website for desktop and mobile browsers. Its framework is an implementation choice, not a backend boundary.
 - `temp/`: user scratch input only. Project code must not depend on it.
 - `tmp/`: temporary local runtime files.
 
@@ -116,12 +117,15 @@ user state and published catalog data.
 - `data/reports/`: runtime reports.
 - `data/databases/`: generated per-subject SQLite databases.
 - `data/*.sqlite3`: local databases.
-- `server/`: versioned hosted API and adapters for catalog, identity, paper
+- `web/backend/`: versioned hosted API and adapters for catalog, identity, paper
   storage, retrieval, language models, and deterministic math tools.
-- `web/`: bilingual responsive marketing and local question-search surface. It
+- `web/frontend/`: bilingual responsive marketing and local question-search surface. It
   owns browser adapters and presentation services, while reusable source
   processing remains under `tools/` and hosted business logic remains under
-  `server/`. It is the maintained end-user client for phone, tablet, and desktop.
+  `web/backend/`. It is the maintained end-user client for phone, tablet, and desktop.
+- `web/frontend/` and `web/backend/` are sibling applications. Neither is nested
+  inside or imported by the other; deployment topology does not change this
+  source boundary.
 
 ## Hosted Runtime Direction
 
