@@ -13,7 +13,7 @@ const emit = defineEmits<{
   complete: []
 }>()
 
-type IntroPhase = 'glitch' | 'flight' | 'formation'
+type IntroPhase = 'glitch' | 'flight' | 'morph' | 'formation'
 
 const { t } = useI18n()
 const phase = ref<IntroPhase>('glitch')
@@ -72,7 +72,7 @@ async function flyOriginToTarget() {
   const target = document.getElementById(props.targetId)
 
   if (!origin || !target) {
-    await wait(1150)
+    await wait(1050)
     return
   }
 
@@ -91,22 +91,22 @@ async function flyOriginToTarget() {
     (targetBounds.width / Math.max(originBounds.width, 1)) * 0.74,
   )
   const arcLift = Math.min(96, Math.max(40, window.innerHeight * 0.085))
-  const middleScale = 1 + (targetScale - 1) * 0.48
+  const middleScale = 1 + (targetScale - 1) * 0.44
 
   flightAnimation = origin.animate(
     [
       { offset: 0, transform: 'translate3d(0, 0, 0) scale(1)' },
       {
-        offset: 0.14,
-        transform: `translate3d(${deltaX * -0.035}px, ${deltaY * -0.025}px, 0) scale(0.96)`,
+        offset: 0.12,
+        transform: `translate3d(${deltaX * -0.025}px, ${deltaY * -0.02}px, 0) scale(0.97)`,
       },
       {
-        offset: 0.5,
-        transform: `translate3d(${deltaX * 0.48}px, ${deltaY * 0.48 - arcLift}px, 0) scale(${middleScale})`,
+        offset: 0.46,
+        transform: `translate3d(${deltaX * 0.46}px, ${deltaY * 0.46 - arcLift}px, 0) scale(${middleScale})`,
       },
       {
         offset: 0.82,
-        transform: `translate3d(${deltaX * 0.9}px, ${deltaY * 0.9 - arcLift * 0.24}px, 0) scale(${targetScale * 1.04})`,
+        transform: `translate3d(${deltaX * 0.88}px, ${deltaY * 0.88 - arcLift * 0.18}px, 0) scale(${targetScale * 0.88})`,
       },
       {
         offset: 1,
@@ -114,8 +114,8 @@ async function flyOriginToTarget() {
       },
     ],
     {
-      duration: 1150,
-      easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      duration: 1050,
+      easing: 'cubic-bezier(0.22, 0.75, 0.2, 1)',
       fill: 'forwards',
     },
   )
@@ -135,9 +135,11 @@ async function play() {
     return
   }
 
-  phase.value = 'formation'
+  phase.value = 'morph'
   emit('formation')
-  await wait(1200)
+  await wait(420)
+  phase.value = 'formation'
+  await wait(650)
   finish()
 }
 
@@ -294,7 +296,7 @@ onBeforeUnmount(() => {
 
 .intro__letter {
   display: inline-block;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
 }
 
 .intro__letter--origin {
@@ -303,30 +305,74 @@ onBeforeUnmount(() => {
   transform-origin: center;
 }
 
+.intro__letter--origin::after {
+  position: absolute;
+  top: 50%;
+  left: 45%;
+  width: 0.7em;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 43% 38%,
+    #111522 0,
+    #050609 58%,
+    #000 100%
+  );
+  box-shadow:
+    0 0 0 0.055em #c9e8ff,
+    0 0 0.14em 0.08em rgb(201 232 255 / 82%),
+    0 0 0.24em 0.12em rgb(255 184 110 / 55%);
+  content: '';
+  opacity: 0;
+  transform: translate3d(-50%, -50%, 0) scale(0.12);
+  transition:
+    opacity 180ms ease,
+    transform 420ms var(--ease-out-expo);
+}
+
 .intro--flight .intro__letter--fading {
   opacity: 0;
-  filter: blur(7px);
   transform: translate3d(22px, 0, 0);
   transition:
     opacity 220ms ease-in,
-    filter 260ms ease-in,
     transform 260ms ease-in;
 }
 
-.intro--flight .intro__line--main {
+.intro--flight .intro__line--main,
+.intro--morph .intro__line--main,
+.intro--formation .intro__line--main {
   clip-path: none;
   transform: none;
   animation: none;
 }
 
-.intro--flight .intro__line--replica {
+.intro--flight .intro__line--replica,
+.intro--morph .intro__line--replica,
+.intro--formation .intro__line--replica {
   opacity: 0 !important;
+}
+
+.intro--morph .intro__letter--fading,
+.intro--formation .intro__letter--fading {
+  opacity: 0;
+}
+
+.intro--morph .intro__letter--origin,
+.intro--formation .intro__letter--origin {
+  color: transparent;
+  transition: color 260ms ease;
+}
+
+.intro--morph .intro__letter--origin::after,
+.intro--formation .intro__letter--origin::after {
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale(1);
 }
 
 .intro--formation {
   pointer-events: none;
   opacity: 0;
-  transition: opacity 900ms var(--ease-out-expo);
+  transition: opacity 650ms var(--ease-out-expo);
 }
 
 .intro--formation .intro__skip {

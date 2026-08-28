@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
 
 import { BRAND_NAME } from '@/i18n/invariantContent'
-import { useLocale } from '@/shared/composables/useLocale'
+import { useLocale, type SupportedLocale } from '@/shared/composables/useLocale'
 import { useTheme } from '@/shared/composables/useTheme'
 
 withDefaults(
@@ -14,30 +14,66 @@ withDefaults(
     paused?: boolean
     hidden?: boolean
   }>(),
-  {
-    showReplay: true,
-    showPause: true,
-    paused: false,
-    hidden: false,
-  },
+  { showReplay: true, showPause: true, paused: false, hidden: false },
 )
 
-const emit = defineEmits<{
-  replay: []
-  'toggle-pause': []
-}>()
-
+const emit = defineEmits<{ replay: []; 'toggle-pause': [] }>()
 const { t } = useI18n({ useScope: 'global' })
-const { isChinese, toggleLocale } = useLocale()
+const { locale, setLocale } = useLocale()
 const { isDark, toggleTheme } = useTheme()
+const localeMenuOpen = ref(false)
+const localePicker = ref<HTMLElement>()
+const localeTrigger = ref<HTMLButtonElement>()
 
 const themeLabel = computed(() =>
   isDark.value ? t('controls.useLightTheme') : t('controls.useDarkTheme'),
 )
 
-function handleThemeToggle(event: MouseEvent) {
-  void toggleTheme({ x: event.clientX, y: event.clientY })
+function toggleLocaleMenu() {
+  localeMenuOpen.value = !localeMenuOpen.value
 }
+
+function chooseLocale(nextLocale: SupportedLocale) {
+  setLocale(nextLocale)
+  localeMenuOpen.value = false
+  void nextTick(() => localeTrigger.value?.focus())
+}
+
+function focusFirstLocale() {
+  void nextTick(() => {
+    localePicker.value
+      ?.querySelector<HTMLButtonElement>('[role="menuitemradio"]')
+      ?.focus()
+  })
+}
+
+function openLocaleMenuFromKeyboard() {
+  localeMenuOpen.value = true
+  focusFirstLocale()
+}
+
+function handleDocumentPointerDown(event: PointerEvent) {
+  if (!localePicker.value?.contains(event.target as Node)) {
+    localeMenuOpen.value = false
+  }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && localeMenuOpen.value) {
+    localeMenuOpen.value = false
+    localeTrigger.value?.focus()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown)
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown)
+  document.removeEventListener('keydown', handleKeydown)
+})
 </script>
 
 <template>
@@ -53,30 +89,81 @@ function handleThemeToggle(event: MouseEvent) {
     </RouterLink>
 
     <div class="site-header__controls">
-      <button
-        class="site-header__control site-header__locale"
-        type="button"
-        :title="t('controls.switchLanguage')"
-        :aria-label="t('controls.switchLanguage')"
-        @click="toggleLocale"
+      <div
+        ref="localePicker"
+        class="site-header__locale-picker"
       >
-        <span
-          lang="zh-CN"
-          :class="{ 'is-active': isChinese }"
-        >中</span>
-        <span aria-hidden="true">/</span>
-        <span
-          lang="en"
-          :class="{ 'is-active': !isChinese }"
-        >EN</span>
-      </button>
+        <button
+          ref="localeTrigger"
+          class="site-header__control"
+          type="button"
+          aria-haspopup="menu"
+          aria-controls="language-menu"
+          :aria-expanded="localeMenuOpen"
+          :title="t('controls.chooseLanguage')"
+          :aria-label="t('controls.chooseLanguage')"
+          @click="toggleLocaleMenu"
+          @keydown.down.prevent="openLocaleMenuFromKeyboard"
+        >
+          <svg
+            class="site-header__icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            aria-hidden="true"
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="9"
+            />
+            <path
+              d="M3 12h18M12 3c2.5 2.5 3.6 5.5 3.6 9S14.5 18.5 12 21M12 3c-2.5 2.5-3.6 5.5-3.6 9S9.5 18.5 12 21"
+            />
+          </svg>
+        </button>
+
+        <Transition name="locale-menu">
+          <div
+            v-if="localeMenuOpen"
+            id="language-menu"
+            class="site-header__locale-menu"
+            role="menu"
+            :aria-label="t('controls.chooseLanguage')"
+          >
+            <button
+              v-for="option in [
+                ['zh-CN', t('controls.languageChinese')],
+                ['en', t('controls.languageEnglish')],
+              ] as const"
+              :key="option[0]"
+              class="site-header__locale-option"
+              :class="{ 'is-selected': locale === option[0] }"
+              type="button"
+              role="menuitemradio"
+              :aria-checked="locale === option[0]"
+              @click="chooseLocale(option[0])"
+            >
+              <span>{{ option[1] }}</span>
+              <svg
+                v-if="locale === option[0]"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path d="m3 8 3 3 7-7" />
+              </svg>
+            </button>
+          </div>
+        </Transition>
+      </div>
 
       <button
         class="site-header__control"
         type="button"
         :title="themeLabel"
         :aria-label="themeLabel"
-        @click="handleThemeToggle"
+        @click="toggleTheme()"
       >
         <svg
           v-if="isDark"
@@ -86,9 +173,7 @@ function handleThemeToggle(event: MouseEvent) {
           stroke="currentColor"
           stroke-width="1.7"
           stroke-linecap="round"
-          stroke-linejoin="round"
           aria-hidden="true"
-          focusable="false"
         >
           <circle
             cx="12"
@@ -109,7 +194,6 @@ function handleThemeToggle(event: MouseEvent) {
           stroke-linecap="round"
           stroke-linejoin="round"
           aria-hidden="true"
-          focusable="false"
         >
           <path d="M20.4 15.1A8.5 8.5 0 0 1 8.9 3.6 8.5 8.5 0 1 0 20.4 15.1Z" />
         </svg>
@@ -132,7 +216,6 @@ function handleThemeToggle(event: MouseEvent) {
           stroke-linecap="round"
           stroke-linejoin="round"
           aria-hidden="true"
-          focusable="false"
         >
           <path d="M4 4v6h6" />
           <path d="M5.7 17.1A8.5 8.5 0 1 0 6 6.2L4 10" />
@@ -159,7 +242,6 @@ function handleThemeToggle(event: MouseEvent) {
           stroke-linecap="round"
           stroke-linejoin="round"
           aria-hidden="true"
-          focusable="false"
         >
           <path d="m8 5 11 7-11 7Z" />
         </svg>
@@ -171,9 +253,7 @@ function handleThemeToggle(event: MouseEvent) {
           stroke="currentColor"
           stroke-width="1.7"
           stroke-linecap="round"
-          stroke-linejoin="round"
           aria-hidden="true"
-          focusable="false"
         >
           <path d="M9 5v14M15 5v14" />
         </svg>
@@ -184,33 +264,24 @@ function handleThemeToggle(event: MouseEvent) {
 
 <style scoped>
 .site-header {
-  --header-ink: #181815;
-  --header-panel: rgb(247 242 228 / 76%);
-  --header-hover: rgb(24 24 21 / 9%);
-  --header-border: rgb(24 24 21 / 14%);
-
   position: fixed;
   z-index: 40;
   inset-block-start: 0;
   inset-inline: 0;
-  box-sizing: border-box;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
   padding-block-start: max(12px, env(safe-area-inset-top));
-  padding-inline-start: max(16px, env(safe-area-inset-left));
-  padding-inline-end: max(16px, env(safe-area-inset-right));
-  color: var(--color-ink, var(--header-ink));
+  padding-inline: max(16px, env(safe-area-inset-left));
+  color: var(--color-ink);
   pointer-events: none;
 }
-
 .site-header__brand,
 .site-header__controls {
   pointer-events: auto;
 }
-
 .site-header__brand {
   display: inline-flex;
   min-height: 44px;
@@ -218,25 +289,22 @@ function handleThemeToggle(event: MouseEvent) {
   color: inherit;
   font-size: 0.72rem;
   font-weight: 600;
-  line-height: 1;
   letter-spacing: 0.1em;
   text-decoration: none;
   text-transform: uppercase;
   white-space: nowrap;
 }
-
 .site-header__controls {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 2px;
-  border: 1px solid var(--color-border, var(--header-border));
+  border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: var(--color-surface-raised, var(--header-panel));
+  background: var(--color-surface-raised);
   box-shadow: 0 1px 0 rgb(255 255 255 / 8%) inset;
   backdrop-filter: blur(12px);
 }
-
 .site-header__control {
   display: inline-grid;
   min-width: 44px;
@@ -250,69 +318,106 @@ function handleThemeToggle(event: MouseEvent) {
   cursor: pointer;
   touch-action: manipulation;
   transition:
-    color 160ms ease,
-    background-color 160ms ease,
-    opacity 160ms ease;
+    background-color 140ms ease,
+    opacity 140ms ease;
 }
-
 .site-header__control:hover {
-  background: var(--color-control-hover, var(--header-hover));
+  background: var(--color-control-hover);
 }
-
 .site-header__control:active {
   opacity: 0.64;
 }
-
 .site-header__control:focus-visible,
-.site-header__brand:focus-visible {
-  outline: 2px solid var(--color-focus, currentColor);
+.site-header__brand:focus-visible,
+.site-header__locale-option:focus-visible {
+  outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-
-.site-header__locale {
-  display: inline-flex;
-  justify-content: center;
-  gap: 0.18rem;
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-}
-
-.site-header__locale span:not(.is-active) {
-  color: var(--color-ink-muted, currentColor);
-}
-
 .site-header__icon {
   width: 20px;
   height: 20px;
 }
-
+.site-header__locale-picker {
+  position: relative;
+}
+.site-header__locale-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  display: grid;
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  color: var(--color-ink);
+  background: var(--color-surface-raised);
+  box-shadow: 0 14px 38px rgb(0 0 0 / 16%);
+  backdrop-filter: blur(16px);
+  transform-origin: top right;
+}
+.site-header__locale-option {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  color: var(--color-ink-muted);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.site-header__locale-option:hover {
+  background: var(--color-control-hover);
+}
+.site-header__locale-option.is-selected {
+  color: var(--color-ink);
+}
+.site-header__locale-option svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.locale-menu-enter-active,
+.locale-menu-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 140ms var(--ease-out-expo);
+}
+.locale-menu-enter-from,
+.locale-menu-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -5px, 0) scale(0.97);
+}
 @media (min-width: 48rem) {
   .site-header {
     padding-block-start: max(20px, env(safe-area-inset-top));
-    padding-inline-start: max(28px, env(safe-area-inset-left));
-    padding-inline-end: max(28px, env(safe-area-inset-right));
+    padding-inline: max(28px, env(safe-area-inset-left));
   }
-
   .site-header__brand {
     font-size: 0.78rem;
   }
 }
-
 @media (max-width: 22.5rem) {
   .site-header__controls {
     gap: 2px;
   }
-
   .site-header__brand {
     font-size: 0.65rem;
     letter-spacing: 0.06em;
   }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  .site-header__control {
+  .site-header__control,
+  .locale-menu-enter-active,
+  .locale-menu-leave-active {
     transition: none;
   }
 }

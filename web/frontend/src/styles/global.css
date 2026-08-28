@@ -31,6 +31,9 @@
   --color-focus: #1747e8;
   --color-accent: #02099a;
   --color-void: #09090b;
+  --color-hole-cool: #b9e6ff;
+  --color-hole-hot: #d17843;
+  --color-hole-white: #f1fbff;
   --color-glow: rgb(29 28 25 / 24%);
   --header-height: 80px;
   --page-gutter: clamp(20px, 3vw, 56px);
@@ -51,6 +54,9 @@
   --color-control-active: rgb(236 234 228 / 15%);
   --color-focus: #91a7ff;
   --color-accent: #aeb8ff;
+  --color-hole-cool: #c9e8ff;
+  --color-hole-hot: #ffb86e;
+  --color-hole-white: #f7fcff;
   --color-glow: rgb(236 234 228 / 30%);
 }
 
@@ -119,12 +125,6 @@ a:focus-visible {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
 }
 
 @media (max-width: 767px),

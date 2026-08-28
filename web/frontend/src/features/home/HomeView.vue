@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
 
 @media (min-width: 768px) {
   .home__visual {
-    transform: translate3d(-12%, 0, 0);
+    transform: translate3d(-7%, 0, 0) scale(1.16);
   }
 }
 
@@ -324,8 +324,8 @@ onBeforeUnmount(() => {
     z-index: 1;
     top: 50%;
     left: 50%;
-    width: min(118vw, 720px);
-    height: min(92vw, 640px);
+    width: min(142vw, 820px);
+    height: min(108vw, 700px);
     opacity: 0.35;
     filter: blur(2.5px);
     transform: translate3d(-50%, -50%, 0);

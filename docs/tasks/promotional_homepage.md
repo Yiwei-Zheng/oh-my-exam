@@ -13,13 +13,17 @@ or backend integration.
   intro. Later visits enter the hero directly, while a replay control remains
   available.
 - The intro reduces `OH-MY-EXAM` to its leading `O`; that letter follows a curved
-  path into the hero and becomes the event-horizon core.
+  path into the hero, fills into a dark core, and reveals the event horizon at the
+  same position.
 - Desktop uses a left visual / right copy layout. Narrow screens center and soften
   the black hole behind foreground copy.
 - The headline cycles through four fixed English statements. The event horizon
   uses deterministic, academically valid English formulas and code fragments.
 - Light mode uses a warm editorial surface; dark mode uses a graphite surface.
   Initial theme and language follow the browser, and manual choices persist.
+- The event horizon uses a large upper-left to lower-right accretion plane.
+  Academic characters flow consistently along fixed paths rather than rotating
+  the complete composition.
 
 ## Interaction and accessibility
 
@@ -27,6 +31,8 @@ or backend integration.
 - `prefers-reduced-motion` skips the intro and displays a static composition.
 - Primary controls use native buttons, visible focus states, localized labels,
   and at least 44 px targets.
+- Language selection uses a keyboard-operable globe menu. Theme switching avoids
+  full-page snapshots and limits visual changes to inexpensive color tokens.
 - The page remains operable from 320 px upward in portrait and landscape without
   horizontal overflow.
 - Unknown routes show a themed, localized 404 page and a route back to `/`.

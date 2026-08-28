@@ -6,6 +6,9 @@ export const messages = {
   en: {
     controls: {
       switchLanguage: 'Switch language',
+      chooseLanguage: 'Choose language',
+      languageChinese: '中文',
+      languageEnglish: 'English',
       useLightTheme: 'Use light theme',
       useDarkTheme: 'Use dark theme',
       replayIntro: 'Replay intro',
@@ -31,6 +34,9 @@ export const messages = {
   'zh-CN': {
     controls: {
       switchLanguage: '切换语言',
+      chooseLanguage: '选择语言',
+      languageChinese: '中文',
+      languageEnglish: 'English',
       useLightTheme: '使用浅色主题',
       useDarkTheme: '使用深色主题',
       replayIntro: '重播片头',

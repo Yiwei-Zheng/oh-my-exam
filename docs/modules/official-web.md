@@ -17,9 +17,11 @@ unfinished workflows. The long-term requirement for a clear question-search
 entry remains outstanding until that workflow is implemented.
 
 The homepage supports system-aware light and dark themes, persistent language and
-theme preferences, an optional session intro, reduced-motion fallbacks, and
-keyboard controls for pausing or replaying motion. Its event-horizon artwork is
-generated with SVG and CSS rather than bundled reference imagery or WebGL.
+theme preferences, an accessible globe language menu, an optional session intro,
+reduced-motion fallbacks, and keyboard controls for pausing or replaying motion.
+Theme changes update tokens directly without full-page transition snapshots. Its
+event-horizon artwork is generated with SVG and CSS rather than bundled reference
+imagery or WebGL; the geometry remains fixed while text offsets flow along paths.
 
 The backend exposes question-level PDF routes at
 `/api/v1/exams/{exam_id}/questions/{question_id}/{question|answer}.pdf`. The
