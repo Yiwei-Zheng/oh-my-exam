@@ -2,15 +2,18 @@
 
 ## Scope
 
-Official historic ENGAA and NSAA Section 1 papers linked from the UAT-UK ESAT
-preparation page.
+Official historic ENGAA and NSAA Section 1 papers, plus the complete TMUA
+paper, worked-answer, and answer-key archive linked from UAT-UK.
 
 ## Source
 
 - Archive page: `https://esat-tmua.ac.uk/esat-preparation-materials/`
+- TMUA archive page: `https://esat-tmua.ac.uk/tmua-preparation-materials/`
 - The downloader parses the current archive page and follows recognized
   `ENGAA_*_S1_QuestionPaper.pdf`, `ENGAA_*_S1_AnswerKey.pdf`,
   `NSAA_*_S1_QuestionPaper.pdf`, and `NSAA_*_S1_AnswerKey.pdf` links.
+- The TMUA catalog recognizes both numbered 2016-2023 papers and the early
+  specimen set. It downloads Paper 1, Paper 2, worked answers, and answer keys.
 - Upstream PDF URLs are not hard-coded, so a moved S3 object is picked up from
   the official page on the next run.
 
@@ -25,17 +28,21 @@ preparation page.
 
 ```powershell
 .venv\Scripts\python tools\downloaders\admissions\uat\uat_admissions_downloader_cli.py
+.venv\Scripts\python tools\downloaders\admissions\uat\uat_admissions_downloader_cli.py --exam tmua
 .venv\Scripts\python tools\splitters\admissions\uat\uat_admissions_splitter_cli.py
 ```
 
-Use repeatable `--exam engaa` or `--exam nsaa`, plus `--start-year` and
+Use repeatable `--exam engaa`, `--exam nsaa`, or `--exam tmua`, plus `--start-year` and
 `--end-year`, to limit either command. `--list-only` lets the downloader audit
-the current official catalog without downloading PDFs.
+the current official catalog without downloading PDFs. The no-argument command
+retains its original ENGAA/NSAA behavior; select TMUA explicitly with
+`--exam tmua`.
 
 ## Raw Layout
 
 ```text
 data/raw_papers/uat/admissions/{engaa|nsaa}/{year}/archive/{exam}_{year}_s1_{qp|ms}.pdf
+data/raw_papers/uat/admissions/tmua/{year|early_specimen}/archive/tmua_*.pdf
 ```
 
 Each PDF has an adjacent JSON file containing the official source URL and

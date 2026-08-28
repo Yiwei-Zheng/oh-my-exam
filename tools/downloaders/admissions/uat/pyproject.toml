@@ -1,7 +1,7 @@
 [project]
 name = "oh-my-exam-uat-admissions-downloader"
 version = "0.1.0"
-description = "Official UAT-UK ENGAA and NSAA archive downloader for Oh-My-Exam."
+description = "Official UAT-UK ENGAA, NSAA, and TMUA archive downloader for Oh-My-Exam."
 requires-python = ">=3.11"
 dependencies = []
 

@@ -33,14 +33,19 @@ def download_asset(
         part_path.unlink(missing_ok=True)
         raise RuntimeError(f"empty download: {asset.source_url}")
     part_path.replace(target)
+    subject_names = {
+        "engaa": "Engineering Admissions Assessment",
+        "nsaa": "Natural Sciences Admissions Assessment",
+        "tmua": "Test of Mathematics for University Admission",
+    }
     metadata = {
         "exam_board": "uat",
         "qualification": "admissions",
         "subject_code": asset.exam,
-        "subject_name": "Engineering Admissions Assessment" if asset.exam == "engaa" else "Natural Sciences Admissions Assessment",
+        "subject_name": subject_names[asset.exam],
         "year": asset.year,
-        "session": "archive",
-        "component": "s1",
+        "session": asset.edition,
+        "component": asset.component,
         "document_type": asset.document_type,
         "source_stem": asset.stem,
         "source_url": asset.source_url,
