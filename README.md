@@ -10,12 +10,23 @@ retained PDFs by internal exam and paper ids. Authentication, PostgreSQL,
 RAGFlow/DeepSeek, and the deterministic math harness currently return explicit
 placeholder capability states rather than pretending to be available.
 
-Create or update the shared project environment, then run the API from the
-repository root:
+Create or update the shared development environment, then run the API from the
+repository root. Use `python3` instead of `python` on Linux when required:
+
+```console
+python scripts/setup_env.py --group backend-dev
+```
+
+Windows:
 
 ```powershell
-requirements\setup.ps1 -Group backend
 .venv\Scripts\python -m uvicorn oh_my_exam_server.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Linux/macOS:
+
+```console
+.venv/bin/python -m uvicorn oh_my_exam_server.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Useful endpoints:
@@ -63,8 +74,8 @@ These tools are intentionally decoupled. The downloader does not import splitter
 
 Install the data-processing dependency group into the same root environment:
 
-```powershell
-requirements\setup.ps1 -Group data-processing
+```console
+python scripts/setup_env.py --group data-processing
 ```
 
 This group includes the splitter OCR extra. Tesseract itself is an external

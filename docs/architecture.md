@@ -53,8 +53,9 @@ user state and published catalog data.
 - `resources/`: source-controlled external metadata and reference resources.
 - `data/`: runtime output and local generated state.
 - `docs/`: agent-facing project documentation.
-- `requirements/`: separate backend and data-processing installation entry
-  points for the shared root Python environment.
+- `requirements/`: separate production backend, development backend, and data-processing
+  installation entry points for the shared root Python environment.
+- `scripts/setup_env.py`: operating-system-neutral environment bootstrap entry point.
 - `web/`: web product boundary containing sibling frontend and backend applications.
 - `web/frontend/`: primary browser client and official website for desktop and mobile browsers. Its framework is an implementation choice, not a backend boundary.
 - `temp/`: user scratch input only. Project code must not depend on it.
@@ -105,6 +106,8 @@ user state and published catalog data.
   permissions, user state, or citations.
 - Python packages share the repository-root `.venv/`. Dependency entry points
   remain separated under `requirements/` for backend and data processing.
+- A virtual environment is recreated on each target operating system; `.venv/`
+  is never copied between Windows and Linux.
 - No scripts, source files, or project docs may be placed inside `.venv/`.
 
 ## Directory Responsibilities
@@ -121,7 +124,8 @@ user state and published catalog data.
 - `data/reports/`: runtime reports.
 - `data/databases/`: generated per-subject SQLite databases.
 - `data/*.sqlite3`: local databases.
-- `requirements/backend.txt`: backend and backend-test installation entry point.
+- `requirements/backend.txt`: production backend installation entry point.
+- `requirements/backend-dev.txt`: editable backend and backend-test installation entry point.
 - `requirements/data-processing.txt`: local data tool, GUI, OCR, and test
   installation entry point.
 - `web/backend/`: versioned hosted API and adapters for catalog, identity, paper
