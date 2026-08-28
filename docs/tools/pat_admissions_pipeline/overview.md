@@ -27,9 +27,9 @@ PDF URL and SHA-256 checksum.
 ## Commands
 
 ```powershell
-tools\.venv\Scripts\python tools\downloaders\admissions\pat\pat_admissions_downloader_cli.py
-tools\.venv\Scripts\python tools\splitters\admissions\pat\pat_admissions_splitter_cli.py
-tools\.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\admissions\pearson_vue --exam-board pearson_vue --qualification admissions --course-code pat
+.venv\Scripts\python tools\downloaders\admissions\pat\pat_admissions_downloader_cli.py
+.venv\Scripts\python tools\splitters\admissions\pat\pat_admissions_splitter_cli.py
+.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\admissions\pearson_vue --exam-board pearson_vue --qualification admissions --course-code pat
 ```
 
 Both PAT commands support `--variant regular|specimen`, `--document-type

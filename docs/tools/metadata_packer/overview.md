@@ -98,19 +98,19 @@ downloaded PDF.
 Dry-run scan:
 
 ```powershell
-tools\.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\a_level\cie --qualification a_level --exam-board cie --course-code 9231 --dry-run
+.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\a_level\cie --qualification a_level --exam-board cie --course-code 9231 --dry-run
 ```
 
 Write or update a subject database:
 
 ```powershell
-tools\.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\a_level\cie --qualification a_level --exam-board cie --course-code 9231
+.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\a_level\cie --qualification a_level --exam-board cie --course-code 9231
 ```
 
 Rebuild from scratch:
 
 ```powershell
-tools\.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\a_level\cie --qualification a_level --exam-board cie --course-code 9231 --overwrite
+.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\a_level\cie --qualification a_level --exam-board cie --course-code 9231 --overwrite
 ```
 
 The packer writes a regenerated compact subject database. `--overwrite` keeps
@@ -122,7 +122,7 @@ the generated schema itself is always refreshed before records are inserted.
 Run the local GUI:
 
 ```powershell
-tools\.venv\Scripts\python tools\packers\packer_gui.py
+.venv\Scripts\python tools\packers\packer_gui.py
 ```
 
 The GUI automatically scans the metadata directory at startup and lists only

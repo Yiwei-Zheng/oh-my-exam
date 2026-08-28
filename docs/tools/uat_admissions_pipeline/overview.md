@@ -24,8 +24,8 @@ preparation page.
 ## Commands
 
 ```powershell
-tools\.venv\Scripts\python tools\downloaders\admissions\uat\uat_admissions_downloader_cli.py
-tools\.venv\Scripts\python tools\splitters\admissions\uat\uat_admissions_splitter_cli.py
+.venv\Scripts\python tools\downloaders\admissions\uat\uat_admissions_downloader_cli.py
+.venv\Scripts\python tools\splitters\admissions\uat\uat_admissions_splitter_cli.py
 ```
 
 Use repeatable `--exam engaa` or `--exam nsaa`, plus `--start-year` and

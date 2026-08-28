@@ -43,7 +43,8 @@ Global engineering rules for agents working in this repository.
 
 - `temp/` is scratch input only.
 - Move useful `temp/` files into the proper source/resource location before depending on them.
-- Do not place scripts, source, docs, or project files inside `.venv/` or `tools/.venv/`.
+- Use only the repository-root `.venv/` for Python dependencies. Do not place
+  scripts, source, docs, or project files inside it.
 - Configuration belongs outside code.
 - Do not commit secrets, API keys, tokens, private local data, or irrelevant generated files.
 

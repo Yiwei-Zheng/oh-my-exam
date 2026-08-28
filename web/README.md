@@ -9,5 +9,6 @@ The frontend calls the backend through versioned HTTP APIs. Neither application
 imports the other's internal code, and production may deploy them together or
 separately without changing this source boundary.
 
-The current frontend uses React/Vite. A future framework rewrite should preserve
-the same API boundary and remain separate from backend business logic.
+The frontend environment uses Vue 3, TypeScript, and Vite. The old React product
+code has been removed; replacement product pages are intentionally not part of
+the environment setup.

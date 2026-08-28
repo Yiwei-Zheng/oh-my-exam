@@ -21,6 +21,9 @@ ocr = [
 [project.scripts]
 ome-cie-alevel-splitter = "cie_alevel_splitter.cli:main"
 
+[tool.setuptools.packages.find]
+where = ["src/common"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["../../../shared/cie/src", "src/common"]

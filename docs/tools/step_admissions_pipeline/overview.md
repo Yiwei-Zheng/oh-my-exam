@@ -32,9 +32,9 @@ URL and SHA-256 checksum for audit and later replacement by an official source.
 ## Commands
 
 ```powershell
-tools\.venv\Scripts\python tools\downloaders\admissions\step\step_admissions_downloader_cli.py
-tools\.venv\Scripts\python tools\splitters\admissions\step\step_admissions_splitter_cli.py
-tools\.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\admissions\ocr --exam-board ocr --qualification admissions --course-code step
+.venv\Scripts\python tools\downloaders\admissions\step\step_admissions_downloader_cli.py
+.venv\Scripts\python tools\splitters\admissions\step\step_admissions_splitter_cli.py
+.venv\Scripts\python tools\packers\packer_cli.py --metadata-root data\processed_questions --output-dir data\databases\admissions\ocr --exam-board ocr --qualification admissions --course-code step
 ```
 
 Both STEP commands support repeatable `--paper 1`, `--paper 2`, or `--paper 3`,

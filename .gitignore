@@ -3,6 +3,7 @@
 *.pyc
 *.pyo
 .agents/
+.venv/
 .pytest_cache/
 __pycache__/
 AGENTS.md

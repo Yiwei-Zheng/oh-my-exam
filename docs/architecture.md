@@ -53,6 +53,8 @@ user state and published catalog data.
 - `resources/`: source-controlled external metadata and reference resources.
 - `data/`: runtime output and local generated state.
 - `docs/`: agent-facing project documentation.
+- `requirements/`: separate backend and data-processing installation entry
+  points for the shared root Python environment.
 - `web/`: web product boundary containing sibling frontend and backend applications.
 - `web/frontend/`: primary browser client and official website for desktop and mobile browsers. Its framework is an implementation choice, not a backend boundary.
 - `temp/`: user scratch input only. Project code must not depend on it.
@@ -81,11 +83,11 @@ user state and published catalog data.
 - Clients consume versioned HTTP APIs and must not import server or Python tool internals.
 - Portable SQLite packages remain valid import/export and optional offline assets;
   they are not the hosted multi-user source of truth.
-- The website may temporarily load a selected portable subject SQLite package in
-  a Web Worker during migration. New accounts, progress, marking, AI, protected
-  PDFs, and hosted search must use the server API.
-- OCR, matching, and PDF crop replay remain standalone services rather than React
-  component logic, regardless of whether they run in the browser or server.
+- The website uses the server API for catalog search and all hosted product
+  capabilities. Portable SQLite packages cross the server import/export boundary,
+  not the browser runtime boundary.
+- OCR, matching, and PDF crop replay must remain standalone services rather than
+  Vue component logic if those capabilities are reintroduced.
 
 ## Forbidden Coupling
 
@@ -95,13 +97,15 @@ user state and published catalog data.
 - Core code must not import GUI libraries or read user input.
 - Subject lists, component rules, and external catalog data must not be hard-coded in UI code.
 - Runtime output must not be treated as source configuration.
-- Website code must not import Python tool internals. It may consume documented,
-  portable per-subject database packages through the runtime asset boundary.
+- Website code must not import Python tool internals or open portable subject
+  databases directly. It consumes versioned server APIs.
 - Website code must not connect directly to the hosted database, object store,
   RAGFlow, or model providers.
 - RAGFlow and language models must not become authoritative stores for exam data,
   permissions, user state, or citations.
-- No scripts, source files, or project docs may be placed in `.venv/` or `tools/.venv/`.
+- Python packages share the repository-root `.venv/`. Dependency entry points
+  remain separated under `requirements/` for backend and data processing.
+- No scripts, source files, or project docs may be placed inside `.venv/`.
 
 ## Directory Responsibilities
 
@@ -117,6 +121,9 @@ user state and published catalog data.
 - `data/reports/`: runtime reports.
 - `data/databases/`: generated per-subject SQLite databases.
 - `data/*.sqlite3`: local databases.
+- `requirements/backend.txt`: backend and backend-test installation entry point.
+- `requirements/data-processing.txt`: local data tool, GUI, OCR, and test
+  installation entry point.
 - `web/backend/`: versioned hosted API and adapters for catalog, identity, paper
   storage, retrieval, language models, and deterministic math tools.
 - `web/frontend/`: bilingual responsive marketing and local question-search surface. It

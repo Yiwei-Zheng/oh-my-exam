@@ -81,7 +81,7 @@ The sync command reads Cambridge AS & A Level subject pages and writes:
 Run from the repository root:
 
 ```powershell
-tools\.venv\Scripts\python tools\downloaders\alevel\cie\sync_cambridge_catalog.py
+.venv\Scripts\python tools\downloaders\alevel\cie\sync_cambridge_catalog.py
 ```
 
 The official catalog is authoritative for current subject names and codes, not a complete historical archive.

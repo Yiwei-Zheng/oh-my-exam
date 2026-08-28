@@ -2,40 +2,45 @@
 
 ## Scope
 
-`web/frontend/` owns the bilingual responsive website and the browser adapters needed for local question search. Its sibling `web/backend/` owns the hosted API; the frontend consumes that backend only through versioned HTTP APIs.
+`web/frontend/` owns the bilingual responsive browser client. Its sibling
+`web/backend/` owns the hosted API. The frontend consumes backend capabilities
+only through versioned HTTP APIs.
 
-## User flow
+## Current state
 
-1. The landing page uses the project video as a responsive full-screen background, with synchronized soft and sharp layers creating a depth-of-field focus around the production line.
-2. Its liquid-glass launcher expands into question-search and paper-building actions. Search enters through a full-screen loading transition; paper building currently routes to the explicit start placeholder.
-3. No subject database is requested on initial load.
-4. The search page mirrors the packer's cascading `qualification → exam_board → course` selection. Choosing the final subject loads only its SQLite package into a Web Worker through `sql.js` WASM.
-5. Question images may come from the file picker, camera capture, or an image pasted from the clipboard while the upload zone is hovered or focused.
-6. Tesseract WASM starts warming in the background after subject selection; the uploaded image is then cleaned and recognized locally.
-7. Subject load builds a token posting index once. Searches shortlist candidates through that index before similarity ranking.
-8. The selected result requests the stored source URLs through the same-origin paper proxy and keeps the returned PDFs in the current browser session as Blob URLs.
-9. PDF.js renders stored `crop_regions`; opening a source paper enters the internal source-PDF route in the same tab, loads it through the same-origin proxy, opens the recorded page, scrolls to the final post-render crop, and highlights that exact question or answer region.
-10. The search component remains mounted while the source-PDF route is open. Returning restores the same subject, uploaded image, OCR text, candidates, rendered question and answer, and search-page scroll position.
+The previous React website and browser-side SQLite, OCR, matching, PDF rendering,
+and source-URL proxy implementation have been removed. The repository currently
+contains an intentionally empty Vue application environment; no replacement
+product page or business workflow is implemented yet.
+
+## Toolchain
+
+- Vue 3 with TypeScript and Vite.
+- Vue Router for URL boundaries.
+- Pinia for client-only state.
+- Vue I18n for Chinese and English resources.
+- Vitest, Vue Test Utils, ESLint, vue-tsc, and Prettier for quality checks.
+- Vite proxies `/api` to `http://127.0.0.1:8000` by default. Override the target
+  with `VITE_API_PROXY_TARGET`.
+
+Dependencies install into `web/frontend/node_modules/`. The project `.npmrc`
+places npm cache under `web/frontend/.npm-cache/`; global package installation is
+not part of the workflow. `.node-version` pins the expected Node runtime.
 
 ## Boundaries
 
-- React components coordinate state and presentation; OCR, matching, database access, PDF cropping, and source-page rendering live in separate services.
-- The client consumes portable packed databases and does not import Python processing code.
-- Vite development and preview servers proxy and cache source PDFs under `tmp/web-paper-cache/` to avoid browser CORS limitations. They prefer an explicit `OH_MY_EXAM_PROXY`, then standard HTTP(S) proxy environment variables, and finally the enabled Windows per-user system proxy.
-- Search feedback is one determinate percentage bar without stage descriptions.
-- Hosted accounts, protected data, and automatic marking remain future API responsibilities.
-
-## Runtime assets
-
-`tools/sync_web_databases.py` validates `data/databases/**/*.sqlite`, copies current subject packages into the ignored `web/frontend/public/runtime/databases/` directory, removes stale copies, and atomically regenerates `subjects.json`. Development and production build commands run this sync automatically. Subject labels are configured in `configs/web_subject_labels.json`; generated runtime files are not source configuration.
-
-The production build copies `assets/web/background_video/1783750570912_clean_temporal_2x.mp4` unchanged to `runtime/hero-video.mp4`, and includes the synchronized subject databases, SQLite WASM, PDF worker, and local English OCR runtime/model files. OCR and PDF modules are route/action split so the landing page does not load them.
+- `App.vue` is an application shell, not a business-logic container.
+- Routes belong under `src/router/`.
+- Client state belongs under `src/stores/`.
+- All user-visible text must come from `src/i18n/` resources.
+- Future product code should be grouped by feature.
+- Frontend modules must not import backend or Python tool internals.
+- The browser must not connect directly to PostgreSQL, object storage, retrieval,
+  or model providers.
 
 ## Verification
 
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
 - `npm run build`
-- Check 320 px, 375 px, tablet portrait/landscape, and desktop widths.
-- Confirm `/runtime/subjects.json` lists only existing databases.
-- Confirm database and video endpoints support range requests.
-- Confirm `npm run dev` exposes a LAN URL and that clipboard image paste works from a focused or hovered upload zone.
-- Test OCR and matching against a known processed question image.
