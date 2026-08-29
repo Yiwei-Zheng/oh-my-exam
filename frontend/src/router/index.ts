@@ -9,7 +9,7 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/admin',
+      redirect: '/questions',
     },
     {
       path: '/login',
@@ -45,7 +45,7 @@ router.beforeEach(async (to) => {
   }
   if (to.meta.role && auth.user?.role !== to.meta.role) return { name: 'login' }
   if (to.meta.guestOnly && auth.user)
-    return { name: auth.user.role === 'admin' ? 'admin' : 'login' }
+    return { name: auth.user.role === 'admin' ? 'admin' : 'questions' }
 })
 
 router.afterEach((_to, from, failure) => {

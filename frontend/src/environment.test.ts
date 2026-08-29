@@ -8,7 +8,7 @@ describe('frontend environment', () => {
     expect(i18n.global.availableLocales).toEqual(['en', 'zh-CN'])
   })
 
-  it('registers the authentication, admin, and not-found routes', () => {
+  it('registers the authentication, question, admin, and not-found routes', () => {
     expect(
       router.getRoutes().map(({ name, path }) => ({
         name,
@@ -17,10 +17,11 @@ describe('frontend environment', () => {
     ).toEqual(
       expect.arrayContaining([
         { name: 'login', path: '/login' },
+        { name: 'questions', path: '/questions' },
         { name: 'admin', path: '/admin' },
         { name: 'not-found', path: '/:pathMatch(.*)*' },
       ]),
     )
-    expect(router.getRoutes()).toHaveLength(4)
+    expect(router.getRoutes()).toHaveLength(5)
   })
 })

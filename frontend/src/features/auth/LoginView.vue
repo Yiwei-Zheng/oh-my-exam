@@ -5,7 +5,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { ApiError } from '../../shared/api'
+import { ApiError, apiRequest } from '../../shared/api'
 import { useLocale } from '../../shared/composables/useLocale'
 import { useAuthStore } from '../../stores/auth'
 
@@ -16,11 +16,18 @@ const route = useRoute()
 const router = useRouter()
 const email = ref('')
 const password = ref('')
+const invitationCode = ref('')
+const mode = ref<'login' | 'register'>('login')
 const showPassword = ref(false)
 const loading = ref(false)
 const error = ref('')
 const canSubmit = computed(
-  () => email.value.trim().includes('@') && password.value.length > 0,
+  () =>
+    email.value.trim().includes('@') &&
+    (mode.value === 'login'
+      ? password.value.length > 0
+      : password.value.length >= 15) &&
+    (mode.value === 'login' || invitationCode.value.trim().length >= 8),
 )
 
 async function submit() {
@@ -28,13 +35,33 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
+    if (mode.value === 'register') {
+      await apiRequest('/api/v1/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: email.value.trim(),
+          password: password.value,
+          invitation_code: invitationCode.value.trim(),
+        }),
+      })
+    }
     const user = await auth.login(email.value.trim(), password.value)
     const fallback = user.role === 'admin' ? '/admin' : '/questions'
     const destination =
       typeof route.query.redirect === 'string' ? route.query.redirect : fallback
     await router.replace(destination)
   } catch (caught) {
-    if (caught instanceof ApiError && caught.status === 401) {
+    if (
+      caught instanceof ApiError &&
+      caught.detail === 'invalid_or_expired_invitation'
+    ) {
+      error.value = t('auth.invalidInvitation')
+    } else if (
+      caught instanceof ApiError &&
+      caught.detail === 'email_already_exists'
+    ) {
+      error.value = t('auth.emailExists')
+    } else if (caught instanceof ApiError && caught.status === 401) {
       error.value = t('auth.invalidCredentials')
     } else if (caught instanceof ApiError && caught.status === 429) {
       error.value = t('auth.rateLimited')
@@ -44,6 +71,11 @@ async function submit() {
   } finally {
     loading.value = false
   }
+}
+
+function toggleMode() {
+  mode.value = mode.value === 'login' ? 'register' : 'login'
+  error.value = ''
 }
 </script>
 
@@ -73,7 +105,7 @@ async function submit() {
         height="220"
       >
       <p class="eyebrow">
-        A LEVEL · UK ADMISSIONS
+        QUESTION INTELLIGENCE / STEM
       </p>
       <h1 id="product-title">
         Oh My Exam
@@ -98,13 +130,17 @@ async function submit() {
         <span /><span /><span />
       </div>
       <p class="section-index">
-        ACCESS / 01
+        ACCESS NODE
       </p>
       <h2 id="login-title">
-        {{ t('auth.title') }}
+        {{ mode === 'login' ? t('auth.title') : t('auth.registerTitle') }}
       </h2>
       <p class="login-note">
-        {{ t('auth.registrationClosed') }}
+        {{
+          mode === 'login'
+            ? t('auth.registrationClosed')
+            : t('auth.registrationHint')
+        }}
       </p>
       <form @submit.prevent="submit">
         <label for="email">{{ t('auth.email') }}</label>
@@ -135,6 +171,19 @@ async function submit() {
             </button>
           </template>
         </el-input>
+        <template v-if="mode === 'register'">
+          <label for="invitation-code">{{ t('auth.invitationCode') }}</label>
+          <el-input
+            id="invitation-code"
+            v-model.trim="invitationCode"
+            autocomplete="one-time-code"
+            size="large"
+            placeholder="OME-XXXXXX-XXXXXX-XXXXXX"
+          />
+          <p class="field-hint">
+            {{ t('auth.passwordRule') }}
+          </p>
+        </template>
         <p
           v-if="error"
           class="form-error"
@@ -150,11 +199,20 @@ async function submit() {
           :loading="loading"
           :disabled="!canSubmit"
         >
-          {{ t('auth.signIn')
+          {{ mode === 'login' ? t('auth.signIn') : t('auth.createAccount')
           }}<el-icon class="el-icon--right">
             <ArrowRight />
           </el-icon>
         </el-button>
+        <button
+          class="mode-switch"
+          type="button"
+          @click="toggleMode"
+        >
+          {{
+            mode === 'login' ? t('auth.useInvitation') : t('auth.backToLogin')
+          }}
+        </button>
       </form>
     </section>
   </main>
@@ -168,22 +226,13 @@ async function submit() {
   align-items: center;
   gap: clamp(32px, 7vw, 112px);
   padding: clamp(24px, 5vw, 80px);
-  background:
-    radial-gradient(circle at 14% 18%, #dfeaff 0, transparent 32%),
-    var(--color-bg);
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(rgba(32, 55, 82, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(32, 55, 82, 0.045) 1px, transparent 1px);
+  background-size: 32px 32px;
   position: relative;
   overflow: hidden;
-}
-.login-page::after {
-  content: '';
-  position: absolute;
-  width: 380px;
-  height: 380px;
-  right: -160px;
-  bottom: -180px;
-  border-radius: 50%;
-  background: #ffd75c;
-  opacity: 0.45;
 }
 .language-pill {
   position: absolute;
@@ -193,7 +242,7 @@ async function submit() {
   width: 48px;
   height: 48px;
   border: 1px solid var(--color-line);
-  border-radius: 16px;
+  border-radius: 10px;
   background: #fff;
   color: var(--color-ink);
   font: 700 14px var(--font-utility);
@@ -207,8 +256,8 @@ async function submit() {
 .app-icon {
   width: clamp(136px, 18vw, 220px);
   height: auto;
-  border-radius: 28%;
-  filter: drop-shadow(0 18px 24px rgba(43, 88, 164, 0.18));
+  border-radius: 24%;
+  filter: grayscale(0.15) drop-shadow(0 16px 24px rgba(20, 32, 48, 0.14));
 }
 .eyebrow,
 .section-index {
@@ -237,10 +286,10 @@ h1 {
 }
 .subject-chips span {
   padding: 8px 12px;
-  border: 1px solid #b9cdf3;
+  border: 1px solid var(--color-line);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.65);
-  color: #315488;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--color-muted);
   font: 700 12px var(--font-utility);
 }
 .login-card {
@@ -248,9 +297,9 @@ h1 {
   z-index: 1;
   padding: clamp(28px, 5vw, 56px);
   border: 1px solid var(--color-line);
-  border-radius: 32px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 24px 70px rgba(39, 73, 130, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 24px 70px rgba(20, 32, 48, 0.1);
 }
 .paper-tabs {
   position: absolute;
@@ -262,11 +311,11 @@ h1 {
 .paper-tabs span {
   width: 13px;
   height: 13px;
-  border-radius: 4px;
-  background: var(--color-pink);
+  border-radius: 2px;
+  background: var(--color-line);
 }
 .paper-tabs span:nth-child(2) {
-  background: var(--color-yellow);
+  background: var(--color-line-strong);
 }
 .paper-tabs span:nth-child(3) {
   background: var(--color-blue);
@@ -305,6 +354,19 @@ label {
   margin: 4px 0 0;
   color: var(--color-danger);
   font-size: 14px;
+}
+.field-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+.mode-switch {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--color-blue-dark);
+  font-weight: 650;
+  cursor: pointer;
 }
 .login-button {
   width: 100%;

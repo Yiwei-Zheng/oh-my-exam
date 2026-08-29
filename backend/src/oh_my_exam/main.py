@@ -9,7 +9,14 @@ from pydantic import BaseModel, Field
 
 from .catalog import CatalogNotFoundError, GlobalCatalog
 from .config import Settings
-from .identity import DuplicateUserError, IdentityStore, InvalidUserError, SESSION_COOKIE, User
+from .identity import (
+    DuplicateUserError,
+    IdentityStore,
+    InvalidInvitationError,
+    InvalidUserError,
+    SESSION_COOKIE,
+    User,
+)
 from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_document import QuestionDocumentError, crop_question_pdf
@@ -29,6 +36,18 @@ class CreateUserRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=15, max_length=1024)
     role: Literal["student", "teacher", "admin"]
+
+
+class RegisterRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=15, max_length=1024)
+    invitation_code: str = Field(min_length=8, max_length=64)
+
+
+class CreateInvitationRequest(BaseModel):
+    role: Literal["student", "teacher", "admin"]
+    max_uses: int = Field(default=1, ge=1, le=100)
+    expires_in_days: int = Field(default=7, ge=1, le=365)
 
 
 class AnswerRevisionRequest(BaseModel):
@@ -205,6 +224,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def logout(response: Response) -> None:
         response.delete_cookie(SESSION_COOKIE, path="/", samesite="lax")
 
+    @app.post("/api/v1/auth/register", status_code=201)
+    def register(payload: RegisterRequest) -> dict[str, object]:
+        try:
+            user = identity.register_with_invitation(
+                payload.email, payload.password, payload.invitation_code
+            )
+        except DuplicateUserError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (InvalidInvitationError, InvalidUserError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"user": user.as_dict()}
+
     @app.get("/api/v1/me")
     def me(user: User = Depends(current_user)) -> dict[str, object]:
         return {"user": user.as_dict()}
@@ -229,6 +260,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except InvalidUserError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return {"user": user.as_dict()}
+
+    @app.get("/api/v1/admin/invitations")
+    def admin_invitations(_: User = Depends(admin_user)) -> dict[str, object]:
+        return {"invitations": [item.as_dict() for item in identity.list_invitations()]}
+
+    @app.post("/api/v1/admin/invitations", status_code=201)
+    def admin_create_invitation(
+        payload: CreateInvitationRequest,
+        user: User = Depends(admin_user),
+    ) -> dict[str, object]:
+        try:
+            invitation, code = identity.create_invitation(
+                user.id, payload.role, payload.max_uses, payload.expires_in_days
+            )
+        except InvalidInvitationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"invitation": invitation.as_dict(), "code": code}
+
+    @app.delete("/api/v1/admin/invitations/{invitation_id}")
+    def admin_revoke_invitation(
+        invitation_id: int,
+        _: User = Depends(admin_user),
+    ) -> dict[str, object]:
+        invitation = identity.revoke_invitation(invitation_id)
+        if invitation is None:
+            raise HTTPException(status_code=404, detail="invitation_not_found")
+        return {"invitation": invitation.as_dict()}
 
     @app.get("/api/v1/admin/question-tree")
     def admin_question_tree(_: User = Depends(admin_user)) -> list[dict[str, object]]:

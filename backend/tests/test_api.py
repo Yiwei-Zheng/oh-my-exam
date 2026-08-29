@@ -222,6 +222,39 @@ def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
     )
     assert duplicate.status_code == 409
 
+    invitation = client.post(
+        "/api/v1/admin/invitations",
+        json={"role": "student", "max_uses": 1, "expires_in_days": 14},
+    )
+    assert invitation.status_code == 201
+    invitation_code = invitation.json()["code"]
+    assert invitation_code.startswith("OME-")
+    assert invitation.json()["invitation"]["role"] == "student"
+    listed_invitations = client.get("/api/v1/admin/invitations")
+    assert listed_invitations.status_code == 200
+    assert listed_invitations.json()["invitations"][0]["code_hint"] == invitation_code[-6:]
+    assert "code" not in listed_invitations.json()["invitations"][0]
+
+    registered = TestClient(client.app).post(
+        "/api/v1/auth/register",
+        json={
+            "email": "student@example.com",
+            "password": "student-long-test-password",
+            "invitation_code": invitation_code.lower(),
+        },
+    )
+    assert registered.status_code == 201
+    assert registered.json()["user"]["role"] == "student"
+    reused = TestClient(client.app).post(
+        "/api/v1/auth/register",
+        json={
+            "email": "another-student@example.com",
+            "password": "student-long-test-password",
+            "invitation_code": invitation_code,
+        },
+    )
+    assert reused.status_code == 422
+
     tree = client.get("/api/v1/admin/question-tree")
     assert tree.status_code == 200
     paper_node = tree.json()[0]["children"][0]["children"][0]["children"][0]["children"][0]["children"][0]

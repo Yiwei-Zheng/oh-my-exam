@@ -8,9 +8,16 @@ browser adaptation only. It never imports processing or persistence internals.
 
 ## Information architecture
 
-Desktop uses navigation, question tree, and document workspace columns. Tablet
-collapses navigation. Phone uses route-based drill-down. The selected catalog
-path and document state are deep-linkable.
+Administrators use a question tree, question list, and document workspace. The
+same header exposes the complete update pipeline, question search, and access
+control. Access control groups existing accounts and invitation management
+without mixing these identity tasks into the catalog browser.
+
+Students and teachers land on `/questions`, where they search extracted text,
+filter by exam, preview the original clipped question, and follow indexed
+similar-question matches. On desktop the search result list and document view
+remain side by side. Tablet moves secondary match content below the document;
+phone stacks every task vertically without horizontal workspace scrolling.
 
 The document rail contains question PDF, answer PDF, structured text, and source
 paper views. Full paper and clipped views embed authorized backend PDF
@@ -18,10 +25,12 @@ responses. Large trees and lists load lazily.
 
 ## Visual system
 
-The interface uses an Apple-inspired document-workspace language: system fonts,
-neutral semantic surfaces, one system-blue accent, restrained materials, and
-precise spacing. Blur is limited to chrome and overlays. Document surfaces are
-opaque. Apple logos, screenshots, and font files are not included.
+The interface uses a restrained technical-workspace language: graphite text,
+paper-white surfaces, cool neutral dividers, one electric-blue action color,
+and monospace labels for paper identifiers and operational metadata. A faint
+coordinate grid and mathematical notation identify the STEM search surface;
+status colors remain semantic rather than decorative. Document surfaces are
+opaque and motion respects the reduced-motion preference.
 
 Element Plus is isolated behind `shared/ui` wrappers. Pinia owns client state;
 TanStack Vue Query owns server state. User-visible strings are translated in

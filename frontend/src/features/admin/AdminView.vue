@@ -65,6 +65,17 @@ interface AdminUser {
   created_at: string
 }
 
+interface Invitation {
+  id: number
+  code_hint: string
+  role: AdminUser['role']
+  max_uses: number
+  used_count: number
+  expires_at: string
+  is_active: boolean
+  created_at: string
+}
+
 const { t } = useI18n()
 const { locale, toggleLocale } = useLocale()
 const router = useRouter()
@@ -89,10 +100,17 @@ const saving = ref(false)
 const usersOpen = ref(false)
 const usersLoading = ref(false)
 const users = ref<AdminUser[]>([])
+const invitations = ref<Invitation[]>([])
+const accessTab = ref<'accounts' | 'invitations'>('accounts')
 const creatingUser = ref(false)
 const newUserEmail = ref('')
 const newUserPassword = ref('')
 const newUserRole = ref<AdminUser['role']>('student')
+const creatingInvitation = ref(false)
+const invitationRole = ref<AdminUser['role']>('student')
+const invitationUses = ref(1)
+const invitationDays = ref(7)
+const revealedInvitationCode = ref('')
 let pollTimer: number | undefined
 
 const visibleQuestions = computed(() => {
@@ -241,15 +259,68 @@ async function openUsers() {
   usersOpen.value = true
   usersLoading.value = true
   try {
-    users.value = (
-      await apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users')
-    ).users
+    const [userPayload, invitationPayload] = await Promise.all([
+      apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users'),
+      apiRequest<{ invitations: Invitation[] }>('/api/v1/admin/invitations'),
+    ])
+    users.value = userPayload.users
+    invitations.value = invitationPayload.invitations
   } catch (caught) {
     error.value =
       caught instanceof ApiError ? caught.detail : t('admin.usersLoadFailed')
   } finally {
     usersLoading.value = false
   }
+}
+
+async function createInvitation() {
+  creatingInvitation.value = true
+  revealedInvitationCode.value = ''
+  try {
+    const created = await apiRequest<{
+      invitation: Invitation
+      code: string
+    }>('/api/v1/admin/invitations', {
+      method: 'POST',
+      body: JSON.stringify({
+        role: invitationRole.value,
+        max_uses: invitationUses.value,
+        expires_in_days: invitationDays.value,
+      }),
+    })
+    invitations.value = [created.invitation, ...invitations.value]
+    revealedInvitationCode.value = created.code
+  } catch (caught) {
+    error.value =
+      caught instanceof ApiError
+        ? caught.detail
+        : t('admin.invitationCreateFailed')
+  } finally {
+    creatingInvitation.value = false
+  }
+}
+
+async function copyInvitationCode() {
+  if (!revealedInvitationCode.value) return
+  await navigator.clipboard.writeText(revealedInvitationCode.value)
+}
+
+async function revokeInvitation(invitation: Invitation) {
+  const payload = await apiRequest<{ invitation: Invitation }>(
+    `/api/v1/admin/invitations/${invitation.id}`,
+    { method: 'DELETE' },
+  )
+  invitations.value = invitations.value.map((item) =>
+    item.id === invitation.id ? payload.invitation : item,
+  )
+}
+
+function invitationAvailable(invitation: Invitation) {
+  return (
+    invitation.is_active &&
+    invitation.used_count < invitation.max_uses &&
+    new Date(invitation.expires_at).getTime() > Date.now()
+  )
 }
 
 async function createUser() {
@@ -288,12 +359,6 @@ onBeforeUnmount(() => {
 <template>
   <main class="workspace">
     <header class="toolbar">
-      <div
-        class="window-mark"
-        aria-hidden="true"
-      >
-        <span /><span /><span />
-      </div>
       <img
         src="/app-icon.png"
         alt=""
@@ -313,6 +378,13 @@ onBeforeUnmount(() => {
           <span>{{ updateJob.message }}</span>
           <small>{{ updateJob.progress }}%</small>
         </div>
+        <button
+          class="toolbar-button"
+          type="button"
+          @click="router.push('/questions')"
+        >
+          {{ t('admin.searchWorkspace') }}
+        </button>
         <button
           class="toolbar-button primary"
           type="button"
@@ -546,10 +618,31 @@ onBeforeUnmount(() => {
     <el-dialog
       v-model="usersOpen"
       class="users-dialog"
-      :title="t('admin.manageUsers')"
+      :title="t('admin.accessControl')"
       width="min(680px, calc(100vw - 28px))"
     >
+      <div
+        class="access-tabs"
+        role="tablist"
+        :aria-label="t('admin.accessControl')"
+      >
+        <button
+          type="button"
+          :class="{ active: accessTab === 'accounts' }"
+          @click="accessTab = 'accounts'"
+        >
+          {{ t('admin.accountsTab') }} · {{ users.length }}
+        </button>
+        <button
+          type="button"
+          :class="{ active: accessTab === 'invitations' }"
+          @click="accessTab = 'invitations'"
+        >
+          {{ t('admin.invitationsTab') }} · {{ invitations.length }}
+        </button>
+      </div>
       <form
+        v-if="accessTab === 'accounts'"
         class="create-user"
         @submit.prevent="createUser"
       >
@@ -583,7 +676,10 @@ onBeforeUnmount(() => {
           {{ creatingUser ? t('admin.creatingUser') : t('admin.createUser') }}
         </button>
       </form>
-      <p class="password-hint">
+      <p
+        v-if="accessTab === 'accounts'"
+        class="password-hint"
+      >
         {{ t('admin.passwordHint') }}
       </p>
       <el-skeleton
@@ -592,7 +688,7 @@ onBeforeUnmount(() => {
         animated
       />
       <div
-        v-else
+        v-else-if="accessTab === 'accounts'"
         class="user-list"
       >
         <div
@@ -600,13 +696,115 @@ onBeforeUnmount(() => {
           :key="user.id"
           class="user-row"
         >
-          <span class="user-avatar">{{ user.email.slice(0, 1).toUpperCase() }}</span>
+          <span class="user-avatar">{{
+            user.email.slice(0, 1).toUpperCase()
+          }}</span>
           <span><strong>{{ user.email }}</strong><small>{{ t(`roles.${user.role}`) }}</small></span>
           <span :class="['user-status', { inactive: !user.is_active }]">
-            {{ user.is_active ? t('admin.activeUser') : t('admin.inactiveUser') }}
+            {{
+              user.is_active ? t('admin.activeUser') : t('admin.inactiveUser')
+            }}
           </span>
         </div>
       </div>
+      <template v-else>
+        <form
+          class="create-invitation"
+          @submit.prevent="createInvitation"
+        >
+          <label>
+            <span>{{ t('admin.invitationPermission') }}</span>
+            <el-select v-model="invitationRole">
+              <el-option
+                v-for="role in ['student', 'teacher', 'admin']"
+                :key="role"
+                :label="t(`roles.${role}`)"
+                :value="role"
+              />
+            </el-select>
+          </label>
+          <label>
+            <span>{{ t('admin.invitationUses') }}</span>
+            <el-input
+              v-model.number="invitationUses"
+              type="number"
+              min="1"
+              max="100"
+            />
+          </label>
+          <label>
+            <span>{{ t('admin.invitationValidity') }}</span>
+            <el-input
+              v-model.number="invitationDays"
+              type="number"
+              min="1"
+              max="365"
+            />
+          </label>
+          <button
+            class="toolbar-button primary"
+            type="submit"
+            :disabled="creatingInvitation"
+          >
+            {{
+              creatingInvitation
+                ? t('admin.creatingInvitation')
+                : t('admin.createInvitation')
+            }}
+          </button>
+        </form>
+        <div
+          v-if="revealedInvitationCode"
+          class="revealed-code"
+          aria-live="polite"
+        >
+          <span>{{ t('admin.copyInvitationHint') }}</span>
+          <code>{{ revealedInvitationCode }}</code>
+          <button
+            class="toolbar-button"
+            type="button"
+            @click="copyInvitationCode"
+          >
+            {{ t('admin.copyCode') }}
+          </button>
+        </div>
+        <div class="invitation-list">
+          <div
+            v-for="invitation in invitations"
+            :key="invitation.id"
+            class="invitation-row"
+          >
+            <span class="code-mark">•••• {{ invitation.code_hint }}</span>
+            <span>
+              <strong>{{ t(`roles.${invitation.role}`) }}</strong>
+              <small>{{ invitation.used_count }}/{{ invitation.max_uses }} ·
+                {{
+                  new Date(invitation.expires_at).toLocaleDateString(locale)
+                }}</small>
+            </span>
+            <span
+              :class="[
+                'user-status',
+                { inactive: !invitationAvailable(invitation) },
+              ]"
+            >
+              {{
+                invitationAvailable(invitation)
+                  ? t('admin.invitationAvailable')
+                  : t('admin.invitationUnavailable')
+              }}
+            </span>
+            <button
+              v-if="invitationAvailable(invitation)"
+              class="text-button danger"
+              type="button"
+              @click="revokeInvitation(invitation)"
+            >
+              {{ t('admin.revokeInvitation') }}
+            </button>
+          </div>
+        </div>
+      </template>
     </el-dialog>
   </main>
 </template>
@@ -1070,6 +1268,225 @@ onBeforeUnmount(() => {
   }
   .preview-pane iframe {
     min-height: 62dvh;
+  }
+}
+
+/* Restrained operations-workspace layer: neutral surfaces, one action color. */
+.workspace {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+.toolbar {
+  min-height: 72px;
+  height: auto;
+  border-color: var(--color-line);
+  border-radius: 12px 12px 0 0;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 50px rgba(17, 24, 32, 0.08);
+}
+.toolbar-button,
+.avatar {
+  min-height: 44px;
+  border-color: var(--color-line);
+  border-radius: 8px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+.toolbar-button.primary {
+  border-color: var(--color-blue);
+  background: var(--color-blue);
+}
+.avatar {
+  width: 44px;
+  background: var(--color-ink);
+}
+.browser {
+  border-color: var(--color-line);
+  border-radius: 0 0 12px 12px;
+  box-shadow: 0 18px 50px rgba(17, 24, 32, 0.08);
+}
+.source-pane,
+.list-pane,
+.preview-toolbar {
+  border-color: var(--color-line);
+}
+.source-pane {
+  background: #f7f8fa;
+}
+.question-list button {
+  min-height: 58px;
+}
+.question-list button.selected {
+  background: var(--color-blue);
+}
+.node-icon {
+  background: var(--color-blue);
+  box-shadow: none;
+}
+.node-icon.paper {
+  background: var(--color-paper);
+}
+.access-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: -8px 0 20px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #eef1f4;
+}
+.access-tabs button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-muted);
+  font-weight: 700;
+  cursor: pointer;
+}
+.access-tabs button.active {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  box-shadow: 0 1px 4px rgba(17, 24, 32, 0.1);
+}
+.create-invitation {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr 1fr auto;
+  align-items: end;
+  gap: 10px;
+}
+.create-invitation label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.revealed-code {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 18px 0;
+  padding: 14px;
+  border: 1px solid #a8c7f5;
+  border-radius: 10px;
+  background: #edf4fe;
+}
+.revealed-code span {
+  grid-column: 1 / -1;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+.revealed-code code,
+.code-mark {
+  font: 700 13px var(--font-utility);
+  letter-spacing: 0.04em;
+}
+.invitation-list {
+  max-height: 46dvh;
+  overflow: auto;
+  border-top: 1px solid var(--color-line);
+}
+.invitation-row {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: 132px minmax(140px, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--color-line);
+}
+.invitation-row > span:nth-child(2) {
+  display: grid;
+}
+.invitation-row small {
+  color: var(--color-muted);
+}
+.text-button {
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-blue-dark);
+  font-weight: 650;
+  cursor: pointer;
+}
+.text-button.danger {
+  color: var(--color-danger);
+}
+@media (max-width: 1100px) {
+  .toolbar {
+    flex-wrap: wrap;
+    padding-block: 10px;
+  }
+  .toolbar-actions {
+    flex-wrap: wrap;
+  }
+  .browser {
+    height: auto;
+    min-height: 0;
+    grid-template-columns: minmax(240px, 32%) minmax(320px, 1fr);
+    overflow: hidden;
+  }
+  .source-pane,
+  .list-pane {
+    min-height: 420px;
+    max-height: 52dvh;
+  }
+  .preview-pane {
+    grid-column: 1 / -1;
+    min-height: 680px;
+  }
+}
+@media (max-width: 760px) {
+  .workspace {
+    padding: 0;
+  }
+  .toolbar {
+    position: static;
+    border-radius: 0;
+  }
+  .toolbar img {
+    display: none;
+  }
+  .title-block {
+    flex: 1;
+  }
+  .toolbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .toolbar-actions .avatar {
+    width: 100%;
+    border-radius: 8px;
+  }
+  .job-pill {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+  .browser {
+    display: block;
+  }
+  .source-pane,
+  .list-pane {
+    min-height: 300px;
+    max-height: 48dvh;
+  }
+  .preview-pane {
+    min-height: 72dvh;
+  }
+  .create-invitation,
+  .invitation-row {
+    grid-template-columns: 1fr;
+  }
+  .invitation-row {
+    padding: 12px 0;
+  }
+  .invitation-row .user-status,
+  .invitation-row .text-button {
+    margin: 0;
+    justify-self: start;
   }
 }
 </style>
