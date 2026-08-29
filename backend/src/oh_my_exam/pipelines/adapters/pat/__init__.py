@@ -1,0 +1,1 @@
+"""Physics Aptitude Test adapter."""

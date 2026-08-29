@@ -1,0 +1,1 @@
+"""UAT admissions-test adapter."""

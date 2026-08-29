@@ -10,10 +10,24 @@ requires-python = ">=3.11"
 dependencies = [
   "argon2-cffi>=23.1,<26",
   "fastapi>=0.115,<1",
+  "Pillow>=10,<13",
   "PyJWT>=2.10,<3",
   "pymupdf>=1.24,<2",
+  "pypdf>=4,<7",
   "uvicorn[standard]>=0.30,<1",
 ]
+
+[project.scripts]
+ome-cie-alevel-downloader = "oh_my_exam.pipelines.adapters.cie_alevel.downloader.cli:main"
+ome-cie-alevel-splitter = "oh_my_exam.pipelines.adapters.cie_alevel.splitter.cli:main"
+ome-uat-admissions-downloader = "oh_my_exam.pipelines.adapters.uat.downloader.cli:main"
+ome-uat-admissions-splitter = "oh_my_exam.pipelines.adapters.uat.splitter.cli:main"
+ome-pat-admissions-downloader = "oh_my_exam.pipelines.adapters.pat.downloader.cli:main"
+ome-pat-admissions-splitter = "oh_my_exam.pipelines.adapters.pat.splitter.cli:main"
+ome-step-admissions-downloader = "oh_my_exam.pipelines.adapters.step.downloader.cli:main"
+ome-step-admissions-splitter = "oh_my_exam.pipelines.adapters.step.splitter.cli:main"
+ome-pack-subject = "oh_my_exam.pipelines.packaging.cli:main"
+ome-build-catalog = "oh_my_exam.pipelines.packaging.global_cli:main"
 
 [project.optional-dependencies]
 test = [
@@ -26,3 +40,4 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["--import-mode=importlib"]
