@@ -1,0 +1,302 @@
+from __future__ import annotations
+
+from collections import Counter, defaultdict
+from contextlib import closing
+from dataclasses import dataclass
+import json
+import math
+from pathlib import Path
+import re
+import sqlite3
+
+from oh_my_exam.pipelines.packaging.global_schema import migrate_global_catalog
+
+
+ALGORITHM_NAME = "syllabus_tfidf"
+ALGORITHM_VERSION = "1"
+_TOKEN = re.compile(r"[a-z][a-z0-9']{1,}|\d+(?:\.\d+)?", re.IGNORECASE)
+_STOP_WORDS = {
+    "and", "are", "can", "determine", "find", "for", "from", "given", "hence", "is",
+    "of", "or", "show", "that", "the", "then", "this", "to", "using", "with", "write",
+}
+
+
+@dataclass(frozen=True)
+class TopicSpec:
+    course_code: str
+    code: str
+    title: str
+    description: str
+    components: frozenset[str]
+    terms: tuple[str, ...]
+    broad: bool = False
+
+    @property
+    def canonical_code(self) -> str:
+        return f"syllabus:cie:a_level:{self.course_code}:{self.code}"
+
+
+@dataclass
+class MatchingSummary:
+    syllabuses: int = 0
+    topics: int = 0
+    tagged_questions: int = 0
+    question_tags: int = 0
+    similarities: int = 0
+
+
+def load_topic_specs(path: Path) -> list[TopicSpec]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    specs: list[TopicSpec] = []
+    for course in payload["courses"]:
+        for topic in course["topics"]:
+            specs.append(TopicSpec(
+                course_code=str(course["course_code"]),
+                code=str(topic["code"]),
+                title=str(topic["title"]),
+                description=str(topic.get("description", "")),
+                components=frozenset(str(item) for item in topic.get("components", [])),
+                terms=tuple(str(item).casefold() for item in topic.get("terms", [])),
+                broad=bool(topic.get("broad", False)),
+            ))
+    return specs
+
+
+def rebuild_question_matching(
+    database_path: Path,
+    topic_catalog_path: Path,
+    *,
+    top_k: int = 12,
+) -> MatchingSummary:
+    """Rebuild managed syllabus tags and explainable, sparse text similarities."""
+    specs = load_topic_specs(topic_catalog_path)
+    by_course: dict[str, list[TopicSpec]] = defaultdict(list)
+    for spec in specs:
+        by_course[spec.course_code].append(spec)
+
+    with closing(sqlite3.connect(database_path)) as connection:
+        connection.row_factory = sqlite3.Row
+        migrate_global_catalog(connection)
+        _clear_managed_rows(connection)
+        feature_ids = _write_topics(connection, by_course, topic_catalog_path)
+        rows = connection.execute(
+            """
+            SELECT q.id, q.paper_id, qt.content, p.component, ep.code AS course_code,
+                   ql.code AS qualification, eb.code AS exam_board
+            FROM questions q
+            JOIN papers p ON p.id = q.paper_id
+            JOIN exam_programs ep ON ep.id = p.exam_program_id
+            JOIN qualifications ql ON ql.id = ep.qualification_id
+            JOIN exam_boards eb ON eb.id = ep.exam_board_id
+            LEFT JOIN question_texts qt
+              ON qt.question_id = q.id AND qt.text_kind = 'search' AND qt.language = 'en'
+            ORDER BY q.id
+            """
+        ).fetchall()
+        tags = _classify_questions(rows, by_course, feature_ids)
+        connection.executemany(
+            """
+            INSERT INTO question_features (question_id, feature_id, role, weight)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                (question_id, feature_id, "secondary" if broad else "primary", weight)
+                for question_id, values in tags.items()
+                for feature_id, weight, broad in values
+            ],
+        )
+        algorithm_id = _write_algorithm(connection, top_k)
+        similarities = _build_similarities(rows, tags, top_k=top_k)
+        connection.executemany(
+            """
+            INSERT INTO question_similarities (
+                source_question_id, target_question_id, algorithm_id, rank, score
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            [(*pair, algorithm_id, rank, score) for pair, rank, score in similarities],
+        )
+        connection.commit()
+        return MatchingSummary(
+            syllabuses=len(by_course),
+            topics=len(specs),
+            tagged_questions=len(tags),
+            question_tags=sum(len(values) for values in tags.values()),
+            similarities=len(similarities),
+        )
+
+
+def _clear_managed_rows(connection: sqlite3.Connection) -> None:
+    managed = "canonical_code LIKE 'syllabus:cie:a_level:%'"
+    connection.execute(
+        f"DELETE FROM question_features WHERE feature_id IN (SELECT id FROM features WHERE {managed})"
+    )
+    connection.execute(
+        "DELETE FROM question_similarities WHERE algorithm_id IN "
+        "(SELECT id FROM similarity_algorithms WHERE name = ?)",
+        (ALGORITHM_NAME,),
+    )
+    connection.execute("DELETE FROM similarity_algorithms WHERE name = ?", (ALGORITHM_NAME,))
+    connection.execute("DELETE FROM syllabuses WHERE name LIKE 'Managed syllabus topics:%'")
+    connection.execute(f"DELETE FROM features WHERE {managed}")
+
+
+def _write_topics(
+    connection: sqlite3.Connection,
+    by_course: dict[str, list[TopicSpec]],
+    source_path: Path,
+) -> dict[str, int]:
+    feature_ids: dict[str, int] = {}
+    for course_code, specs in by_course.items():
+        program = connection.execute(
+            """
+            SELECT ep.id FROM exam_programs ep
+            JOIN qualifications ql ON ql.id = ep.qualification_id
+            JOIN exam_boards eb ON eb.id = ep.exam_board_id
+            WHERE ql.code = 'a_level' AND eb.code = 'cie' AND ep.code = ?
+            """,
+            (course_code,),
+        ).fetchone()
+        if program is None:
+            continue
+        syllabus_id = connection.execute(
+            """
+            INSERT INTO syllabuses (exam_program_id, name, effective_from_year, storage_key)
+            VALUES (?, ?, 2026, ?)
+            """,
+            (program["id"], f"Managed syllabus topics:{course_code}:2026-2027", source_path.as_posix()),
+        ).lastrowid
+        for spec in specs:
+            feature_id = connection.execute(
+                "INSERT INTO features (kind, canonical_code) VALUES ('concept', ?)",
+                (spec.canonical_code,),
+            ).lastrowid
+            connection.execute(
+                "INSERT INTO feature_labels (feature_id, language, name, description) VALUES (?, 'en', ?, ?)",
+                (feature_id, spec.title, spec.description),
+            )
+            topic_id = connection.execute(
+                """
+                INSERT INTO syllabus_topics (syllabus_id, code, title, description)
+                VALUES (?, ?, ?, ?)
+                """,
+                (syllabus_id, spec.code, spec.title, spec.description),
+            ).lastrowid
+            connection.execute(
+                "INSERT INTO syllabus_topic_features (syllabus_topic_id, feature_id) VALUES (?, ?)",
+                (topic_id, feature_id),
+            )
+            feature_ids[spec.canonical_code] = int(feature_id)
+    return feature_ids
+
+
+def _classify_questions(
+    rows: list[sqlite3.Row],
+    by_course: dict[str, list[TopicSpec]],
+    feature_ids: dict[str, int],
+) -> dict[int, list[tuple[int, float, bool]]]:
+    tags: dict[int, list[tuple[int, float, bool]]] = {}
+    for row in rows:
+        if row["qualification"] != "a_level" or row["exam_board"] != "cie":
+            continue
+        content = str(row["content"] or "").casefold()
+        component = _component_family(row["component"])
+        matches: list[tuple[int, float, bool]] = []
+        for spec in by_course.get(str(row["course_code"]), []):
+            if spec.components and component not in spec.components:
+                continue
+            hits = sum(1 for term in spec.terms if _contains_term(content, term))
+            if spec.broad or hits:
+                feature_id = feature_ids.get(spec.canonical_code)
+                if feature_id is not None:
+                    weight = 0.35 if spec.broad else min(1.0, 0.55 + 0.15 * hits)
+                    matches.append((feature_id, weight, spec.broad))
+        if matches:
+            tags[int(row["id"])] = matches
+    return tags
+
+
+def _build_similarities(
+    rows: list[sqlite3.Row],
+    tags: dict[int, list[tuple[int, float, bool]]],
+    *,
+    top_k: int,
+) -> list[tuple[tuple[int, int], int, float]]:
+    by_course: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for row in rows:
+        if str(row["content"] or "").strip():
+            by_course[f"{row['qualification']}:{row['exam_board']}:{row['course_code']}"] .append(row)
+
+    output: list[tuple[tuple[int, int], int, float]] = []
+    for course_rows in by_course.values():
+        counters = {int(row["id"]): Counter(_tokenize(str(row["content"]))) for row in course_rows}
+        document_frequency = Counter(term for counter in counters.values() for term in counter)
+        total = len(counters)
+        vectors: dict[int, dict[str, float]] = {}
+        postings: dict[str, list[tuple[int, float]]] = defaultdict(list)
+        for question_id, counter in counters.items():
+            vector = {
+                term: (1.0 + math.log(count)) * (math.log((1 + total) / (1 + document_frequency[term])) + 1.0)
+                for term, count in counter.items()
+                if document_frequency[term] <= max(200, total // 5)
+            }
+            norm = math.sqrt(sum(value * value for value in vector.values())) or 1.0
+            vectors[question_id] = {term: value / norm for term, value in vector.items()}
+            for term, value in vectors[question_id].items():
+                postings[term].append((question_id, value))
+
+        paper_by_question = {int(row["id"]): int(row["paper_id"]) for row in course_rows}
+        feature_sets = {qid: {feature_id for feature_id, _, _ in values} for qid, values in tags.items()}
+        for source_id, vector in vectors.items():
+            scores: Counter[int] = Counter()
+            for term, source_weight in vector.items():
+                for target_id, target_weight in postings[term]:
+                    if target_id != source_id and paper_by_question[target_id] != paper_by_question[source_id]:
+                        scores[target_id] += source_weight * target_weight
+            source_features = feature_sets.get(source_id, set())
+            ranked: list[tuple[float, int]] = []
+            for target_id, lexical_score in scores.items():
+                target_features = feature_sets.get(target_id, set())
+                union = source_features | target_features
+                topic_score = len(source_features & target_features) / len(union) if union else 0.0
+                score = 0.75 * lexical_score + 0.25 * topic_score
+                if score >= 0.08:
+                    ranked.append((score, target_id))
+            ranked.sort(key=lambda item: (-item[0], item[1]))
+            for rank, (score, target_id) in enumerate(ranked[:top_k], 1):
+                output.append(((source_id, target_id), rank, round(score, 6)))
+    return output
+
+
+def _write_algorithm(connection: sqlite3.Connection, top_k: int) -> int:
+    return int(connection.execute(
+        """
+        INSERT INTO similarity_algorithms (name, version, configuration_json)
+        VALUES (?, ?, ?)
+        """,
+        (
+            ALGORITHM_NAME,
+            ALGORITHM_VERSION,
+            json.dumps({"text_weight": 0.75, "topic_weight": 0.25, "top_k": top_k}, sort_keys=True),
+        ),
+    ).lastrowid)
+
+
+def _component_family(value: object) -> str:
+    match = re.search(r"\d+", str(value or ""))
+    if match is None:
+        return ""
+    family = str(int(match.group(0)))[0]
+    # Pre-2020 Mathematics used Paper 7 for the content now assessed as Paper 6.
+    return "6" if family == "7" else family
+
+
+def _contains_term(content: str, term: str) -> bool:
+    if not term:
+        return False
+    if re.fullmatch(r"[a-z0-9']+", term):
+        return re.search(rf"\b{re.escape(term)}\b", content) is not None
+    return term in content
+
+
+def _tokenize(content: str) -> list[str]:
+    return [token for token in _TOKEN.findall(content.casefold()) if token not in _STOP_WORDS]

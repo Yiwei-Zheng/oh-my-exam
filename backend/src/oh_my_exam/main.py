@@ -97,6 +97,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def list_exams() -> list[dict[str, object]]:
         return catalog.list_exams()
 
+    @app.get("/api/v1/questions/search")
+    def search_questions(
+        query: str = Query("", max_length=500),
+        exam_id: str | None = None,
+        topic: list[str] = Query(default=[]),
+        limit: int = Query(50, ge=1, le=200),
+    ) -> list[dict[str, object]]:
+        try:
+            return catalog.search_questions(
+                query, exam_id=exam_id, topic_codes=tuple(topic), limit=limit
+            )
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/v1/topics")
+    def list_topics(exam_id: str | None = None) -> list[dict[str, object]]:
+        try:
+            return catalog.list_topics(exam_id)
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.get("/api/v1/exams/{exam_id}/questions")
     def list_questions(
         exam_id: str,
@@ -112,6 +133,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_question(exam_id: str, question_id: int) -> dict[str, object]:
         try:
             return catalog.get_question(exam_id, question_id)
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/similar")
+    def list_similar_questions(
+        exam_id: str,
+        question_id: int,
+        limit: int = Query(10, ge=1, le=50),
+    ) -> list[dict[str, object]]:
+        try:
+            return catalog.list_similar_questions(exam_id, question_id, limit)
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 

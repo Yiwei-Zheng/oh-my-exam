@@ -29,6 +29,7 @@ ome-step-admissions-downloader = "oh_my_exam.pipelines.adapters.step.downloader.
 ome-step-admissions-splitter = "oh_my_exam.pipelines.adapters.step.splitter.cli:main"
 ome-pack-subject = "oh_my_exam.pipelines.packaging.cli:main"
 ome-build-catalog = "oh_my_exam.pipelines.packaging.global_cli:main"
+ome-match-questions = "oh_my_exam.question_matching_cli:main"
 
 [project.optional-dependencies]
 test = [

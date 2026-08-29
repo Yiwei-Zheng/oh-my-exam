@@ -170,6 +170,167 @@ class GlobalCatalog:
             rows = connection.execute(sql, parameters).fetchall()
         return [self._question_summary(row) for row in rows]
 
+    def search_questions(
+        self,
+        query: str = "",
+        *,
+        exam_id: str | None = None,
+        topic_codes: tuple[str, ...] = (),
+        limit: int = 50,
+    ) -> list[dict[str, object]]:
+        """Search identity, extracted text, and managed syllabus topics."""
+        normalized_query = query.strip().casefold()
+        tokens = tuple(dict.fromkeys(part for part in normalized_query.split() if part))
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id) if exam_id else None
+            has_features = self._table_exists(connection, "question_features")
+            select_topics = (
+                "GROUP_CONCAT(DISTINCT fl.name) AS topics"
+                if has_features else "'' AS topics"
+            )
+            joins = ""
+            if has_features:
+                joins = """
+                    LEFT JOIN question_features qf ON qf.question_id = qu.id
+                    LEFT JOIN features f ON f.id = qf.feature_id
+                    LEFT JOIN feature_labels fl ON fl.feature_id = f.id AND fl.language = 'en'
+                """
+            sql = f"""
+                SELECT qu.id, qu.stable_key, qu.question_number, qu.local_key,
+                       p.id AS paper_id, p.source_key AS paper_key, qt.content,
+                       ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
+                       {select_topics}
+                FROM questions qu
+                JOIN papers p ON p.id = qu.paper_id
+                JOIN exam_programs ep ON ep.id = p.exam_program_id
+                JOIN qualifications ql ON ql.id = ep.qualification_id
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
+                LEFT JOIN question_texts qt
+                  ON qt.question_id = qu.id AND qt.text_kind = 'search' AND qt.language = 'en'
+                {joins}
+                WHERE 1 = 1
+            """
+            parameters: list[object] = []
+            if program_id is not None:
+                sql += " AND p.exam_program_id = ?"
+                parameters.append(program_id)
+            if tokens:
+                clauses: list[str] = []
+                for token in tokens:
+                    clauses.append("(lower(COALESCE(qt.content, '')) LIKE ? OR lower(qu.stable_key) LIKE ?)")
+                    parameters.extend((f"%{token}%", f"%{token}%"))
+                sql += " AND " + " AND ".join(clauses)
+            if topic_codes and has_features:
+                placeholders = ", ".join("?" for _ in topic_codes)
+                sql += f" AND f.canonical_code IN ({placeholders})"
+                parameters.extend(topic_codes)
+            sql += " GROUP BY qu.id ORDER BY p.year DESC, p.source_key, qu.sort_order LIMIT ?"
+            parameters.append(max(limit * 5, limit))
+            rows = connection.execute(sql, parameters).fetchall()
+
+        results: list[dict[str, object]] = []
+        for row in rows:
+            content = str(row["content"] or "")
+            haystack = f"{row['stable_key']} {content}".casefold()
+            lexical_hits = sum(haystack.count(token) for token in tokens)
+            phrase_bonus = 2 if normalized_query and normalized_query in haystack else 0
+            summary = self._question_summary(row)
+            summary.update({
+                "exam_id": f"{row['qualification']}:{row['exam_board']}:{row['course_code']}",
+                "topics": [item for item in str(row["topics"] or "").split(",") if item],
+                "score": lexical_hits + phrase_bonus,
+            })
+            results.append(summary)
+        results.sort(key=lambda item: (-int(item["score"]), str(item["stable_key"])))
+        return results[:limit]
+
+    def list_topics(self, exam_id: str | None = None) -> list[dict[str, object]]:
+        with closing(self._connect()) as connection:
+            if not self._table_exists(connection, "syllabus_topics"):
+                return []
+            sql = """
+                SELECT f.canonical_code AS code, st.title, st.description,
+                       ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
+                       COUNT(DISTINCT qf.question_id) AS question_count
+                FROM syllabus_topics st
+                JOIN syllabuses s ON s.id = st.syllabus_id
+                JOIN exam_programs ep ON ep.id = s.exam_program_id
+                JOIN qualifications ql ON ql.id = ep.qualification_id
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
+                JOIN syllabus_topic_features stf ON stf.syllabus_topic_id = st.id
+                JOIN features f ON f.id = stf.feature_id
+                LEFT JOIN question_features qf ON qf.feature_id = f.id
+                WHERE 1 = 1
+            """
+            parameters: list[object] = []
+            if exam_id:
+                sql += " AND ep.id = ?"
+                parameters.append(self._program_id(connection, exam_id))
+            sql += " GROUP BY st.id ORDER BY ep.code, st.code"
+            rows = connection.execute(sql, parameters).fetchall()
+        return [
+            {
+                "code": row["code"], "title": row["title"], "description": row["description"],
+                "exam_id": f"{row['qualification']}:{row['exam_board']}:{row['course_code']}",
+                "question_count": row["question_count"],
+            }
+            for row in rows
+        ]
+
+    def list_similar_questions(
+        self,
+        exam_id: str,
+        question_id: int,
+        limit: int = 10,
+    ) -> list[dict[str, object]]:
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id)
+            exists = connection.execute(
+                """
+                SELECT 1 FROM questions q JOIN papers p ON p.id = q.paper_id
+                WHERE q.id = ? AND p.exam_program_id = ?
+                """,
+                (question_id, program_id),
+            ).fetchone()
+            if exists is None:
+                raise CatalogNotFoundError(f"question not found: {question_id}")
+            if not self._table_exists(connection, "question_similarities"):
+                return []
+            rows = connection.execute(
+                """
+                SELECT target.id, target.stable_key, target.question_number, target.local_key,
+                       p.id AS paper_id, p.source_key AS paper_key, qt.content,
+                       qs.rank, qs.score,
+                       GROUP_CONCAT(DISTINCT shared_labels.name) AS shared_topics
+                FROM question_similarities qs
+                JOIN similarity_algorithms sa ON sa.id = qs.algorithm_id
+                JOIN questions target ON target.id = qs.target_question_id
+                JOIN papers p ON p.id = target.paper_id
+                LEFT JOIN question_texts qt
+                  ON qt.question_id = target.id AND qt.text_kind = 'search' AND qt.language = 'en'
+                LEFT JOIN question_features source_features
+                  ON source_features.question_id = qs.source_question_id
+                LEFT JOIN question_features target_features
+                  ON target_features.question_id = target.id
+                 AND target_features.feature_id = source_features.feature_id
+                LEFT JOIN feature_labels shared_labels
+                  ON shared_labels.feature_id = target_features.feature_id AND shared_labels.language = 'en'
+                WHERE qs.source_question_id = ? AND sa.name = 'syllabus_tfidf'
+                GROUP BY target.id, qs.rank, qs.score
+                ORDER BY qs.rank
+                LIMIT ?
+                """,
+                (question_id, limit),
+            ).fetchall()
+        return [
+            self._question_summary(row) | {
+                "rank": row["rank"],
+                "score": row["score"],
+                "shared_topics": [item for item in str(row["shared_topics"] or "").split(",") if item],
+            }
+            for row in rows
+        ]
+
     def get_question(self, exam_id: str, question_id: int) -> dict[str, object]:
         with closing(self._connect()) as connection:
             program_id = self._program_id(connection, exam_id)
@@ -368,6 +529,13 @@ class GlobalCatalog:
         connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         return connection
+
+    @staticmethod
+    def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+        return connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?",
+            (table,),
+        ).fetchone() is not None
 
     @staticmethod
     def _tree_node(node_id: str, label: str, kind: str) -> dict[str, object]:

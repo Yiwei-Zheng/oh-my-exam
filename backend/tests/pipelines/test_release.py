@@ -25,6 +25,11 @@ def test_build_and_activate_release_replaces_active_catalog(monkeypatch, tmp_pat
         "extract_answer_markdown",
         lambda *_args, **_kwargs: SimpleNamespace(versions_written=0),
     )
+    monkeypatch.setattr(
+        release,
+        "rebuild_question_matching",
+        lambda *_args, **_kwargs: SimpleNamespace(tagged_questions=0),
+    )
 
     assert release.build_and_activate_release(tmp_path) == active
     with sqlite3.connect(active) as connection:

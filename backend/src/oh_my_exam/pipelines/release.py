@@ -10,6 +10,8 @@ import sqlite3
 from oh_my_exam.paths import DATA_ROOT
 from oh_my_exam.pipelines.packaging.answer_extraction import extract_answer_markdown
 from oh_my_exam.pipelines.packaging.global_migration import GlobalMigrationOptions, migrate_portable_catalogs
+from oh_my_exam.question_matching import rebuild_question_matching
+from oh_my_exam.question_matching_cli import DEFAULT_TOPICS
 
 
 def _progress(stage: str, progress: int, message: str) -> None:
@@ -31,7 +33,12 @@ def build_and_activate_release(data_root: Path = DATA_ROOT) -> Path:
     ))
     _progress("cataloging", 68, f"已写入 {summary.questions} 道题")
     answers = extract_answer_markdown(candidate, paper_root, overwrite=True)
-    _progress("classifying", 90, f"已提取 {answers.versions_written} 份答案文本")
+    matches = rebuild_question_matching(candidate, DEFAULT_TOPICS)
+    _progress(
+        "classifying",
+        90,
+        f"已提取 {answers.versions_written} 份答案文本，标注 {matches.tagged_questions} 道题",
+    )
 
     with closing(sqlite3.connect(candidate)) as connection:
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]

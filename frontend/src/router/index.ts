@@ -24,6 +24,12 @@ export const router = createRouter({
       meta: { requiresAuth: true, role: 'admin' },
     },
     {
+      path: '/questions',
+      name: 'questions',
+      component: () => import('../features/questions/QuestionSearchView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('../features/not-found/NotFoundView.vue'),

@@ -22,6 +22,11 @@ qualification
 Knowledge points and other classifications are tags and filters. The browser
 loads one level at a time and uses cursor pagination for question results.
 
+Managed CIE knowledge-point tags use official syllabus section names. Search
+can span question text, stable identity and these tags. Similar-question lists
+are built offline from syllabus overlap and sparse text similarity, then stored
+in the normalized catalog so API reads remain bounded.
+
 ## Documents and regions
 
 A source-paper record uses an internal id and a storage key relative to the

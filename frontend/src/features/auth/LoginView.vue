@@ -29,9 +29,10 @@ async function submit() {
   loading.value = true
   try {
     const user = await auth.login(email.value.trim(), password.value)
+    const fallback = user.role === 'admin' ? '/admin' : '/questions'
     const destination =
-      typeof route.query.redirect === 'string' ? route.query.redirect : '/admin'
-    await router.replace(user.role === 'admin' ? destination : '/login')
+      typeof route.query.redirect === 'string' ? route.query.redirect : fallback
+    await router.replace(destination)
   } catch (caught) {
     if (caught instanceof ApiError && caught.status === 401) {
       error.value = t('auth.invalidCredentials')
