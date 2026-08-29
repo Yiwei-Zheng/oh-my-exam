@@ -7,9 +7,9 @@ Implementation details must not silently redefine product behavior.
 
 ## One authority per fact
 
-PostgreSQL owns hosted identity, catalog, pipeline, and audit state. The object
-store owns document bytes. Redis carries work but does not own job history.
-Generated caches and portable exports are never treated as authorities.
+The identity database owns accounts and job state. The active catalog database
+owns published question data. Original PDFs own document fidelity. Generated
+caches and portable inputs are never treated as published authorities.
 
 ## Explicit boundaries
 

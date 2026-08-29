@@ -1,23 +1,47 @@
 # Development
 
-## Supported environment
+## Prerequisites
 
-Windows and Linux are supported for source development. Linux is required for
-production-equivalent Celery worker verification.
+- Python 3.11 or later
+- Node.js 20.17 or later
+- npm
+- Tesseract on `PATH` only when OCR fallback is required
 
-## Services
+From the repository root, prepare the Python environment and install frontend dependencies:
 
-Development requires PostgreSQL and Redis, the FastAPI application, a Celery
-worker, and the Vite frontend. All processes use the typed environment contract
-documented by `.env.example`.
+```powershell
+python scripts\setup_env.py --group all
+Set-Location frontend
+npm install
+```
 
-Exact installation and start commands will be finalized when the source move is
-complete. Documentation must describe only commands verified against the new
-paths; legacy `web/` and `tools/` commands are intentionally not preserved.
+Start the API from the repository root:
 
-## Verification
+```powershell
+$env:OME_BOOTSTRAP_ADMIN_EMAIL = 'admin@example.com'
+$env:OME_BOOTSTRAP_ADMIN_PASSWORD = 'replace-this-development-password'
+$env:OME_JWT_SECRET = 'replace-with-at-least-32-random-bytes'
+python scripts\start_api.py
+```
 
-Run the narrowest relevant unit and integration tests during development. The
-clean-cut gate additionally runs backend tests and migrations, frontend test,
-type check, lint, build, accessibility and E2E checks, representative PDF
-rendering, and one complete CIE 9709 pipeline.
+Start Vite from `frontend/`:
+
+```powershell
+npm run dev
+```
+
+Vite proxies `/api` to `http://127.0.0.1:8000`. Use `VITE_API_PROXY_TARGET` to override it.
+
+## Validation
+
+```powershell
+Set-Location backend
+..\.venv\Scripts\python -m pytest -q
+Set-Location ..\frontend
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+Pipeline CLIs are listed in the root README. The release pipeline can be exercised directly with `python backend/scripts/release_catalog.py`; it activates a candidate only after validation.

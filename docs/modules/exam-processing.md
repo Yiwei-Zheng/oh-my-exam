@@ -31,9 +31,9 @@ Adapters may define source discovery, naming, catalog interpretation, and
 PDF-layout rules. They implement pipeline contracts and are tested with fixed
 fixtures. Adapters do not publish directly and do not import FastAPI or Celery.
 
-Configuration uses source-controlled defaults below `backend/config/exams/`
-and versioned administrator overrides in PostgreSQL. Browser input cannot upload
-or execute arbitrary Python.
+Configuration uses source-controlled defaults below `backend/config/exams/`.
+Browser input selects supported operations; it cannot upload or execute
+arbitrary Python.
 
 ## Failure and publication
 
@@ -44,6 +44,8 @@ leave the current active release unchanged.
 
 ## Runtime adapters
 
-FastAPI creates, cancels, retries, and reports runs. Celery executes steps. Redis
-transports work. PostgreSQL owns run history. Server-Sent Events deliver progress
-without making the browser the owner of execution state.
+FastAPI creates, reports, and authenticates runs. A backend-owned subprocess
+executes the release command and writes structured progress; SQLite owns run
+history. Server-Sent Events deliver progress without making the browser the
+owner of execution state. A queue may replace the local executor later without
+changing pipeline contracts.

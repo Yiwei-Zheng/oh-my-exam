@@ -1,32 +1,17 @@
-# Data Migration
+# Data Migration Record
 
-## Scope
+## Completed clean break
 
-Migrate the existing application SQLite database, global and subject catalogs,
-original PDFs, crop metadata, answer text, configuration, and source resources
-into the new backend boundary. The existing corpus is treated as authoritative
-until reconciliation completes.
+- Maintained Vue source moved from `web/frontend` to `frontend`.
+- FastAPI source moved from `web/backend` to `backend`.
+- Downloader, splitter and packer packages moved from `tools` into `backend/src/oh_my_exam/pipelines`.
+- Tracked exam configuration and resources moved below `backend`.
+- `data/{databases,processed_questions,raw_papers,reports}` moved to `backend/data` on the same volume.
+- The active catalog gained `answer_versions.raw_text`; the empty `marking_points` table was removed.
+- Permanent JPGs below `backend/data/processed_questions` were removed after dynamic PDF preview passed API and browser verification.
 
-## Method
+Original PDFs, JSON crop metadata, portable databases and reports were retained. Legacy import names and launch wrappers are not supported.
 
-1. Inventory source paths, counts, byte sizes, database schemas, and storage keys.
-2. Create database backups and a SHA-256 manifest for retained documents.
-3. Import identity and catalog records into PostgreSQL staging schemas.
-4. Move immutable PDFs into `backend/data/objects/` without changing document
-   identity; verify every retained checksum.
-5. Validate relationships, pages, regions, answer text, and representative PDF
-   rendering.
-6. Run one complete pipeline and verify automatic release activation.
-7. Switch all code and configuration to the new paths and perform a cold start.
-8. Delete authorized legacy code and derived data only after the complete gate.
+## Verification
 
-## Deletion
-
-The accepted clean break removes old roots, launchers, Flet GUIs, permanent JPG
-crops, duplicate processed reports, and fully imported sidecars. It retains
-original PDFs, migrated data, backups, checksums, migration manifests,
-corrections, releases, and audit records.
-
-Deletion commands must resolve and verify exact workspace paths before acting.
-No deletion targets an environment variable, glob, repository root, or parent
-directory.
+The migration gate checks backend tests, all new CLI entry points, SQLite integrity, frontend lint/typecheck/tests/build, authenticated tree browsing, question list loading, dynamic PDF delivery and narrow-screen overflow. A failed catalog candidate never replaces the active catalog.

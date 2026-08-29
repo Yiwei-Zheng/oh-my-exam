@@ -1,0 +1,22 @@
+[Unit]
+Description=Oh-My-Exam API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oh-my-exam
+Group=oh-my-exam
+WorkingDirectory=/srv/oh-my-exam
+EnvironmentFile=/etc/oh-my-exam/oh-my-exam.env
+ExecStart=/srv/oh-my-exam/.venv/bin/python scripts/start_api.py --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/oh-my-exam/backend/data /srv/oh-my-exam/tmp
+
+[Install]
+WantedBy=multi-user.target

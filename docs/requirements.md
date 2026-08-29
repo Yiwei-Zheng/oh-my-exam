@@ -47,11 +47,13 @@ architecture must allow new exam families without global rewrites.
 
 - Administrators can discover, download, validate, split, extract text or OCR,
   link questions and answers, classify, package, and publish from the web UI.
-- Web requests create or control durable jobs; they do not run a complete
-  pipeline in the request process.
+- Web requests create durable job records and start the pipeline in an isolated
+  subprocess; they do not execute processing inside the request handler.
 - Every step has explicit inputs, outputs, status, logs, and artifact identity.
-- Steps are idempotent, retryable, and resumable after worker failure.
-- Different subjects may run concurrently; publication is serialized.
+- Steps are idempotent and retryable. A failed run keeps its logs and may be
+  restarted by an administrator.
+- The current release serializes publication. Distributed workers and
+  cross-host resumption are future scale-out capabilities.
 - Each build produces an immutable catalog release.
 - Deterministic validation runs automatically. A passing release becomes active
   without manual review; a failing release leaves the previous release active.
@@ -61,12 +63,10 @@ architecture must allow new exam families without global rewrites.
 
 ## Data and storage
 
-- PostgreSQL is the hosted source of truth for identity, catalog, pipeline,
-  learning state, and audit data.
-- PostgreSQL schemas and normalized tables provide logical separation. Hosted
-  identity and catalog data do not use independent SQLite files.
-- SQLite remains supported for portable release export, migration input, tests,
-  and isolated local processing where appropriate.
+- The supported self-hosted release uses separate normalized SQLite databases
+  for identity and job state, the active catalog, and portable pipeline inputs.
+- PostgreSQL is the documented scale-out direction, not a runtime dependency of
+  this release. A future migration must preserve API and module boundaries.
 - Original PDF documents are immutable, checksummed, versioned server objects.
 - The local object store lives under `backend/data/objects/`; the storage API
   remains replaceable by an S3-compatible implementation.
@@ -94,8 +94,8 @@ architecture must allow new exam families without global rewrites.
 
 - Production supports current Ubuntu and Debian releases with systemd.
 - Caddy serves the frontend and proxies versioned API requests.
-- FastAPI, Celery workers, PostgreSQL, and Redis run as separate processes or
-  managed services.
+- FastAPI runs under systemd. Pipeline subprocesses are created by the backend
+  and their durable state remains in SQLite.
 - Installation, migration, upgrade, backup, and health-check procedures must be
   repeatable and documented.
 - Docker support is explicitly out of scope for the current iteration.

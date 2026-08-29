@@ -9,8 +9,8 @@ an Apple-inspired web document browser and Linux bare-metal deployment.
 
 ## Confirmed constraints
 
-- Use a modular monolith, PostgreSQL, Redis, Celery, filesystem/S3 storage
-  boundary, Vue 3, and versioned REST APIs.
+- Use a modular monolith, SQLite-backed self-hosted runtime, filesystem storage
+  boundary, Vue 3, and versioned REST APIs. Preserve seams for later scale-out.
 - Keep pipeline core independent of FastAPI and GUI code.
 - Use automatic validation and publication without a manual review gate.
 - Store answer raw text and Markdown; defer marking-point structures.
@@ -42,8 +42,8 @@ README.md
 2. Move the frontend and backend source applications.
 3. Consolidate processing packages, configuration, resources, requirements, and
    tests under `backend/`; update every import and entry point.
-4. Introduce PostgreSQL schemas and Alembic migrations. Import application and
-   catalog SQLite data with count and relationship reports.
+4. Normalize and migrate the identity, run-state, portable input, and active
+   catalog SQLite databases with count and relationship reports.
 5. Move original PDFs and retained runtime data into `backend/data/`; preserve
    path-independent document keys and generate a checksum manifest.
 6. Implement durable pipeline runs, automatic release validation/publication,
@@ -82,7 +82,7 @@ database backups, checksums, migration manifests, or audit records.
 - The runtime corpus is about 5.66 GiB and contains more than 130,000 files.
 - Existing storage keys and hard-coded root paths must be migrated without
   silently changing document identity.
-- Native Celery production workers are Linux-only; Windows development requires
-  a non-production execution path or Linux worker host for full integration.
+- The local subprocess executor is single-host. Multi-host processing will need
+  an explicit queue and database migration rather than compatibility shims.
 - Source PDF availability and licensing must remain controlled by authenticated
   document endpoints.
