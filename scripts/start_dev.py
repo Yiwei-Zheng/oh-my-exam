@@ -56,11 +56,9 @@ def require_runtime() -> str:
 
 def require_available_port(port: int, label: str) -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
-        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            probe.bind(("127.0.0.1", port))
-        except OSError as exc:
-            raise RuntimeError(f"{label} port {port} is already in use.") from exc
+        probe.settimeout(0.3)
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            raise RuntimeError(f"{label} port {port} is already in use.")
 
 
 def process_options() -> dict[str, object]:
