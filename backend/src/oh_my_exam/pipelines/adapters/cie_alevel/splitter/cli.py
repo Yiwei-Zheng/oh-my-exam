@@ -55,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     split_all.add_argument("--subject", action="append", dest="subjects", help="科目代码，例如 9709 或 9231；可重复。")
     split_all.add_argument("--start-year", type=int)
     split_all.add_argument("--end-year", type=int)
-    split_all.add_argument("--paper-key", action="append", dest="paper_keys", help="GUI/listing 中的本地试卷 key；可重复。")
+    split_all.add_argument("--paper-key", action="append", dest="paper_keys", help="题目列表中的本地试卷 key；可重复。")
     split_all.add_argument("--workers", type=int, default=1)
     split_all.add_argument("--dpi", type=int, default=150)
     split_all.add_argument("--threshold", type=int, default=215)

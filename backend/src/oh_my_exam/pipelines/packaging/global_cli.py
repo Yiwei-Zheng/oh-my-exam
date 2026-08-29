@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
+from oh_my_exam.paths import DATABASE_ROOT, RAW_PAPER_ROOT
 from oh_my_exam.pipelines.packaging.global_migration import GlobalMigrationOptions, migrate_portable_catalogs
 from oh_my_exam.pipelines.packaging.answer_extraction import extract_answer_markdown
 
@@ -13,12 +14,12 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ome-global-catalog",
         description="将现有单科 SQLite 迁移为统一的全局题库。",
     )
-    parser.add_argument("--database-root", type=Path, default=Path("backend/data/databases"))
-    parser.add_argument("--paper-root", type=Path, default=Path("backend/data/objects"))
+    parser.add_argument("--database-root", type=Path, default=DATABASE_ROOT)
+    parser.add_argument("--paper-root", type=Path, default=RAW_PAPER_ROOT)
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("backend/data/databases/global_exam_catalog.sqlite"),
+        default=DATABASE_ROOT / "global_exam_catalog.sqlite",
     )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument(

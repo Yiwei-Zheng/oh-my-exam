@@ -276,7 +276,7 @@ def test_cambridge_subjects_parser_keeps_subject_links_only() -> None:
     assert [(subject.code, subject.name) for subject in subjects] == [("9709", "Mathematics")]
 
 
-def test_gui_subject_options_are_loaded_from_manifest(tmp_path: Path) -> None:
+def test_subject_options_are_loaded_from_manifest(tmp_path: Path) -> None:
     manifest = {
         "qualification": "a_level",
         "sessions": ["s24"],
@@ -292,10 +292,10 @@ def test_gui_subject_options_are_loaded_from_manifest(tmp_path: Path) -> None:
     assert load_subject_options(manifest_path) == {"9701": "Chemistry", "9709": "Mathematics"}
 
 
-def test_gui_default_manifest_is_resolved_from_project_root() -> None:
+def test_default_manifest_is_resolved_outside_project_root(tmp_path: Path) -> None:
     previous = Path.cwd()
     try:
-        os.chdir(project_path("tools/downloaders/alevel/cie"))
+        os.chdir(tmp_path)
         manifest = default_manifest_path()
         assert project_path(manifest).exists()
         assert load_subject_options(manifest)
@@ -303,7 +303,7 @@ def test_gui_default_manifest_is_resolved_from_project_root() -> None:
         os.chdir(previous)
 
 
-def test_gui_subject_download_percentage_uses_available_assets_and_local_pdfs(tmp_path: Path) -> None:
+def test_subject_download_percentage_uses_available_assets_and_local_pdfs(tmp_path: Path) -> None:
     availability_dir = tmp_path / "available"
     raw_root = tmp_path / "raw"
     asset_a = PaperAsset("cie", "a_level", "9709", "Math", "s24", "qp", "11")
@@ -323,7 +323,7 @@ def test_gui_subject_download_percentage_uses_available_assets_and_local_pdfs(tm
     ) == 50
 
 
-def test_gui_subject_download_percentage_can_reuse_local_pdf_index(tmp_path: Path) -> None:
+def test_subject_download_percentage_can_reuse_local_pdf_index(tmp_path: Path) -> None:
     availability_dir = tmp_path / "available"
     raw_root = tmp_path / "raw"
     asset_a = PaperAsset("cie", "a_level", "9709", "Math", "s24", "qp", "11")
