@@ -6,9 +6,9 @@ This repository is starting with the local exam paper processing pipeline.
 
 The first hosted server slice lives in `web/backend/`. It exposes the existing
 admissions-test subject packages through a read-only API and serves locally
-retained PDFs by internal exam and paper ids. Authentication, PostgreSQL,
-RAGFlow/DeepSeek, and the deterministic math harness currently return explicit
-placeholder capability states rather than pretending to be available.
+retained PDFs by internal exam and paper ids. Email/password authentication and
+the administrator workspace are available; PostgreSQL, RAGFlow/DeepSeek, and
+the deterministic math harness remain future capabilities.
 
 Create or update the shared development environment, then run the API from the
 repository root. Use `python3` instead of `python` on Linux when required:
@@ -17,16 +17,16 @@ repository root. Use `python3` instead of `python` on Linux when required:
 python scripts/setup_env.py --group backend-dev
 ```
 
-Windows:
+Cross-platform web start:
 
 ```powershell
-.venv\Scripts\python -m uvicorn oh_my_exam_server.main:app --reload --host 127.0.0.1 --port 8000
+# Windows
+python web\start.py
 ```
 
-Linux/macOS:
-
-```console
-.venv/bin/python web/start.py --install
+```bash
+# macOS or Linux
+python3 web/start.py
 ```
 
 Useful endpoints:
@@ -45,8 +45,8 @@ mark-scheme display. The paper route returns the complete source PDF and remains
 appropriate for explicit full-paper viewing or workflows that reuse many
 questions from the same paper.
 
-Do not expose this initial server directly to the public internet because
-authentication is still a documented placeholder.
+For public deployment, set a strong `OME_JWT_SECRET`, enable
+`OME_SECURE_COOKIES=true`, and place the service behind an HTTPS reverse proxy.
 
 ## Official Web
 

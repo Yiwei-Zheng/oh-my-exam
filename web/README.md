@@ -9,25 +9,32 @@ The frontend calls the backend through versioned HTTP APIs. Neither application
 imports the other's internal code, and production may deploy them together or
 separately without changing this source boundary.
 
-## Linux deployment start
+## Cross-platform start
 
-`web/start.py` builds and starts the self-contained web application. FastAPI
+`web/start.py` starts the already prepared web application. FastAPI
 serves both the versioned API and the compiled Vue frontend from one origin, so
 production does not run the Vite development server or embed a deployment
-domain.
+domain. The same script supports Windows, macOS, and Linux.
 
-From the repository root:
+The script is intentionally decoupled from environment setup: it does not create
+a virtual environment, install dependencies, modify configuration, or build the
+frontend. The active Python environment must already contain the backend
+dependencies, and `web/frontend/dist/index.html` must already exist.
 
-```bash
-python3 -m venv .venv
-.venv/bin/pip install -e 'web/backend'
-.venv/bin/python web/start.py --install
+Start from the repository root:
+
+```powershell
+# Windows
+python web\start.py
 ```
 
-`--install` runs `npm ci` and the production frontend build before starting.
-For later restarts, use `.venv/bin/python web/start.py`. The default listener is
-`0.0.0.0:8000`; override it with `--host`, `--port`, `HOST`, or `PORT`. Run
-`.venv/bin/python web/start.py --check` to validate an existing build without
+```bash
+# macOS or Linux
+python3 web/start.py
+```
+
+The default listener is `0.0.0.0:8000`; override it with `--host`, `--port`,
+`HOST`, or `PORT`. Add `--check` to validate the prepared runtime without
 starting the server.
 
 The frontend uses Vue 3, TypeScript, Vite, Element Plus, and ECharts. It provides
