@@ -22,6 +22,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AnswerRevisionRequest(BaseModel):
+    raw_text: str
+    markdown: str
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     catalog = GlobalCatalog(settings.database_path)
@@ -50,7 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             CORSMiddleware,
             allow_origins=list(settings.cors_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST", "DELETE"],
+            allow_methods=["GET", "POST", "PATCH", "DELETE"],
             allow_headers=["Authorization", "Content-Type"],
         )
 
@@ -162,6 +167,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return catalog.question_tree()
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/papers/{paper_id}/questions")
+    def admin_paper_questions(paper_id: int, _: User = Depends(admin_user)) -> list[dict[str, object]]:
+        try:
+            return catalog.list_paper_questions(paper_id)
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.patch("/api/v1/admin/questions/{question_id}/answer-text")
+    def admin_save_answer_text(
+        question_id: int,
+        payload: AnswerRevisionRequest,
+        _: User = Depends(admin_user),
+    ) -> dict[str, object]:
+        try:
+            return {"answer_structured": catalog.save_answer_revision(
+                question_id, payload.raw_text, payload.markdown
+            )}
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/v1/admin/question-update")
     def latest_question_update(_: User = Depends(admin_user)) -> dict[str, object]:

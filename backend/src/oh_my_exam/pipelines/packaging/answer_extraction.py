@@ -88,10 +88,10 @@ def extract_answer_markdown(
                 cursor = conn.execute(
                     """
                     INSERT OR IGNORE INTO answer_versions (
-                        answer_id, version, language, markdown, status
-                    ) VALUES (?, 1, 'en', ?, 'draft')
+                        answer_id, version, language, raw_text, markdown, status
+                    ) VALUES (?, 1, 'en', ?, ?, 'draft')
                     """,
-                    (answer_id, markdown),
+                    (answer_id, markdown, markdown),
                 )
                 if cursor.rowcount:
                     written += 1

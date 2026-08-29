@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import sys
 
 
 @dataclass(frozen=True)
@@ -33,7 +34,7 @@ class Settings:
         paper_root = Path(
             os.environ.get(
                 "OME_PAPER_ROOT",
-                backend_root / "data" / "objects",
+                backend_root / "data" / "raw_papers",
             )
         ).resolve()
         origins = tuple(
@@ -48,7 +49,10 @@ class Settings:
             )
         ).resolve()
         command_raw = os.environ.get("OME_QUESTION_UPDATE_COMMAND_JSON", "")
-        command: tuple[str, ...] = ()
+        command: tuple[str, ...] = (
+            sys.executable,
+            str(backend_root / "scripts" / "release_catalog.py"),
+        )
         if command_raw:
             parsed = json.loads(command_raw)
             if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):

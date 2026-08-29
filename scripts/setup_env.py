@@ -12,12 +12,11 @@ import venv
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 VENV_ROOT = PROJECT_ROOT / ".venv"
-REQUIREMENTS_ROOT = PROJECT_ROOT / "requirements"
-REQUIREMENT_GROUPS = {
-    "backend": ("backend.txt",),
-    "backend-dev": ("backend-dev.txt",),
-    "data-processing": ("data-processing.txt",),
-    "all": ("backend-dev.txt", "data-processing.txt"),
+INSTALL_TARGETS = {
+    "backend": "./backend",
+    "backend-dev": "./backend[test]",
+    "data-processing": "./backend[ocr]",
+    "all": "./backend[test,ocr]",
 }
 
 
@@ -78,21 +77,12 @@ def install_group(group: str) -> None:
     python_path = ensure_venv()
     environment = local_install_environment()
 
-    for requirement_name in REQUIREMENT_GROUPS[group]:
-        requirement_path = REQUIREMENTS_ROOT / requirement_name
-        subprocess.run(
-            [
-                str(python_path),
-                "-m",
-                "pip",
-                "install",
-                "--requirement",
-                str(requirement_path),
-            ],
-            cwd=PROJECT_ROOT,
-            env=environment,
-            check=True,
-        )
+    subprocess.run(
+        [str(python_path), "-m", "pip", "install", "--editable", INSTALL_TARGETS[group]],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        check=True,
+    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -101,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--group",
-        choices=tuple(REQUIREMENT_GROUPS),
+        choices=tuple(INSTALL_TARGETS),
         default="all",
         help="Dependency group to install (default: all).",
     )

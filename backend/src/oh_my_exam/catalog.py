@@ -60,7 +60,7 @@ class GlobalCatalog:
                 SELECT ql.code AS qualification, ql.name AS qualification_name,
                        eb.code AS board, eb.name AS board_name,
                        ep.code AS program, ep.name AS program_name,
-                       p.id AS paper_id, p.source_key, p.year,
+                       p.id AS paper_id, p.source_key, p.year, p.session,
                        COUNT(qu.id) AS question_count
                 FROM qualifications ql
                 JOIN exam_programs ep ON ep.qualification_id = ql.id
@@ -74,6 +74,8 @@ class GlobalCatalog:
         roots: dict[str, dict[str, object]] = {}
         boards: dict[tuple[str, str], dict[str, object]] = {}
         programs: dict[tuple[str, str, str], dict[str, object]] = {}
+        years: dict[tuple[str, str, str, str], dict[str, object]] = {}
+        sessions: dict[tuple[str, str, str, str, str], dict[str, object]] = {}
         for row in rows:
             qualification = str(row["qualification"])
             board = str(row["board"])
@@ -92,12 +94,60 @@ class GlobalCatalog:
             if program_node not in board_node["children"]:
                 board_node["children"].append(program_node)
             if row["paper_id"] is not None:
+                year = str(row["year"] or "Unknown year")
+                year_node = years.setdefault(
+                    (qualification, board, program, year),
+                    self._tree_node(f"year:{qualification}:{board}:{program}:{year}", year, "year"),
+                )
+                if year_node not in program_node["children"]:
+                    program_node["children"].append(year_node)
+                session = str(row["session"] or "Unspecified")
+                session_node = sessions.setdefault(
+                    (qualification, board, program, year, session),
+                    self._tree_node(
+                        f"session:{qualification}:{board}:{program}:{year}:{session}",
+                        session.upper(),
+                        "session",
+                    ),
+                )
+                if session_node not in year_node["children"]:
+                    year_node["children"].append(session_node)
                 label = f"{row['year']} · {row['source_key']}" if row["year"] else str(row["source_key"])
-                program_node["children"].append({
+                session_node["children"].append({
                     "id": f"paper:{row['paper_id']}", "label": label, "kind": "paper",
                     "count": int(row["question_count"]), "children": [],
+                    "paper_id": int(row["paper_id"]),
+                    "exam_id": f"{qualification}:{board}:{program}",
+                    "year": row["year"], "session": row["session"] or "",
                 })
         return list(roots.values())
+
+    def list_paper_questions(self, paper_id: int) -> list[dict[str, object]]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT qu.id, qu.stable_key, qu.question_number, qu.local_key,
+                       p.id AS paper_id, p.source_key AS paper_key, qt.content,
+                       ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code
+                FROM questions qu
+                JOIN papers p ON p.id = qu.paper_id
+                JOIN exam_programs ep ON ep.id = p.exam_program_id
+                JOIN qualifications ql ON ql.id = ep.qualification_id
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
+                LEFT JOIN question_texts qt
+                  ON qt.question_id = qu.id AND qt.text_kind = 'search' AND qt.language = 'en'
+                WHERE p.id = ?
+                ORDER BY qu.sort_order, qu.id
+                """,
+                (paper_id,),
+            ).fetchall()
+        if not rows:
+            raise CatalogNotFoundError(f"paper not found or empty: {paper_id}")
+        return [
+            self._question_summary(row)
+            | {"exam_id": f"{row['qualification']}:{row['exam_board']}:{row['course_code']}"}
+            for row in rows
+        ]
 
     def list_questions(self, exam_id: str, query: str = "", limit: int = 50) -> list[dict[str, object]]:
         with closing(self._connect()) as connection:
@@ -155,9 +205,49 @@ class GlobalCatalog:
                 """,
                 (question_id, question_id),
             ).fetchall()
+            answer_version = connection.execute(
+                """
+                SELECT av.version, av.raw_text, av.markdown, av.status
+                FROM answers a
+                JOIN answer_versions av ON av.answer_id = a.id
+                WHERE a.question_id = ?
+                ORDER BY av.version DESC, av.id DESC
+                LIMIT 1
+                """,
+                (question_id,),
+            ).fetchone()
         result = self._question_summary(question)
         result["crop_regions"] = [dict(row) for row in crop_rows]
+        result["answer_structured"] = dict(answer_version) if answer_version else None
         return result
+
+    def save_answer_revision(self, question_id: int, raw_text: str, markdown: str) -> dict[str, object]:
+        with closing(self._connect_writable()) as connection:
+            answer = connection.execute(
+                "SELECT id FROM answers WHERE question_id = ? ORDER BY id LIMIT 1",
+                (question_id,),
+            ).fetchone()
+            if answer is None:
+                raise CatalogNotFoundError(f"answer not found for question: {question_id}")
+            version = int(connection.execute(
+                "SELECT COALESCE(MAX(version), 0) + 1 FROM answer_versions WHERE answer_id = ?",
+                (answer["id"],),
+            ).fetchone()[0])
+            cursor = connection.execute(
+                """
+                INSERT INTO answer_versions (answer_id, version, language, raw_text, markdown, status)
+                VALUES (?, ?, 'en', ?, ?, 'published')
+                """,
+                (answer["id"], version, raw_text, markdown),
+            )
+            connection.commit()
+        return {
+            "id": cursor.lastrowid,
+            "version": version,
+            "raw_text": raw_text,
+            "markdown": markdown,
+            "status": "published",
+        }
 
     def get_question_document(self, exam_id: str, question_id: int, kind: str) -> QuestionDocument:
         if kind not in {"question", "answer"}:
@@ -269,6 +359,13 @@ class GlobalCatalog:
             raise CatalogNotFoundError(f"global catalog not found: {self.database_path}")
         uri = f"{self.database_path.as_uri()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    def _connect_writable(self) -> sqlite3.Connection:
+        if not self.database_path.is_file():
+            raise CatalogNotFoundError(f"global catalog not found: {self.database_path}")
+        connection = sqlite3.connect(self.database_path)
         connection.row_factory = sqlite3.Row
         return connection
 

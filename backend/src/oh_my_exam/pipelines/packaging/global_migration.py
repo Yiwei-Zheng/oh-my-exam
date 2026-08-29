@@ -49,7 +49,7 @@ def migrate_portable_catalogs(options: GlobalMigrationOptions) -> GlobalMigratio
     source_paths = [
         path.resolve()
         for path in sorted(database_root.rglob("*.sqlite"))
-        if path.resolve() != output_path
+        if path.resolve() != output_path and path.name != "global_exam_catalog.sqlite"
     ]
     if not source_paths:
         raise ValueError(f"no portable SQLite databases found under: {database_root}")

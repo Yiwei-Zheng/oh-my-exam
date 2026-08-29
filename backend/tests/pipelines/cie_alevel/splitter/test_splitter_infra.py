@@ -345,7 +345,7 @@ def test_9231_removes_stale_asset_slices_after_resplitting(tmp_path: Path) -> No
 def test_9709_modern_qp_does_not_start_from_cover_footer() -> None:
     module = _load_9709_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2025" / "m25" / "9709_m25_qp_12.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2025" / "m25" / "9709_m25_qp_12.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9709 m25 qp12 sample is not installed")
 
@@ -361,7 +361,7 @@ def test_9709_modern_qp_does_not_start_from_cover_footer() -> None:
 def test_9709_qp_splits_readable_layout_to_leaf_subquestions() -> None:
     module = _load_9709_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2021" / "w21" / "9709_w21_qp_12.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2021" / "w21" / "9709_w21_qp_12.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9709 w21 qp12 sample is not installed")
 
@@ -376,7 +376,7 @@ def test_9709_qp_splits_readable_layout_to_leaf_subquestions() -> None:
 def test_9709_modern_ms32_skips_marking_principles_pages() -> None:
     module = _load_9709_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2025" / "m25" / "9709_m25_ms_32.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2025" / "m25" / "9709_m25_ms_32.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9709 m25 ms32 sample is not installed")
 
@@ -391,7 +391,7 @@ def test_9709_modern_ms32_skips_marking_principles_pages() -> None:
 def test_9709_ms_splits_readable_layout_to_leaf_subquestions() -> None:
     module = _load_9709_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2021" / "w21" / "9709_w21_ms_12.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9709" / "2021" / "w21" / "9709_w21_ms_12.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9709 w21 ms12 sample is not installed")
 
@@ -408,7 +408,7 @@ def test_9709_ms_splits_readable_layout_to_leaf_subquestions() -> None:
 def test_9231_qp_splits_damaged_modern_layout_to_leaf_subquestions() -> None:
     module = _load_9231_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2025" / "w25" / "9231_w25_qp_11.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2025" / "w25" / "9231_w25_qp_11.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9231 w25 qp11 sample is not installed")
 
@@ -422,7 +422,7 @@ def test_9231_qp_splits_damaged_modern_layout_to_leaf_subquestions() -> None:
 def test_9231_qp_keeps_readable_top_level_question_without_subparts() -> None:
     module = _load_9231_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2021" / "w21" / "9231_w21_qp_12.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2021" / "w21" / "9231_w21_qp_12.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9231 w21 qp12 sample is not installed")
 
@@ -435,7 +435,7 @@ def test_9231_qp_keeps_readable_top_level_question_without_subparts() -> None:
 def test_9231_ms_splits_image_and_text_layout_to_leaf_subquestions() -> None:
     module = _load_9231_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2025" / "w25" / "9231_w25_ms_11.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2025" / "w25" / "9231_w25_ms_11.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9231 w25 ms11 sample is not installed")
 
@@ -450,7 +450,7 @@ def test_9231_ms_splits_image_and_text_layout_to_leaf_subquestions() -> None:
 def test_9231_w23_ms11_splits_rotated_table_to_leaf_subquestions() -> None:
     module = _load_9231_cutter_module()
     fitz = pytest.importorskip("fitz")
-    pdf_path = _project_root() / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2023" / "w23" / "9231_w23_ms_11.pdf"
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2023" / "w23" / "9231_w23_ms_11.pdf"
     if not pdf_path.exists():
         pytest.skip("local 9231 w23 ms11 sample is not installed")
 

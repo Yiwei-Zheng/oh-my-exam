@@ -146,20 +146,10 @@ def migrate_global_catalog(conn: sqlite3.Connection) -> None:
             answer_id INTEGER NOT NULL REFERENCES answers(id) ON DELETE CASCADE,
             version INTEGER NOT NULL CHECK (version > 0),
             language TEXT NOT NULL DEFAULT 'en',
+            raw_text TEXT NOT NULL,
             markdown TEXT NOT NULL,
             status TEXT NOT NULL CHECK (status IN ('draft', 'reviewed', 'published', 'rejected')),
             UNIQUE (answer_id, version, language)
-        );
-
-        CREATE TABLE IF NOT EXISTS marking_points (
-            id INTEGER PRIMARY KEY,
-            answer_version_id INTEGER NOT NULL REFERENCES answer_versions(id) ON DELETE CASCADE,
-            sequence_no INTEGER NOT NULL,
-            mark_code TEXT,
-            marks INTEGER NOT NULL CHECK (marks >= 0),
-            criterion_markdown TEXT NOT NULL,
-            dependency_note TEXT,
-            UNIQUE (answer_version_id, sequence_no)
         );
 
         CREATE TABLE IF NOT EXISTS features (

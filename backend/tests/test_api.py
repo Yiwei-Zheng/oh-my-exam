@@ -27,9 +27,9 @@ def _create_global_database(path: Path) -> None:
             INSERT INTO exam_programs VALUES (1, 1, 1, 'engaa', 'ENGAA');
             CREATE TABLE papers (
                 id INTEGER PRIMARY KEY, exam_program_id INTEGER, stable_key TEXT,
-                source_key TEXT, year INTEGER
+                source_key TEXT, year INTEGER, session TEXT
             );
-            INSERT INTO papers VALUES (1, 1, 'admissions:uat:engaa:engaa_2023_s1_qp', 'engaa_2023_s1_qp', 2023);
+            INSERT INTO papers VALUES (1, 1, 'admissions:uat:engaa:engaa_2023_s1_qp', 'engaa_2023_s1_qp', 2023, 'summer');
             CREATE TABLE paper_documents (
                 id INTEGER PRIMARY KEY, paper_id INTEGER, role TEXT, storage_key TEXT,
                 original_filename TEXT
@@ -68,6 +68,13 @@ def _create_global_database(path: Path) -> None:
                 post_left INTEGER, post_top INTEGER, post_right INTEGER, post_bottom INTEGER
             );
             INSERT INTO answer_regions VALUES (1, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
+            CREATE TABLE answer_versions (
+                id INTEGER PRIMARY KEY, answer_id INTEGER, version INTEGER, language TEXT,
+                raw_text TEXT, markdown TEXT, status TEXT
+            );
+            INSERT INTO answer_versions VALUES (
+                1, 1, 1, 'en', 'Acceleration is 2', '**Acceleration is 2**', 'published'
+            );
             """
         )
 
@@ -116,6 +123,7 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     question = client.get("/api/v1/exams/admissions:uat:engaa/questions/7")
     assert question.status_code == 200
     assert question.json()["crop_regions"][0]["render_dpi"] == 180
+    assert question.json()["answer_structured"]["raw_text"] == "Acceleration is 2"
 
     question_pdf = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/question.pdf")
     assert question_pdf.status_code == 200
@@ -189,7 +197,22 @@ def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
 
     tree = client.get("/api/v1/admin/question-tree")
     assert tree.status_code == 200
-    assert tree.json()[0]["children"][0]["children"][0]["children"][0]["count"] == 1
+    paper_node = tree.json()[0]["children"][0]["children"][0]["children"][0]["children"][0]["children"][0]
+    assert paper_node["count"] == 1
+    assert paper_node["exam_id"] == "admissions:uat:engaa"
+
+    paper_questions = client.get("/api/v1/admin/papers/1/questions")
+    assert paper_questions.status_code == 200
+    assert paper_questions.json()[0]["question_number"] == "7"
+
+    revision = client.patch(
+        "/api/v1/admin/questions/7/answer-text",
+        json={"raw_text": "Updated raw", "markdown": "**Updated**"},
+    )
+    assert revision.status_code == 200
+    assert revision.json()["answer_structured"]["version"] == 2
+    updated_question = client.get("/api/v1/exams/admissions:uat:engaa/questions/7")
+    assert updated_question.json()["answer_structured"]["markdown"] == "**Updated**"
 
     update = client.post("/api/v1/admin/question-update")
     assert update.status_code == 503
