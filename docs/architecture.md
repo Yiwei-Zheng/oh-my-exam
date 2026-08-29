@@ -1,169 +1,187 @@
 # Architecture
 
-## Scope
+## Overview
 
-Stable repository-level architecture for Oh-My-Exam.
+Oh-My-Exam is a feature-first modular monolith with sibling browser and server
+applications. It uses one versioned HTTP boundary and one hosted PostgreSQL
+source of truth. Processing code belongs to the backend but remains independent
+of HTTP and GUI frameworks.
 
-## What belongs here
+```text
+Browser
+  -> Caddy
+      -> frontend static files
+      -> /api/v1/* -> FastAPI
+                       -> PostgreSQL
+                       -> object store
+                       -> Redis -> Celery workers -> pipeline core
+```
 
-- Project goal.
-- Top-level module boundaries.
-- Dependency direction.
-- Forbidden coupling.
-- Top-level directory responsibilities.
+## Repository
 
-## What does not belong here
+```text
+oh-my-exam/
+├── frontend/
+├── backend/
+│   ├── config/
+│   ├── resources/
+│   ├── migrations/
+│   ├── scripts/
+│   ├── src/oh_my_exam/
+│   ├── data/
+│   └── tests/
+├── assets/
+├── tmp/
+├── docs/
+├── scripts/
+├── deploy/
+├── .env.example
+├── .gitignore
+├── AGENTS.md
+└── README.md
+```
 
-- Exam-board details.
-- Subject-specific rules.
-- Downloader, splitter, classifier, GUI, or CLI implementation details.
-- Data format schemas owned by one tool.
-- Task history.
+`assets/` contains maintained cross-application design assets. `tmp/` is
+untrusted scratch space and no product behavior may depend on it. `scripts/`
+contains only repository-wide development and verification entry points.
+`deploy/` contains Linux native service and reverse-proxy assets.
 
-## Related docs
+## Frontend
 
-- `docs/principles.md`
-- `docs/requirements.md`
-- `docs/modules/exam-processing.md`
-- `docs/modules/resources-and-configs.md`
-- `docs/modules/local-data-storage.md`
-- `docs/modules/global-question-catalog.md`
-- `docs/modules/official-web.md`
-- `docs/tools/cie_alevel_downloader/overview.md`
-- `docs/tools/cie_alevel_splitter/overview.md`
-- `docs/tools/metadata_packer/overview.md`
+The frontend uses a pragmatic Feature-Sliced Design:
 
-## Project Goal
+```text
+src/
+├── app/       # router, providers, i18n, global styles
+├── pages/     # route composition
+├── widgets/   # question tree, document viewer, pipeline console
+├── features/  # user actions and workflows
+├── entities/  # exam, paper, question, answer, pipeline run
+└── shared/    # API client, UI wrappers, utilities, configuration
+```
 
-Oh-My-Exam is a hosted, multi-user exam question search, tutoring, marking, and
-paper-generation project. Its initial product focus is admissions tests,
-especially ENGAA, NSAA, TMUA, and STEP.
+Pages compose features and widgets. Entities do not import features or pages.
+Business modules do not import Element Plus directly; `shared/ui/` owns the
+component-library boundary. Pinia owns client state. TanStack Vue Query owns
+server state. The OpenAPI document generates HTTP request and response types.
 
-The repository must support multiple exam types, exam boards, subjects, and
-tools without forcing their details into global documents or shared code.
-Local processing remains supported, but the hosted service is the authority for
-user state and published catalog data.
+## Backend
 
-## Top-Level Boundaries
+```text
+src/oh_my_exam/
+├── main.py
+├── api/                 # HTTP adapters and versioned routes
+├── modules/
+│   ├── identity/
+│   ├── catalog/
+│   ├── documents/
+│   ├── pipeline/
+│   ├── administration/
+│   ├── audit/
+│   └── learning/
+├── pipelines/
+│   ├── engine/          # step contracts and orchestration
+│   └── adapters/        # CIE, PAT, STEP, UAT implementations
+├── infrastructure/
+│   ├── database/
+│   ├── object_store/
+│   ├── queue/
+│   └── security/
+└── shared/
+```
 
-- `tools/`: local processing tools, grouped by responsibility, qualification, and exam board.
-- `tools/shared/`: small tool-neutral helper packages used by multiple local tools.
-- `tools/packers/`: local packers that convert processed public metadata into portable subject databases.
-- `web/backend/`: hosted API, service adapters, and future multi-user application persistence.
-- `configs/`: source-controlled configuration and manifests.
-- `resources/`: source-controlled external metadata and reference resources.
-- `data/`: runtime output and local generated state.
-- `docs/`: agent-facing project documentation.
-- `requirements/`: separate production backend, development backend, and data-processing
-  installation entry points for the shared root Python environment.
-- `scripts/setup_env.py`: operating-system-neutral environment bootstrap entry point.
-- `web/`: web product boundary containing sibling frontend and backend applications.
-- `web/frontend/`: primary browser client and official website for desktop and mobile browsers. Its framework is an implementation choice, not a backend boundary.
-- `temp/`: user scratch input only. Project code must not depend on it.
-- `tmp/`: temporary local runtime files.
+Each module owns its application services, domain rules, persistence models,
+and API schemas. Route handlers perform authentication, request validation, and
+response mapping only. Celery tasks call the same application services as CLI
+or administrative adapters. Pipeline core code does not import FastAPI, Celery,
+Vue, or an interactive console.
 
-## Dependency Direction
+## Dependency direction
 
-- Product requirements constrain architecture.
-- Architecture constrains modules.
-- Modules constrain tools.
-- Tools may read configs, resources, and data formats documented under their own docs.
-- GUI and CLI are adapters over core services.
-- Core services must not depend on GUI frameworks.
+```text
+requirements
+  -> module contracts
+      -> application services
+          -> domain and pipeline core
+              <- infrastructure adapters
+      <- HTTP, worker, CLI adapters
+```
 
-## Module Boundaries
+Forbidden dependencies:
 
-- Downloaders collect raw source assets.
-- Splitters process local raw assets into question-level outputs.
-- Shared tool helper packages may contain source URL construction or other
-  dependency-neutral utilities, but not downloader or splitter workflow logic.
-- Classifiers/taggers annotate processed questions.
-- Storage code persists normalized local data.
-- Packers convert processed question metadata into compact per-subject import
-  databases and a normalized global SQLite catalog. Catalogs store server-owned
-  document storage keys, never third-party source URLs.
-- The server reads the normalized global catalog. Hosted update orchestration
-  invokes a separately configured processing command without a shell; browser
-  routes never import downloader or splitter internals.
-- Clients consume versioned HTTP APIs and must not import server or Python tool internals.
-- Portable SQLite packages remain valid import/export and optional offline assets;
-  they are not the hosted multi-user source of truth.
-- The website uses the server API for catalog search and all hosted product
-  capabilities. Portable SQLite packages cross the server import/export boundary,
-  not the browser runtime boundary.
-- OCR, matching, and PDF crop replay must remain standalone services rather than
-  Vue component logic if those capabilities are reintroduced.
+- Frontend source importing backend or Python internals.
+- API routes implementing processing or catalog business rules.
+- Pipeline core importing FastAPI, Celery, GUI frameworks, or browser concepts.
+- Source adapters writing directly into published catalog tables.
+- Browser code receiving or constructing filesystem paths or upstream URLs.
+- Redis, object storage, retrieval providers, or model providers becoming the
+  authority for users, permissions, catalog identity, or publication state.
 
-## Forbidden Coupling
+## Persistence
 
-- Downloader code must not import splitter internals.
-- Splitter code must not import downloader internals.
-- GUI code must not implement core business logic.
-- Core code must not import GUI libraries or read user input.
-- Subject lists, component rules, and external catalog data must not be hard-coded in UI code.
-- Runtime output must not be treated as source configuration.
-- Website code must not import Python tool internals or open portable subject
-  databases directly. It consumes versioned server APIs.
-- Website code must not connect directly to the hosted database, object store,
-  RAGFlow, or model providers.
-- RAGFlow and language models must not become authoritative stores for exam data,
-  permissions, user state, or citations.
-- Python packages share the repository-root `.venv/`. Dependency entry points
-  remain separated under `requirements/` for backend and data processing.
-- A virtual environment is recreated on each target operating system; `.venv/`
-  is never copied between Windows and Linux.
-- No scripts, source files, or project docs may be placed inside `.venv/`.
+One PostgreSQL database uses logical schemas:
 
-## Directory Responsibilities
+- `identity`: users, roles, role assignments, and sessions.
+- `catalog`: exams, subjects, papers, questions, answers, text, tags, and
+  catalog releases.
+- `documents`: immutable document identity, versions, and page regions.
+- `pipeline`: runs, steps, artifacts, source observations, and configuration
+  snapshots.
+- `learning`: attempts, progress, and later marking records.
+- `audit`: administrator and security events.
 
-- `tools/downloaders/{qualification}/{exam_board}/`: downloader packages and launchers.
-- `tools/splitters/{qualification}/{exam_board}/`: splitter packages and launchers.
-- `tools/packers/`: packer packages and launchers that consume public processed metadata.
-- `tools/shared/`: source-level helper packages that preserve downloader/splitter decoupling.
-- `tools/classifiers/{qualification}/{exam_board}/`: classifier/tagging tools.
-- `resources/exam_boards/{exam_board}/`: board-specific source metadata, catalog snapshots, syllabus references, and availability files.
-- `configs/`: maintained manifests and configuration files.
-- `data/raw_papers/`: downloaded raw papers.
-- `data/processed_questions/`: generated question-level outputs.
-- `data/reports/`: runtime reports.
-- `data/databases/`: generated per-subject SQLite import databases and
-  `global_exam_catalog.sqlite`.
-- `data/*.sqlite3`: local databases.
-- `requirements/backend.txt`: production backend installation entry point.
-- `requirements/backend-dev.txt`: editable backend and backend-test installation entry point.
-- `requirements/data-processing.txt`: local data tool, GUI, OCR, and test
-  installation entry point.
-- `web/backend/`: versioned hosted API and adapters for catalog, identity,
-  administration, question-update jobs, paper storage, retrieval, language
-  models, and deterministic math tools.
-- `web/frontend/`: bilingual responsive marketing and local question-search surface. It
-  owns browser adapters and presentation services, while reusable source
-  processing remains under `tools/` and hosted business logic remains under
-  `web/backend/`. It is the maintained end-user client for phone, tablet, and desktop.
-- `web/frontend/` and `web/backend/` are sibling applications. Neither is nested
-  inside or imported by the other; deployment topology does not change this
-  source boundary.
+Tables follow third normal form unless a documented read model is introduced.
+Database changes use Alembic. Internal relations use bigint primary keys. Public
+APIs use UUID public ids and stable business keys.
 
-## Hosted Runtime Direction
+The object store contains immutable PDFs addressed by storage keys derived from
+document identity, not user input. PostgreSQL stores checksums, MIME type, byte
+size, version, provenance, and the storage key. Production APIs resolve public
+ids to objects after authorization.
 
-- Start as a modular monolith rather than independent business microservices.
-- PostgreSQL will own normalized published catalog data, users, attempts,
-  progress, conversations, citations, and usage records.
-- Original PDFs are server-owned assets behind a `PaperStore` boundary. Local
-  filesystem storage is supported for development; production targets an
-  S3-compatible object store.
-- Catalog document rows store a path-independent storage key. API requests
-  identify questions and papers by internal ids; the server must never accept a
-  client-supplied file path or upstream URL.
-- Normal question display requests identify a question and document side through
-  the versioned API. The server resolves the original paper and replays stored
-  crop regions into a question-level vector PDF; crop calculation remains a
-  backend service rather than browser or route-handler logic.
-- Born-digital papers use vector extracts by default. Scanned papers may use a
-  compressed raster fallback when clipping would retain the full source-page
-  image. Explicit full-paper viewing remains a separate endpoint and may use
-  byte-range requests and session caching.
-- RAGFlow is a replaceable retrieval adapter. DeepSeek is a replaceable model
-  adapter. Both are called only from the server.
-- Mathematical tools run through typed, restricted contracts in an isolated
-  execution environment. Model-generated arbitrary code is not executed.
+## Catalog releases
+
+Processing writes staging artifacts and normalized candidate records. Validation
+checks schemas, relationships, document existence, page bounds, crop rectangles,
+and representative rendering. A successful release is immutable and is made
+active by switching one release reference transactionally. A failed build does
+not mutate the active release.
+
+Corrections are append-only revisions. Saving a correction activates it
+immediately. Rollback activates a previous revision or release; it does not
+restore legacy repository code.
+
+## Document delivery
+
+Full-paper endpoints support HTTP byte ranges. Question and answer endpoints
+resolve normalized regions and produce clipped vector PDFs with cache validators.
+PDF.js renders both forms in the frontend. Extracted answer text is delivered by
+a separate JSON endpoint. Permanent JPG crops are forbidden; thumbnails are
+bounded caches only.
+
+## Deployment
+
+Linux bare-metal deployment uses Caddy, systemd, a Python virtual environment,
+a static frontend build, FastAPI, Celery, PostgreSQL, and Redis. Native and
+development modes share the same typed environment settings. Missing required
+production settings fail at startup. Docker-specific files and paths are not
+part of this architecture iteration.
+
+## References
+
+- FastAPI multi-file applications:
+  https://fastapi.tiangolo.com/tutorial/bigger-applications/
+- PostgreSQL schemas:
+  https://www.postgresql.org/docs/current/ddl-schemas.html
+- SQLAlchemy 2 ORM:
+  https://docs.sqlalchemy.org/en/20/orm/
+- Alembic migrations:
+  https://alembic.sqlalchemy.org/en/latest/tutorial.html
+- Celery workflows and workers:
+  https://docs.celeryq.dev/en/stable/userguide/
+- Feature-Sliced Design:
+  https://fsd.how/docs/reference/slices-segments/
+- Caddy frontend and API proxy pattern:
+  https://caddyserver.com/docs/caddyfile/patterns
+- PDF.js:
+  https://mozilla.github.io/pdf.js/getting_started/

@@ -1,52 +1,49 @@
-# Exam Processing Module
+# Exam Processing
 
-## Scope
+## Responsibility
 
-Cross-tool boundaries for exam paper processing.
+The processing module owns durable acquisition and publication workflows. It
+coordinates source adapters and reusable steps without placing exam-specific
+rules in global services.
 
-## What belongs here
+## Standard workflow
 
-- Processing phases.
-- Dependency rules between tool types.
-- Shared expectations that are not tied to one exam board.
+```text
+discover
+  -> download
+  -> validate-source
+  -> split
+  -> extract-text-or-ocr
+  -> link-question-answer
+  -> classify
+  -> validate-catalog
+  -> package
+  -> publish
+```
 
-## What does not belong here
+Each step declares input artifacts, output artifacts, idempotency identity,
+progress, logs, and failure state. A run stores its resolved configuration
+snapshot. Retrying a successful step must not duplicate authoritative records.
 
-- CIE-specific endpoints.
-- Subject-specific cutter rules.
-- GUI or CLI command syntax.
-- Tool-owned data schemas.
+## Adapter boundary
 
-## Related docs
+Adapters may define source discovery, naming, catalog interpretation, and
+PDF-layout rules. They implement pipeline contracts and are tested with fixed
+fixtures. Adapters do not publish directly and do not import FastAPI or Celery.
 
-- `docs/architecture.md`
-- `docs/modules/resources-and-configs.md`
-- `docs/modules/local-data-storage.md`
-- `docs/tools/cie_alevel_downloader/overview.md`
-- `docs/tools/cie_alevel_splitter/overview.md`
-- `docs/tools/cie_alevel_classifier/overview.md`
+Configuration uses source-controlled defaults below `backend/config/exams/`
+and versioned administrator overrides in PostgreSQL. Browser input cannot upload
+or execute arbitrary Python.
 
-## Phases
+## Failure and publication
 
-1. Download raw exam assets.
-2. Split raw papers into question-level assets.
-3. Classify and tag questions.
-4. Store normalized question-bank data.
-5. Package data for client import or distribution.
+Missing assets, unsupported layouts, OCR failures, and invalid regions are
+explicit outcomes. Failed work remains inspectable and resumable. Catalog
+validation is automatic. Passing releases activate immediately; failed releases
+leave the current active release unchanged.
 
-## Boundary Rules
+## Runtime adapters
 
-- Each phase must expose a callable core service.
-- GUI and CLI must call the same core service.
-- A later phase may consume files or public metadata from an earlier phase.
-- A later phase must not import private implementation modules from an earlier phase.
-- Packers may consume splitter JSON sidecars and images as public processed output, but must not import splitter internals.
-- Tools may duplicate small model definitions when hard runtime decoupling is more important than sharing.
-- Shared helper packages may be used for stable source identifiers such as
-  remote URL construction when that avoids cross-importing tool internals.
-
-## Failure Rules
-
-- Processing tools should report failures explicitly.
-- A tool must not silently produce misleading outputs when boundaries or source data cannot be trusted.
-- Runtime reports belong under `data/reports/`.
+FastAPI creates, cancels, retries, and reports runs. Celery executes steps. Redis
+transports work. PostgreSQL owns run history. Server-Sent Events deliver progress
+without making the browser the owner of execution state.

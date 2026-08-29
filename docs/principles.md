@@ -1,67 +1,44 @@
-# Principles
+# Engineering Principles
 
-## Scope
+## Product truth before implementation convenience
 
-Global engineering rules for agents working in this repository.
+Requirements constrain architecture. Architecture constrains module contracts.
+Implementation details must not silently redefine product behavior.
 
-## What belongs here
+## One authority per fact
 
-- Stable development principles.
-- Cross-cutting architecture rules.
-- Rules that apply to every tool.
+PostgreSQL owns hosted identity, catalog, pipeline, and audit state. The object
+store owns document bytes. Redis carries work but does not own job history.
+Generated caches and portable exports are never treated as authorities.
 
-## What does not belong here
+## Explicit boundaries
 
-- Tool-specific workflows.
-- Exam-board details.
-- Data schemas owned by one tool.
-- Completed task history.
+The frontend communicates only through the versioned API. Pipeline core runs
+without Web or GUI dependencies. Infrastructure is replaceable where a real
+replacement is planned, especially object storage, queue transport, and model
+providers. Avoid ceremonial abstractions elsewhere.
 
-## Related docs
+## Reproducible processing
 
-- `AGENTS.md`
-- `docs/architecture.md`
-- `docs/requirements.md`
+Every run records configuration, inputs, outputs, code-visible adapter identity,
+and failure state. Steps are idempotent. Published releases and corrections are
+versioned. Original documents remain immutable.
 
-## Change Discipline
+## Clean breaks with evidence
 
-- Prefer small, reviewable changes.
-- Avoid unrelated refactors.
-- Do not delete working behavior unless the task asks for it.
-- Keep names clear and consistent with nearby code.
-- Add comments only for non-obvious design reasons.
+Do not maintain compatibility code after the new path passes its acceptance
+gate. Before deleting legacy assets, reconcile counts, verify checksums, render
+representative documents, test the supported workflows, and retain a migration
+manifest. Git history is the archive for tracked code.
 
-## Documentation Discipline
+## Accessible, bilingual interfaces
 
-- Read `docs/requirements.md`, `docs/architecture.md`, relevant `docs/tasks/`, and nearby code before changing code.
-- Use UTF-8 when reading Chinese or mixed-language docs.
-- Update documentation when behavior, startup flow, architecture, or APIs change.
-- Keep global docs short and stable.
-- Put local details in the owning module or tool docs.
+Chinese and English are first-class. Interfaces remain keyboard and touch
+operable, responsive, contrast-safe, and usable with reduced motion. Visual
+style never overrides legibility or document fidelity.
 
-## Source And Runtime Hygiene
+## Small, reviewable changes
 
-- `temp/` is scratch input only.
-- Move useful `temp/` files into the proper source/resource location before depending on them.
-- Use only the repository-root `.venv/` for Python dependencies. Do not place
-  scripts, source, docs, or project files inside it.
-- Configuration belongs outside code.
-- Do not commit secrets, API keys, tokens, private local data, or irrelevant generated files.
-
-## Architecture Rules
-
-- Core business logic and presentation layers must be separate.
-- Core code must not depend on GUI frameworks.
-- GUI and CLI must call public core services.
-- Frontend and backend must communicate through APIs.
-- Do not duplicate business logic across frontend and backend.
-- If a change affects system boundaries, update `docs/architecture.md`.
-- Record important long-term technical decisions under `docs/decisions/`.
-
-## GUI Rules
-
-- GUI must support Chinese and English.
-- User-visible text belongs in i18n resources.
-- Resizable windows, panels, and long content must remain usable with horizontal and vertical scrolling.
-- Long list items must not hide critical actions.
-- Removing GUI code must not break core and CLI functionality.
+Keep commits scoped to one migration or capability. Inspect diffs before every
+commit. Do not combine unrelated refactors, generated files, secrets, caches, or
+runtime data with source changes.
