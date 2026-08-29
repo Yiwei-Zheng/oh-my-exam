@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import re
 
 
 class PaperNotFoundError(LookupError):
@@ -18,11 +17,11 @@ class FileSystemPaperStore:
     def __init__(self, paper_root: Path) -> None:
         self.paper_root = paper_root.resolve()
 
-    def find_by_stem(self, stem: str) -> Path:
-        if not stem or Path(stem).name != stem or re.fullmatch(r"[A-Za-z0-9_.-]+", stem) is None:
-            raise PaperNotFoundError("invalid paper stem")
-        matches = [path.resolve() for path in self.paper_root.rglob(f"{stem}.pdf") if path.is_file()]
-        safe_matches = [path for path in matches if path.is_relative_to(self.paper_root)]
-        if len(safe_matches) != 1:
-            raise PaperNotFoundError(f"expected one local PDF for {stem}, found {len(safe_matches)}")
-        return safe_matches[0]
+    def find_by_storage_key(self, storage_key: str) -> Path:
+        relative = Path(storage_key)
+        if not storage_key or relative.is_absolute() or ".." in relative.parts:
+            raise PaperNotFoundError("invalid paper storage key")
+        path = (self.paper_root / relative).resolve()
+        if not path.is_relative_to(self.paper_root) or not path.is_file():
+            raise PaperNotFoundError(f"paper not found: {storage_key}")
+        return path

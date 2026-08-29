@@ -11,46 +11,76 @@ from oh_my_exam_server.main import create_app
 from oh_my_exam_server.paper_store import FileSystemPaperStore, PaperNotFoundError
 
 
-def _create_subject_database(path: Path) -> None:
+def _create_global_database(path: Path) -> None:
     path.parent.mkdir(parents=True)
     with sqlite3.connect(path) as connection:
         connection.executescript(
             """
-            CREATE TABLE database_info (
-                qualification TEXT, exam_board TEXT, course_code TEXT, course_display_name TEXT
+            CREATE TABLE exam_boards (id INTEGER PRIMARY KEY, code TEXT, name TEXT);
+            INSERT INTO exam_boards VALUES (1, 'uat', 'UAT-UK');
+            CREATE TABLE qualifications (id INTEGER PRIMARY KEY, code TEXT, name TEXT);
+            INSERT INTO qualifications VALUES (1, 'admissions', 'Admissions');
+            CREATE TABLE exam_programs (
+                id INTEGER PRIMARY KEY, exam_board_id INTEGER, qualification_id INTEGER,
+                code TEXT, name TEXT
             );
-            INSERT INTO database_info VALUES ('admissions', 'uat', 'engaa', 'ENGAA');
+            INSERT INTO exam_programs VALUES (1, 1, 1, 'engaa', 'ENGAA');
             CREATE TABLE papers (
-                id INTEGER PRIMARY KEY, qp_stem TEXT, ms_stem TEXT, qp_url TEXT, ms_url TEXT
+                id INTEGER PRIMARY KEY, exam_program_id INTEGER, stable_key TEXT,
+                source_key TEXT, year INTEGER
             );
-            INSERT INTO papers VALUES (
-                1, 'engaa_2023_s1_qp', 'engaa_2023_s1_ms', 'https://example.test/qp', 'https://example.test/ms'
+            INSERT INTO papers VALUES (1, 1, 'admissions:uat:engaa:engaa_2023_s1_qp', 'engaa_2023_s1_qp', 2023);
+            CREATE TABLE paper_documents (
+                id INTEGER PRIMARY KEY, paper_id INTEGER, role TEXT, storage_key TEXT,
+                original_filename TEXT
+            );
+            INSERT INTO paper_documents VALUES (
+                1, 1, 'question_paper', 'uat/admissions/engaa/2023/engaa_2023_s1_qp.pdf', 'engaa_2023_s1_qp.pdf'
+            );
+            INSERT INTO paper_documents VALUES (
+                2, 1, 'answer_key', 'uat/admissions/engaa/2023/engaa_2023_s1_ms.pdf', 'engaa_2023_s1_ms.pdf'
             );
             CREATE TABLE questions (
-                id INTEGER PRIMARY KEY, paper_id INTEGER, local_question_key TEXT, question_number TEXT
+                id INTEGER PRIMARY KEY, paper_id INTEGER, stable_key TEXT, local_key TEXT,
+                question_number TEXT, sort_order INTEGER
             );
-            INSERT INTO questions VALUES (7, 1, 'q07', '7');
-            CREATE TABLE question_texts (question_id INTEGER PRIMARY KEY, content TEXT);
-            INSERT INTO question_texts VALUES (7, 'Find the acceleration of the particle.');
-            CREATE TABLE crop_regions (
-                question_id INTEGER, source_type INTEGER, region_order INTEGER, page_index INTEGER,
+            INSERT INTO questions VALUES (
+                7, 1, 'admissions:uat:engaa:engaa_2023_s1_qp:q07', 'q07', '7', 7
+            );
+            CREATE TABLE question_texts (
+                question_id INTEGER, text_kind TEXT, language TEXT, content TEXT
+            );
+            INSERT INTO question_texts VALUES (7, 'search', 'en', 'Find the acceleration of the particle.');
+            CREATE TABLE question_regions (
+                question_id INTEGER, document_id INTEGER, region_order INTEGER, page_index INTEGER,
                 x0 REAL, y0 REAL, x1 REAL, y1 REAL, render_dpi INTEGER, join_gap_px INTEGER,
                 post_left INTEGER, post_top INTEGER, post_right INTEGER, post_bottom INTEGER
             );
-            INSERT INTO crop_regions VALUES (7, 0, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
-            INSERT INTO crop_regions VALUES (7, 1, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
+            INSERT INTO question_regions VALUES (7, 1, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
+            CREATE TABLE answers (
+                id INTEGER PRIMARY KEY, question_id INTEGER, source_document_id INTEGER,
+                answer_kind TEXT
+            );
+            INSERT INTO answers VALUES (1, 7, 2, 'answer_key');
+            CREATE TABLE answer_regions (
+                answer_id INTEGER, region_order INTEGER, page_index INTEGER,
+                x0 REAL, y0 REAL, x1 REAL, y1 REAL, render_dpi INTEGER, join_gap_px INTEGER,
+                post_left INTEGER, post_top INTEGER, post_right INTEGER, post_bottom INTEGER
+            );
+            INSERT INTO answer_regions VALUES (1, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
             """
         )
 
 
 def _client(tmp_path: Path) -> TestClient:
-    database_root = tmp_path / "databases"
+    database_path = tmp_path / "databases" / "global_exam_catalog.sqlite"
     paper_root = tmp_path / "raw_papers"
-    _create_subject_database(database_root / "admissions" / "uat" / "uat_admissions_engaa.sqlite")
-    paper_root.mkdir(parents=True)
-    _write_pdf(paper_root / "engaa_2023_s1_qp.pdf", "Question page", "Find the acceleration")
-    _write_pdf(paper_root / "engaa_2023_s1_ms.pdf", "Answer page", "Acceleration is 2")
-    settings = Settings(tmp_path, database_root, paper_root)
+    _create_global_database(database_path)
+    paper_dir = paper_root / "uat" / "admissions" / "engaa" / "2023"
+    paper_dir.mkdir(parents=True)
+    _write_pdf(paper_dir / "engaa_2023_s1_qp.pdf", "Question page", "Find the acceleration")
+    _write_pdf(paper_dir / "engaa_2023_s1_ms.pdf", "Answer page", "Acceleration is 2")
+    settings = Settings(tmp_path, database_path, paper_root)
     return TestClient(create_app(settings))
 
 
@@ -126,9 +156,9 @@ def test_placeholders_are_explicit(tmp_path: Path) -> None:
 
 def test_paper_store_rejects_globs_and_paths(tmp_path: Path) -> None:
     store = FileSystemPaperStore(tmp_path)
-    for unsafe_stem in ("../paper", "*.pdf", "folder/paper"):
+    for unsafe_stem in ("../paper.pdf", "folder/../../paper.pdf", "C:/paper.pdf"):
         try:
-            store.find_by_stem(unsafe_stem)
+            store.find_by_storage_key(unsafe_stem)
         except PaperNotFoundError:
             continue
         raise AssertionError(f"unsafe stem was accepted: {unsafe_stem}")

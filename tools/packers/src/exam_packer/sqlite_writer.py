@@ -57,18 +57,14 @@ def _insert_database_info(conn: sqlite3.Connection, options: PackOptions) -> Non
 def _upsert_paper(conn: sqlite3.Connection, record: MetadataRecord) -> int:
     qp_stem = _source_stem_for(record, "QP")
     ms_stem = _source_stem_for(record, "MS")
-    qp_url = record.source_url if record.source_type == "QP" else ""
-    ms_url = record.source_url if record.source_type == "MS" else ""
     conn.execute(
         """
-        INSERT INTO papers (qp_stem, ms_stem, qp_url, ms_url)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO papers (qp_stem, ms_stem)
+        VALUES (?, ?)
         ON CONFLICT(qp_stem) DO UPDATE SET
-            ms_stem = excluded.ms_stem,
-            qp_url = CASE WHEN excluded.qp_url != '' THEN excluded.qp_url ELSE papers.qp_url END,
-            ms_url = CASE WHEN excluded.ms_url != '' THEN excluded.ms_url ELSE papers.ms_url END
+            ms_stem = excluded.ms_stem
         """,
-        (qp_stem, ms_stem, qp_url, ms_url),
+        (qp_stem, ms_stem),
     )
     row = conn.execute("SELECT id FROM papers WHERE qp_stem = ?", (qp_stem,)).fetchone()
     if row is None:

@@ -36,7 +36,8 @@ Runtime data and local persistence boundaries.
 - `data/processed_questions/`: generated question-level assets.
 - `data/reports/`: tool reports and status logs.
 - `data/gui/`: local GUI preferences.
-- `data/databases/`: generated per-subject SQLite databases for import or distribution.
+- `data/databases/`: generated per-subject SQLite import databases and the
+  normalized `global_exam_catalog.sqlite` used by the local backend.
 - `data/*.sqlite3`: local SQLite databases.
 
 ## Database Rule

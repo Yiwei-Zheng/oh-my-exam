@@ -36,3 +36,7 @@ a clipped PDF can still embed a full-page raster image. When a workflow reads
 many questions from one paper, the existing full-paper endpoint plus byte-range
 requests and session caching may use less total bandwidth than many independent
 extracts.
+
+The local backend reads `data/databases/global_exam_catalog.sqlite` by default.
+Override it with `OME_DATABASE_PATH`. Document rows contain relative storage
+keys under `OME_PAPER_ROOT`; public or third-party file URLs are not stored.

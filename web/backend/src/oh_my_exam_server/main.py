@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
-from .catalog import CatalogNotFoundError, SubjectCatalog
+from .catalog import CatalogNotFoundError, GlobalCatalog
 from .config import Settings
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_document import QuestionDocumentError, crop_question_pdf
@@ -17,7 +17,7 @@ class PlaceholderRequest(BaseModel):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
-    catalog = SubjectCatalog(settings.database_root)
+    catalog = GlobalCatalog(settings.database_path)
     papers = FileSystemPaperStore(settings.paper_root)
     app = FastAPI(title="Oh-My-Exam API", version="0.1.0")
 
@@ -38,7 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def capabilities() -> dict[str, object]:
         exam_ids = {exam["id"] for exam in catalog.list_exams()}
         return {
-            "catalog": {"status": "ready", "source": "portable_sqlite"},
+            "catalog": {"status": "ready", "source": "global_sqlite"},
             "paper_storage": {
                 "status": "ready",
                 "backend": "local_filesystem",
@@ -79,7 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def get_question_pdf(exam_id: str, question_id: int, kind: str) -> Response:
         try:
             document = catalog.get_question_document(exam_id, question_id, kind)
-            source_path = papers.find_by_stem(document.stem)
+            source_path = papers.find_by_storage_key(document.storage_key)
             content = crop_question_pdf(source_path, document.crop_regions)
         except (CatalogNotFoundError, PaperNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -97,8 +97,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/exams/{exam_id}/papers/{paper_id}/{kind}")
     def get_paper(exam_id: str, paper_id: int, kind: str) -> FileResponse:
         try:
-            stem = catalog.get_paper_stem(exam_id, paper_id, kind)
-            path = papers.find_by_stem(stem)
+            storage_key = catalog.get_paper_storage_key(exam_id, paper_id, kind)
+            path = papers.find_by_storage_key(storage_key)
         except (CatalogNotFoundError, PaperNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return FileResponse(path, media_type="application/pdf", filename=path.name)

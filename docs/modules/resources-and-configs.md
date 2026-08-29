@@ -44,9 +44,9 @@ Source-controlled configuration and external reference resources.
 - The canonical exam-board key owns the first directory segment under
   `data/raw_papers/` and `data/processed_questions/`, and the exam-board segment
   under `data/databases/{qualification}/`.
-- A mirror or archive site is a source provider, not an exam board. Preserve it
-  in source metadata such as `source_provider` and `source_url`; never use it as
-  the exam-board path key.
+- A mirror or archive site is a downloader implementation detail, not an exam
+  board. Remote URLs may be used transiently to download files, but catalog
+  databases must retain only the local server-owned storage key.
 - Current admissions mappings are PAT → `pearson_vue`, STEP → `ocr`, and
   ENGAA/NSAA → `uat`.
 

@@ -44,8 +44,8 @@ Do not create `schema_migrations`, `paper_documents`, `metadata_fields`,
 The subject database is a compact runtime index. It keeps only enough data to:
 
 1. match OCR text against known question text;
-2. identify and download the source QP/MS documents from their stored URLs;
-3. crop the matched question from a downloaded PDF.
+2. identify the local QP/MS documents by their stable stems;
+3. import their crop metadata into the global catalog.
 
 ## `database_info`
 
@@ -70,8 +70,6 @@ Columns:
 - `id`
 - `qp_stem`
 - `ms_stem`
-- `qp_url`
-- `ms_url`
 
 `qp_stem` is unique. Example:
 
@@ -79,8 +77,9 @@ Columns:
 9231_w22_qp_11
 ```
 
-URLs are copied from splitter sidecars. Consumers must use these stored URLs
-instead of assuming that a provider URL can be reconstructed from a stem.
+Remote URLs are not stored. The global-catalog migration resolves these stems
+against server-owned PDFs under `data/raw_papers/` and stores relative storage
+keys in `paper_documents`.
 
 ## `questions`
 

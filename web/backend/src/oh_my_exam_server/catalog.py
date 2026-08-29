@@ -1,18 +1,9 @@
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
-
-
-@dataclass(frozen=True)
-class ExamDatabase:
-    id: str
-    qualification: str
-    exam_board: str
-    course_code: str
-    display_name: str
-    path: Path
 
 
 class CatalogNotFoundError(LookupError):
@@ -21,190 +12,252 @@ class CatalogNotFoundError(LookupError):
 
 @dataclass(frozen=True)
 class QuestionDocument:
-    stem: str
+    storage_key: str
     filename: str
     crop_regions: tuple[dict[str, object], ...]
 
 
-class SubjectCatalog:
-    """Read-only adapter over the existing portable subject databases."""
+class GlobalCatalog:
+    """Read-only adapter over the normalized global question catalog."""
 
-    def __init__(self, database_root: Path) -> None:
-        self.database_root = database_root.resolve()
+    def __init__(self, database_path: Path) -> None:
+        self.database_path = database_path.resolve()
 
     def list_exams(self) -> list[dict[str, object]]:
-        exams = []
-        for database in self._scan():
-            with self._connect(database) as connection:
-                paper_count = connection.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
-                question_count = connection.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
-            exams.append(
-                {
-                    "id": database.id,
-                    "qualification": database.qualification,
-                    "exam_board": database.exam_board,
-                    "course_code": database.course_code,
-                    "display_name": database.display_name,
-                    "paper_count": paper_count,
-                    "question_count": question_count,
-                }
-            )
-        return exams
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT ep.id, ep.code, ep.name,
+                       eb.code AS exam_board, ql.code AS qualification,
+                       COUNT(DISTINCT p.id) AS paper_count,
+                       COUNT(DISTINCT qu.id) AS question_count
+                FROM exam_programs ep
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
+                JOIN qualifications ql ON ql.id = ep.qualification_id
+                LEFT JOIN papers p ON p.exam_program_id = ep.id
+                LEFT JOIN questions qu ON qu.paper_id = p.id
+                GROUP BY ep.id
+                ORDER BY ql.code, eb.code, ep.code
+                """
+            ).fetchall()
+        return [
+            {
+                "id": self._exam_id(row),
+                "qualification": row["qualification"],
+                "exam_board": row["exam_board"],
+                "course_code": row["code"],
+                "display_name": row["name"],
+                "paper_count": row["paper_count"],
+                "question_count": row["question_count"],
+            }
+            for row in rows
+        ]
 
     def list_questions(self, exam_id: str, query: str = "", limit: int = 50) -> list[dict[str, object]]:
-        database = self.get_exam(exam_id)
-        sql = """
-            SELECT q.id, q.question_number, q.local_question_key,
-                   p.id AS paper_id, p.qp_stem, t.content
-            FROM questions q
-            JOIN papers p ON p.id = q.paper_id
-            LEFT JOIN question_texts t ON t.question_id = q.id
-        """
-        parameters: list[object] = []
-        if query.strip():
-            sql += " WHERE lower(COALESCE(t.content, '')) LIKE ?"
-            parameters.append(f"%{query.strip().lower()}%")
-        sql += " ORDER BY p.qp_stem, q.id LIMIT ?"
-        parameters.append(limit)
-        with self._connect(database) as connection:
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id)
+            sql = """
+                SELECT qu.id, qu.stable_key, qu.question_number, qu.local_key,
+                       p.id AS paper_id, p.source_key AS paper_key, qt.content
+                FROM questions qu
+                JOIN papers p ON p.id = qu.paper_id
+                LEFT JOIN question_texts qt
+                  ON qt.question_id = qu.id AND qt.text_kind = 'search' AND qt.language = 'en'
+                WHERE p.exam_program_id = ?
+            """
+            parameters: list[object] = [program_id]
+            if query.strip():
+                sql += " AND lower(COALESCE(qt.content, '')) LIKE ?"
+                parameters.append(f"%{query.strip().lower()}%")
+            sql += " ORDER BY p.year, p.source_key, qu.sort_order LIMIT ?"
+            parameters.append(limit)
             rows = connection.execute(sql, parameters).fetchall()
         return [self._question_summary(row) for row in rows]
 
     def get_question(self, exam_id: str, question_id: int) -> dict[str, object]:
-        database = self.get_exam(exam_id)
-        with self._connect(database) as connection:
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id)
             question = connection.execute(
                 """
-                SELECT q.id, q.question_number, q.local_question_key,
-                       p.id AS paper_id, p.qp_stem, p.ms_stem, t.content
-                FROM questions q
-                JOIN papers p ON p.id = q.paper_id
-                LEFT JOIN question_texts t ON t.question_id = q.id
-                WHERE q.id = ?
+                SELECT qu.id, qu.stable_key, qu.question_number, qu.local_key,
+                       p.id AS paper_id, p.source_key AS paper_key, qt.content
+                FROM questions qu
+                JOIN papers p ON p.id = qu.paper_id
+                LEFT JOIN question_texts qt
+                  ON qt.question_id = qu.id AND qt.text_kind = 'search' AND qt.language = 'en'
+                WHERE qu.id = ? AND p.exam_program_id = ?
                 """,
-                (question_id,),
+                (question_id, program_id),
             ).fetchone()
             if question is None:
                 raise CatalogNotFoundError(f"question not found: {question_id}")
             crop_rows = connection.execute(
                 """
-                SELECT source_type, region_order, page_index, x0, y0, x1, y1,
-                       render_dpi, join_gap_px, post_left, post_top, post_right, post_bottom
-                FROM crop_regions
-                WHERE question_id = ?
+                SELECT 0 AS source_type, qr.region_order, qr.page_index,
+                       qr.x0, qr.y0, qr.x1, qr.y1, qr.render_dpi, qr.join_gap_px,
+                       qr.post_left, qr.post_top, qr.post_right, qr.post_bottom
+                FROM question_regions qr
+                WHERE qr.question_id = ?
+                UNION ALL
+                SELECT 1 AS source_type, ar.region_order, ar.page_index,
+                       ar.x0, ar.y0, ar.x1, ar.y1, ar.render_dpi, ar.join_gap_px,
+                       ar.post_left, ar.post_top, ar.post_right, ar.post_bottom
+                FROM answers a
+                JOIN answer_regions ar ON ar.answer_id = a.id
+                WHERE a.question_id = ?
                 ORDER BY source_type, region_order
                 """,
-                (question_id,),
+                (question_id, question_id),
             ).fetchall()
         result = self._question_summary(question)
-        result.update(
-            {
-                "answer_stem": question["ms_stem"],
-                "crop_regions": [dict(row) for row in crop_rows],
-            }
-        )
+        result["crop_regions"] = [dict(row) for row in crop_rows]
         return result
-
-    def get_paper_stem(self, exam_id: str, paper_id: int, kind: str) -> str:
-        if kind not in {"question", "answer"}:
-            raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
-        database = self.get_exam(exam_id)
-        column = "qp_stem" if kind == "question" else "ms_stem"
-        with self._connect(database) as connection:
-            row = connection.execute(f"SELECT {column} FROM papers WHERE id = ?", (paper_id,)).fetchone()
-        if row is None or not row[0]:
-            raise CatalogNotFoundError(f"paper not found: {paper_id}")
-        return str(row[0])
 
     def get_question_document(self, exam_id: str, question_id: int, kind: str) -> QuestionDocument:
         if kind not in {"question", "answer"}:
             raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
-        database = self.get_exam(exam_id)
-        source_type = 0 if kind == "question" else 1
-        stem_column = "p.qp_stem" if kind == "question" else "p.ms_stem"
-        with self._connect(database) as connection:
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id)
             question = connection.execute(
-                f"""
-                SELECT q.local_question_key, {stem_column} AS stem
-                FROM questions q
-                JOIN papers p ON p.id = q.paper_id
-                WHERE q.id = ?
-                """,
-                (question_id,),
-            ).fetchone()
-            if question is None or not question["stem"]:
-                raise CatalogNotFoundError(f"question document not found: {question_id}/{kind}")
-            regions = connection.execute(
                 """
-                SELECT region_order, page_index, x0, y0, x1, y1, render_dpi,
-                       post_left, post_top, post_right, post_bottom
-                FROM crop_regions
-                WHERE question_id = ? AND source_type = ?
-                ORDER BY region_order
+                SELECT qu.id, qu.local_key
+                FROM questions qu
+                JOIN papers p ON p.id = qu.paper_id
+                WHERE qu.id = ? AND p.exam_program_id = ?
                 """,
-                (question_id, source_type),
-            ).fetchall()
-        if not regions:
-            raise CatalogNotFoundError(f"question crop regions not found: {question_id}/{kind}")
-        stem = str(question["stem"])
-        local_key = str(question["local_question_key"])
+                (question_id, program_id),
+            ).fetchone()
+            if question is None:
+                raise CatalogNotFoundError(f"question not found: {question_id}")
+            if kind == "question":
+                document = connection.execute(
+                    """
+                    SELECT pd.storage_key, pd.original_filename
+                    FROM question_regions qr
+                    JOIN paper_documents pd ON pd.id = qr.document_id
+                    WHERE qr.question_id = ?
+                    ORDER BY qr.region_order
+                    LIMIT 1
+                    """,
+                    (question_id,),
+                ).fetchone()
+                regions = connection.execute(
+                    """
+                    SELECT region_order, page_index, x0, y0, x1, y1, render_dpi,
+                           post_left, post_top, post_right, post_bottom
+                    FROM question_regions
+                    WHERE question_id = ?
+                    ORDER BY region_order
+                    """,
+                    (question_id,),
+                ).fetchall()
+            else:
+                document = connection.execute(
+                    """
+                    SELECT pd.storage_key, pd.original_filename, a.id AS answer_id
+                    FROM answers a
+                    JOIN paper_documents pd ON pd.id = a.source_document_id
+                    WHERE a.question_id = ?
+                    ORDER BY CASE a.answer_kind
+                        WHEN 'worked_solution' THEN 0
+                        WHEN 'mark_scheme' THEN 1
+                        WHEN 'answer_key' THEN 2
+                        ELSE 3
+                    END, a.id
+                    LIMIT 1
+                    """,
+                    (question_id,),
+                ).fetchone()
+                regions = [] if document is None else connection.execute(
+                    """
+                    SELECT region_order, page_index, x0, y0, x1, y1, render_dpi,
+                           post_left, post_top, post_right, post_bottom
+                    FROM answer_regions
+                    WHERE answer_id = ?
+                    ORDER BY region_order
+                    """,
+                    (document["answer_id"],),
+                ).fetchall()
+        if document is None or not regions:
+            raise CatalogNotFoundError(f"question document not found: {question_id}/{kind}")
+        source_name = Path(str(document["original_filename"])).stem
         return QuestionDocument(
-            stem=stem,
-            filename=f"{stem}_{local_key}.pdf",
+            storage_key=str(document["storage_key"]),
+            filename=f"{source_name}_{question['local_key']}.pdf",
             crop_regions=tuple(dict(region) for region in regions),
         )
 
-    def get_exam(self, exam_id: str) -> ExamDatabase:
-        for database in self._scan():
-            if database.id == exam_id:
-                return database
-        raise CatalogNotFoundError(f"exam not found: {exam_id}")
-
-    def _scan(self) -> list[ExamDatabase]:
-        if not self.database_root.is_dir():
-            return []
-        databases = []
-        for path in sorted(self.database_root.rglob("*.sqlite")):
-            uri = f"{path.resolve().as_uri()}?mode=ro"
-            try:
-                with sqlite3.connect(uri, uri=True) as connection:
-                    row = connection.execute(
-                        "SELECT qualification, exam_board, course_code, course_display_name "
-                        "FROM database_info LIMIT 1"
-                    ).fetchone()
-            except sqlite3.Error:
-                continue
-            if row is None or not all(isinstance(value, str) and value.strip() for value in row[:3]):
-                continue
-            qualification, exam_board, course_code, display_name = (str(value).strip() for value in row)
-            if qualification != "admissions":
-                continue
-            databases.append(
-                ExamDatabase(
-                    id=f"{qualification}:{exam_board}:{course_code}",
-                    qualification=qualification,
-                    exam_board=exam_board,
-                    course_code=course_code,
-                    display_name=display_name or course_code.upper(),
-                    path=path.resolve(),
-                )
+    def get_paper_storage_key(self, exam_id: str, paper_id: int, kind: str) -> str:
+        if kind not in {"question", "answer"}:
+            raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id)
+            roles = (
+                ("question_paper",)
+                if kind == "question"
+                else ("worked_answer", "mark_scheme", "answer_key")
             )
-        return databases
+            placeholders = ", ".join("?" for _ in roles)
+            row = connection.execute(
+                f"""
+                SELECT pd.storage_key
+                FROM paper_documents pd
+                JOIN papers p ON p.id = pd.paper_id
+                WHERE p.id = ? AND p.exam_program_id = ? AND pd.role IN ({placeholders})
+                ORDER BY CASE pd.role
+                    WHEN 'worked_answer' THEN 0
+                    WHEN 'mark_scheme' THEN 1
+                    WHEN 'answer_key' THEN 2
+                    ELSE 3
+                END, pd.id
+                LIMIT 1
+                """,
+                (paper_id, program_id, *roles),
+            ).fetchone()
+        if row is None:
+            raise CatalogNotFoundError(f"paper not found: {paper_id}/{kind}")
+        return str(row["storage_key"])
 
-    @staticmethod
-    def _connect(database: ExamDatabase) -> sqlite3.Connection:
-        uri = f"{database.path.as_uri()}?mode=ro"
+    def _connect(self) -> sqlite3.Connection:
+        if not self.database_path.is_file():
+            raise CatalogNotFoundError(f"global catalog not found: {self.database_path}")
+        uri = f"{self.database_path.as_uri()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True)
         connection.row_factory = sqlite3.Row
         return connection
 
     @staticmethod
+    def _program_id(connection: sqlite3.Connection, exam_id: str) -> int:
+        parts = exam_id.split(":")
+        if len(parts) != 3:
+            raise CatalogNotFoundError(f"invalid exam id: {exam_id}")
+        qualification, exam_board, course_code = parts
+        row = connection.execute(
+            """
+            SELECT ep.id
+            FROM exam_programs ep
+            JOIN exam_boards eb ON eb.id = ep.exam_board_id
+            JOIN qualifications ql ON ql.id = ep.qualification_id
+            WHERE ql.code = ? AND eb.code = ? AND ep.code = ?
+            """,
+            (qualification, exam_board, course_code),
+        ).fetchone()
+        if row is None:
+            raise CatalogNotFoundError(f"exam not found: {exam_id}")
+        return int(row[0])
+
+    @staticmethod
+    def _exam_id(row: sqlite3.Row) -> str:
+        return f"{row['qualification']}:{row['exam_board']}:{row['code']}"
+
+    @staticmethod
     def _question_summary(row: sqlite3.Row) -> dict[str, object]:
         return {
             "id": row["id"],
+            "stable_key": row["stable_key"],
             "paper_id": row["paper_id"],
-            "paper_stem": row["qp_stem"],
-            "local_key": row["local_question_key"],
+            "paper_key": row["paper_key"],
+            "local_key": row["local_key"],
             "question_number": row["question_number"],
             "content": row["content"] or "",
         }

@@ -33,9 +33,7 @@ def migrate(conn: sqlite3.Connection) -> None:
         CREATE TABLE papers (
             id INTEGER PRIMARY KEY,
             qp_stem TEXT NOT NULL UNIQUE,
-            ms_stem TEXT NOT NULL,
-            qp_url TEXT NOT NULL DEFAULT '',
-            ms_url TEXT NOT NULL DEFAULT ''
+            ms_stem TEXT NOT NULL
         );
 
         CREATE TABLE questions (

@@ -41,8 +41,7 @@ schema documented under `docs/tools/cie_alevel_splitter/` and does not maintain
 compatibility branches for older sidecar formats.
 
 The packer also recognizes processed UAT admissions sidecars under
-`data/processed_questions/uat/admissions/{engaa|nsaa}/`. Their official PDF URL
-is read from each crop region's `source_pdf` field. In the GUI these appear as
+`data/processed_questions/uat/admissions/{engaa|nsaa}/`. In the GUI these appear as
 `Admissions Tests` → `UAT` → `ENGAA` or `NSAA`.
 
 ## Database Output
@@ -78,9 +77,8 @@ The subject database owns these core tables:
 
 The subject database must not create `schema_migrations` or FTS5 shadow tables.
 
-`papers` stores QP/MS source stems and the exact downloadable URL for each
-document. Runtime code must use the stored URLs because not every provider URL
-can be reconstructed from a stem.
+`papers` stores only QP/MS source stems. Remote downloader URLs are not written
+to a catalog database.
 
 `questions` stores only the paper link, local question key, and human-readable
 question number. Search text from QP metadata is stored in `question_texts`,
@@ -116,6 +114,19 @@ Rebuild from scratch:
 The packer writes a regenerated compact subject database. `--overwrite` keeps
 the same external behavior for callers that explicitly request a rebuild, but
 the generated schema itself is always refreshed before records are inserted.
+
+Build the normalized global catalog after the required subject databases exist:
+
+```powershell
+.venv\Scripts\python tools\packers\global_catalog_cli.py --overwrite --strip-legacy-urls --extract-answer-text
+```
+
+The global catalog resolves each source stem to a PDF already present under
+`data/raw_papers/` and stores its relative storage key. The optional cleanup
+flag removes legacy URL columns from older subject databases after a successful
+migration. Answer extraction uses the stored answer crop regions and local PDFs
+to create draft Markdown without an AI call; empty or unusable extracts remain
+`source_only`.
 
 ## GUI
 

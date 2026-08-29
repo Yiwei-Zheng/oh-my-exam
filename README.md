@@ -159,8 +159,14 @@ Package splitter JSON sidecars into one SQLite database per subject:
 The generated file name is lowercase snake_case, for example
 `data/databases/a_level/cie/cie_a_level_9231.sqlite`. The packer regenerates a
 compact runtime database with paper stems, local question keys, searchable
-question text, exact QP/MS source URLs, and the crop coordinates needed to
-recreate question images from downloaded PDFs.
+question text, and the crop coordinates needed to recreate question images
+from server-owned PDFs. Catalog databases do not retain third-party source URLs.
+
+Build the normalized global catalog used by the backend:
+
+```powershell
+.venv\Scripts\python tools\packers\global_catalog_cli.py --overwrite --strip-legacy-urls --extract-answer-text
+```
 
 Run the packer GUI:
 

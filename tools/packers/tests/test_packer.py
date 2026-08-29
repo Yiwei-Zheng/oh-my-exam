@@ -99,8 +99,7 @@ def test_packer_writes_compact_search_and_crop_sqlite(tmp_path: Path) -> None:
         }.isdisjoint(question_columns)
         question = conn.execute(
             """
-            SELECT p.qp_stem, p.ms_stem, p.qp_url, p.ms_url,
-                   q.local_question_key, q.question_number
+            SELECT p.qp_stem, p.ms_stem, q.local_question_key, q.question_number
             FROM questions q
             JOIN papers p ON p.id = q.paper_id
             """
@@ -108,11 +107,11 @@ def test_packer_writes_compact_search_and_crop_sqlite(tmp_path: Path) -> None:
         assert question == (
             "9231_w22_qp_11",
             "9231_w22_ms_11",
-            "https://example.test/9231_w22_qp_11.pdf",
-            "https://example.test/9231_w22_ms_11.pdf",
             "q01_b",
             "1(b)",
         )
+        paper_columns = {row[1] for row in conn.execute("PRAGMA table_info(papers)")}
+        assert {"qp_url", "ms_url", "source_url"}.isdisjoint(paper_columns)
         question_text = conn.execute("SELECT question_id, content FROM question_texts").fetchone()
         assert question_text == (1, "Find the value of the constant.")
         crop_rows = conn.execute(
@@ -256,11 +255,9 @@ def test_uat_admissions_sidecars_are_discovered_and_packed(tmp_path: Path) -> No
     assert summary.metadata_count == 2
     assert summary.matched_pairs == 1
     with closing(sqlite3.connect(output_dir / "uat_admissions_engaa.sqlite")) as conn:
-        assert conn.execute("SELECT qp_stem, ms_stem, qp_url, ms_url FROM papers").fetchone() == (
+        assert conn.execute("SELECT qp_stem, ms_stem FROM papers").fetchone() == (
             "engaa_2016_s1_qp",
             "engaa_2016_s1_ms",
-            "https://example.test/engaa_2016_s1_qp.pdf",
-            "https://example.test/engaa_2016_s1_ms.pdf",
         )
         assert conn.execute("SELECT local_question_key, question_number FROM questions").fetchone() == (
             "q01",

@@ -27,6 +27,7 @@ Stable repository-level architecture for Oh-My-Exam.
 - `docs/modules/exam-processing.md`
 - `docs/modules/resources-and-configs.md`
 - `docs/modules/local-data-storage.md`
+- `docs/modules/global-question-catalog.md`
 - `docs/modules/official-web.md`
 - `docs/tools/cie_alevel_downloader/overview.md`
 - `docs/tools/cie_alevel_splitter/overview.md`
@@ -78,8 +79,10 @@ user state and published catalog data.
   dependency-neutral utilities, but not downloader or splitter workflow logic.
 - Classifiers/taggers annotate processed questions.
 - Storage code persists normalized local data.
-- Packers convert processed question metadata into compact per-subject runtime databases for search and PDF recropping, including exact per-document source URLs.
-- The server may import portable subject packages, but must not import downloader
+- Packers convert processed question metadata into compact per-subject import
+  databases and a normalized global SQLite catalog. Catalogs store server-owned
+  document storage keys, never third-party source URLs.
+- The server reads the normalized global catalog and must not import downloader
   or splitter internals.
 - Clients consume versioned HTTP APIs and must not import server or Python tool internals.
 - Portable SQLite packages remain valid import/export and optional offline assets;
@@ -122,7 +125,8 @@ user state and published catalog data.
 - `data/raw_papers/`: downloaded raw papers.
 - `data/processed_questions/`: generated question-level outputs.
 - `data/reports/`: runtime reports.
-- `data/databases/`: generated per-subject SQLite databases.
+- `data/databases/`: generated per-subject SQLite import databases and
+  `global_exam_catalog.sqlite`.
 - `data/*.sqlite3`: local databases.
 - `requirements/backend.txt`: production backend installation entry point.
 - `requirements/backend-dev.txt`: editable backend and backend-test installation entry point.
@@ -146,8 +150,9 @@ user state and published catalog data.
 - Original PDFs are server-owned assets behind a `PaperStore` boundary. Local
   filesystem storage is supported for development; production targets an
   S3-compatible object store.
-- API requests identify papers by internal ids. The server must never act as an
-  unrestricted proxy for a client-supplied URL.
+- Catalog document rows store a path-independent storage key. API requests
+  identify questions and papers by internal ids; the server must never accept a
+  client-supplied file path or upstream URL.
 - Normal question display requests identify a question and document side through
   the versioned API. The server resolves the original paper and replays stored
   crop regions into a question-level vector PDF; crop calculation remains a
