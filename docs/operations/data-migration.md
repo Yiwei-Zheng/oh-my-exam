@@ -8,9 +8,13 @@
 - Tracked exam configuration and resources moved below `backend`.
 - `data/{databases,processed_questions,raw_papers,reports}` moved to `backend/data` on the same volume.
 - The active catalog gained `answer_versions.raw_text`; the empty `marking_points` table was removed.
-- Permanent JPGs below `backend/data/processed_questions` were removed after dynamic PDF preview passed API and browser verification.
+- After dynamic PDF preview passed API and browser verification, 46,674 JPG
+  crops below `backend/data/processed_questions` and 13,356 duplicate report
+  crops below `backend/data/reports/processed_questions` were removed. No JPG
+  remains below `backend/data`.
 
-Original PDFs, JSON crop metadata, portable databases and reports were retained. Legacy import names and launch wrappers are not supported.
+Original PDFs, JSON crop metadata, portable databases and non-image reports were
+retained. Legacy import names and launch wrappers are not supported.
 
 ## Verification
 
