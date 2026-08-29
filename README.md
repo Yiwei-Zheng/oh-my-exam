@@ -26,7 +26,7 @@ Windows:
 Linux/macOS:
 
 ```console
-.venv/bin/python -m uvicorn oh_my_exam_server.main:app --reload --host 127.0.0.1 --port 8000
+.venv/bin/python web/start.py --install
 ```
 
 Useful endpoints:

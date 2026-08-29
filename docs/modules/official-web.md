@@ -40,8 +40,10 @@ configuration and does not simulate success.
   browser code.
 - The update command is an argument array and is never passed through a shell.
 - User-visible text belongs in the Chinese/English i18n resources.
-- Production hosting rewrites browser routes to `index.html` and serves the API
-  under the same site or an explicitly allowed CORS origin.
+- `web/start.py` starts Uvicorn, and FastAPI serves the compiled frontend with
+  an `index.html` SPA fallback while preserving the `/api` boundary. Frontend
+  and API therefore share the current deployment origin without a hard-coded
+  domain.
 
 ## Verification
 

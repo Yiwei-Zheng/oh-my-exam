@@ -9,12 +9,26 @@ The frontend calls the backend through versioned HTTP APIs. Neither application
 imports the other's internal code, and production may deploy them together or
 separately without changing this source boundary.
 
-## One-click local start
+## Linux deployment start
 
-On Windows, double-click `web/start-dev.cmd` to open the backend and frontend
-development servers in separate terminal windows. Close both windows to stop
-the application. Run `web\start-dev.cmd --check` to validate prerequisites
-without starting either server.
+`web/start.py` builds and starts the self-contained web application. FastAPI
+serves both the versioned API and the compiled Vue frontend from one origin, so
+production does not run the Vite development server or embed a deployment
+domain.
+
+From the repository root:
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e 'web/backend'
+.venv/bin/python web/start.py --install
+```
+
+`--install` runs `npm ci` and the production frontend build before starting.
+For later restarts, use `.venv/bin/python web/start.py`. The default listener is
+`0.0.0.0:8000`; override it with `--host`, `--port`, `HOST`, or `PORT`. Run
+`.venv/bin/python web/start.py --check` to validate an existing build without
+starting the server.
 
 The frontend uses Vue 3, TypeScript, Vite, Element Plus, and ECharts. It provides
 a bilingual email/password login and an administrator workspace. Public

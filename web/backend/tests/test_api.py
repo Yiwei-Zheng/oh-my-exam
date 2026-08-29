@@ -206,3 +206,29 @@ def test_paper_store_rejects_globs_and_paths(tmp_path: Path) -> None:
         except PaperNotFoundError:
             continue
         raise AssertionError(f"unsafe stem was accepted: {unsafe_stem}")
+
+
+def test_frontend_build_is_served_with_spa_fallback(tmp_path: Path) -> None:
+    database_path = tmp_path / "databases" / "global_exam_catalog.sqlite"
+    _create_global_database(database_path)
+    frontend_dist = tmp_path / "frontend" / "dist"
+    assets = frontend_dist / "assets"
+    assets.mkdir(parents=True)
+    (frontend_dist / "index.html").write_text("<h1>Oh My Exam</h1>", encoding="utf-8")
+    (assets / "app.js").write_text("console.log('ready')", encoding="utf-8")
+    settings = Settings(
+        tmp_path,
+        database_path,
+        tmp_path / "raw_papers",
+        app_database_path=tmp_path / "application.sqlite3",
+        frontend_dist_path=frontend_dist,
+    )
+    client = TestClient(create_app(settings))
+
+    assert "Oh My Exam" in client.get("/").text
+    assert "Oh My Exam" in client.get("/admin").text
+    assert "console.log" in client.get("/assets/app.js").text
+    assert client.get("/api/v1/unknown").status_code == 404
+    traversal = client.get("/%2e%2e/pyproject.toml")
+    assert "Oh My Exam" in traversal.text
+    assert "build-system" not in traversal.text
