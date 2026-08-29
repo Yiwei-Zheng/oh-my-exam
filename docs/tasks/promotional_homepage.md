@@ -27,21 +27,24 @@ or backend integration.
 
 ## Interaction and accessibility
 
-- Continuous motion can be paused and resumed.
+- Continuous motion pauses automatically in hidden tabs; no visible pause control
+  is shown on this promotional surface.
 - `prefers-reduced-motion` skips the intro and displays a static composition.
 - Primary controls use native buttons, visible focus states, localized labels,
   and at least 44 px targets.
-- Language selection uses a keyboard-operable globe menu. Theme switching avoids
-  full-page snapshots and limits visual changes to inexpensive color tokens.
+- Language selection uses a keyboard-operable globe menu. Theme switching uses
+  an interruptible transform-only circular reveal and avoids full-page snapshots.
 - The page remains operable from 320 px upward in portrait and landscape without
   horizontal overflow.
 - Unknown routes show a themed, localized 404 page and a route back to `/`.
 
 ## Implementation boundaries
 
-- Use Vue, CSS, SVG, and the Web Animations API; do not add an animation or WebGL
-  runtime.
-- Self-host IBM Plex Mono under its bundled SIL Open Font License.
+- Use a dynamically imported PixiJS WebGL renderer with a runtime glyph atlas and
+  merged meshes. Keep a static SVG fallback for reduced motion and browsers
+  without WebGL2.
+- Self-host Space Grotesk for display text and IBM Plex Mono for academic
+  characters under their bundled SIL Open Font Licenses.
 - Do not ship the visual references from `tmp/index/` as production assets.
 - Do not add analytics code, cookies, external scripts, audio, or a favicon.
 

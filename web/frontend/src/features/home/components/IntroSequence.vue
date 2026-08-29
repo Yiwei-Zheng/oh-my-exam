@@ -72,7 +72,7 @@ async function flyOriginToTarget() {
   const target = document.getElementById(props.targetId)
 
   if (!origin || !target) {
-    await wait(1050)
+    await wait(1150)
     return
   }
 
@@ -87,8 +87,8 @@ async function flyOriginToTarget() {
     targetBounds.height / 2 -
     (originBounds.top + originBounds.height / 2)
   const targetScale = Math.max(
-    3,
-    (targetBounds.width / Math.max(originBounds.width, 1)) * 0.74,
+    1.6,
+    (targetBounds.width / Math.max(originBounds.width, 1)) * 0.82,
   )
   const arcLift = Math.min(96, Math.max(40, window.innerHeight * 0.085))
   const middleScale = 1 + (targetScale - 1) * 0.44
@@ -114,8 +114,8 @@ async function flyOriginToTarget() {
       },
     ],
     {
-      duration: 1050,
-      easing: 'cubic-bezier(0.22, 0.75, 0.2, 1)',
+      duration: 1150,
+      easing: 'cubic-bezier(0.18, 0.78, 0.2, 1)',
       fill: 'forwards',
     },
   )
@@ -124,7 +124,7 @@ async function flyOriginToTarget() {
 }
 
 async function play() {
-  await wait(2200)
+  await wait(2100)
   if (completed) {
     return
   }
@@ -137,9 +137,9 @@ async function play() {
 
   phase.value = 'morph'
   emit('formation')
-  await wait(420)
+  await wait(550)
   phase.value = 'formation'
-  await wait(650)
+  await wait(400)
   finish()
 }
 
@@ -164,37 +164,21 @@ onBeforeUnmount(() => {
     aria-modal="true"
     aria-labelledby="intro-title"
   >
-    <h2
-      id="intro-title"
-      class="sr-only"
-      v-text="BRAND_NAME"
-    />
-    <button
-      ref="skipButton"
-      class="intro__skip"
-      type="button"
-      @click="skip"
-    >
+    <h2 id="intro-title" class="sr-only" v-text="BRAND_NAME" />
+    <button ref="skipButton" class="intro__skip" type="button" @click="skip">
       {{ t('controls.skipIntro') }}
     </button>
 
-    <div
-      class="intro__scanline"
-      aria-hidden="true"
-    />
-    <div
-      class="intro__title-stack"
-      aria-hidden="true"
-    >
+    <div class="intro__scanline" aria-hidden="true" />
+    <div class="intro__title-stack" aria-hidden="true">
       <span
         class="intro__line intro__line--replica intro__line--replica-top"
         v-text="BRAND_NAME"
       />
       <span class="intro__line intro__line--main">
-        <span
-          ref="originLetter"
-          class="intro__letter intro__letter--origin"
-        >O</span>
+        <span ref="originLetter" class="intro__letter intro__letter--origin"
+          >O</span
+        >
         <span
           class="intro__letter intro__letter--fading"
           v-text="BRAND_NAME.slice(1)"
@@ -222,7 +206,7 @@ onBeforeUnmount(() => {
   color: #f0eeec;
   background: #1a1828;
   isolation: isolate;
-  animation: intro-background 2200ms steps(1, end) both;
+  animation: intro-background 2100ms steps(1, end) both;
 }
 
 .intro__skip {
@@ -265,6 +249,7 @@ onBeforeUnmount(() => {
   width: min(88vw, 1400px);
   min-height: 32vh;
   font-size: clamp(2.25rem, 6.2vw, 8rem);
+  font-family: 'Space Grotesk', sans-serif;
   font-weight: 700;
   line-height: 0.92;
   letter-spacing: clamp(0.08em, 1.2vw, 0.18em);
@@ -278,12 +263,12 @@ onBeforeUnmount(() => {
 
 .intro__line--main {
   display: flex;
-  animation: intro-main-glitch 2200ms steps(1, end) both;
+  animation: intro-main-glitch 2100ms steps(1, end) both;
 }
 
 .intro__line--replica {
   opacity: 0;
-  animation: intro-replica 2200ms steps(1, end) both;
+  animation: intro-replica 2100ms steps(1, end) both;
 }
 
 .intro__line--replica-top {
@@ -305,29 +290,41 @@ onBeforeUnmount(() => {
   transform-origin: center;
 }
 
+.intro__letter--origin::before,
 .intro__letter--origin::after {
   position: absolute;
   top: 50%;
   left: 45%;
-  width: 0.7em;
+  width: 0.72em;
   aspect-ratio: 1;
   border-radius: 50%;
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+}
+
+.intro__letter--origin::before {
   background: radial-gradient(
     circle at 43% 38%,
     #111522 0,
     #050609 58%,
     #000 100%
   );
-  box-shadow:
-    0 0 0 0.055em #c9e8ff,
-    0 0 0.14em 0.08em rgb(201 232 255 / 82%),
-    0 0 0.24em 0.12em rgb(255 184 110 / 55%);
-  content: '';
-  opacity: 0;
   transform: translate3d(-50%, -50%, 0) scale(0.12);
   transition:
-    opacity 180ms ease,
-    transform 420ms var(--ease-out-expo);
+    opacity 190ms ease,
+    transform 520ms var(--ease-out-expo);
+}
+
+.intro__letter--origin::after {
+  border: 0.052em solid #c9e8ff;
+  box-shadow:
+    0 0 0.13em 0.065em rgb(201 232 255 / 88%),
+    0 0 0.25em 0.12em rgb(255 184 110 / 58%);
+  transform: translate3d(-50%, -50%, 0) scale(0.58);
+  transition:
+    opacity 240ms ease,
+    transform 540ms var(--ease-out-expo);
 }
 
 .intro--flight .intro__letter--fading {
@@ -363,7 +360,9 @@ onBeforeUnmount(() => {
   transition: color 260ms ease;
 }
 
+.intro--morph .intro__letter--origin::before,
 .intro--morph .intro__letter--origin::after,
+.intro--formation .intro__letter--origin::before,
 .intro--formation .intro__letter--origin::after {
   opacity: 1;
   transform: translate3d(-50%, -50%, 0) scale(1);
@@ -372,7 +371,7 @@ onBeforeUnmount(() => {
 .intro--formation {
   pointer-events: none;
   opacity: 0;
-  transition: opacity 650ms var(--ease-out-expo);
+  transition: opacity 400ms var(--ease-out-expo);
 }
 
 .intro--formation .intro__skip {
@@ -389,7 +388,7 @@ onBeforeUnmount(() => {
   opacity: 0;
   background: currentColor;
   box-shadow: 0 0 24px currentColor;
-  animation: intro-scanline 2200ms steps(1, end) both;
+  animation: intro-scanline 2100ms steps(1, end) both;
 }
 
 @keyframes intro-background {

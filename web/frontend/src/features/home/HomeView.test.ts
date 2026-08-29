@@ -9,7 +9,6 @@ import HomeView from './HomeView.vue'
 
 const HeaderStub = defineComponent({
   props: {
-    showPause: Boolean,
     showReplay: Boolean,
   },
   template: '<div data-header></div>',
@@ -18,6 +17,7 @@ const HeaderStub = defineComponent({
 const BlackHoleStub = defineComponent({
   props: {
     stage: String,
+    paused: Boolean,
     reducedMotion: Boolean,
   },
   template: '<div data-black-hole></div>',
@@ -65,10 +65,10 @@ describe('HomeView', () => {
     const typewriter = wrapper.findComponent(TypewriterStub)
 
     expect(wrapper.find('.intro').exists()).toBe(false)
-    expect(header.props('showPause')).toBe(false)
     expect(header.props('showReplay')).toBe(false)
     expect(blackHole.props('stage')).toBe('ready')
     expect(blackHole.props('reducedMotion')).toBe(true)
+    expect(blackHole.props('paused')).toBe(true)
     expect(typewriter.props('paused')).toBe(true)
     expect(window.sessionStorage.getItem('oh-my-exam.intro-seen')).toBe('true')
 

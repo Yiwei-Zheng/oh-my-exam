@@ -18,12 +18,10 @@ const { prefersReducedMotion } = useReducedMotion()
 const introPlaying = ref(false)
 const introKey = ref(0)
 const blackHoleStage = ref<BlackHoleStage>('dormant')
-const manuallyPaused = ref(false)
 const documentHidden = ref(false)
 
 const motionPaused = computed(
-  () =>
-    manuallyPaused.value || documentHidden.value || prefersReducedMotion.value,
+  () => documentHidden.value || prefersReducedMotion.value,
 )
 const headlinePaused = computed(() => motionPaused.value || introPlaying.value)
 const heroContentVisible = computed(() => blackHoleStage.value !== 'dormant')
@@ -64,7 +62,6 @@ function replayIntro() {
     return
   }
 
-  manuallyPaused.value = false
   blackHoleStage.value = 'dormant'
   introKey.value += 1
   introPlaying.value = true
@@ -81,10 +78,6 @@ function completeIntro() {
   void nextTick(() => {
     document.getElementById('home-content')?.focus({ preventScroll: true })
   })
-}
-
-function togglePause() {
-  manuallyPaused.value = !manuallyPaused.value
 }
 
 function syncDocumentVisibility() {
@@ -110,21 +103,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="home">
-    <a
-      v-if="!introPlaying"
-      class="home__skip-link"
-      href="#home-content"
-    >
+    <a v-if="!introPlaying" class="home__skip-link" href="#home-content">
       {{ t('controls.skipToContent') }}
     </a>
 
     <SiteHeader
       :hidden="introPlaying"
-      :paused="motionPaused"
       :show-replay="!prefersReducedMotion"
-      :show-pause="!prefersReducedMotion"
       @replay="replayIntro"
-      @toggle-pause="togglePause"
     />
 
     <main
@@ -133,10 +119,7 @@ onBeforeUnmount(() => {
       tabindex="-1"
       :inert="introPlaying"
     >
-      <div
-        class="home__visual"
-        aria-hidden="false"
-      >
+      <div class="home__visual" aria-hidden="false">
         <CharacterBlackHole
           :stage="blackHoleStage"
           :paused="motionPaused"
@@ -156,10 +139,7 @@ onBeforeUnmount(() => {
           class="home__headline"
           :aria-label="t('home.accessibleHeadline')"
         >
-          <span
-            class="home__prefix"
-            aria-hidden="true"
-          >
+          <span class="home__prefix" aria-hidden="true">
             {{ HERO_PREFIX }}
           </span>
           <TypewriterHeadline
@@ -185,12 +165,14 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .home {
+  --hero-type-size: clamp(1.9rem, 2.8vw, 3.7rem);
+
   position: relative;
   min-width: 320px;
   min-height: 100dvh;
   overflow: hidden;
   background:
-    radial-gradient(circle at 22% 47%, var(--color-glow), transparent 32%),
+    radial-gradient(circle at 24% 38%, var(--color-glow), transparent 34%),
     var(--color-surface);
   color: var(--color-ink);
   transition:
@@ -218,7 +200,7 @@ onBeforeUnmount(() => {
 .home__hero {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 58fr) minmax(0, 42fr);
+  grid-template-columns: minmax(0, 56fr) minmax(0, 44fr);
   width: 100%;
   min-height: 100dvh;
   padding: var(--header-height) var(--page-gutter) 0;
@@ -226,12 +208,10 @@ onBeforeUnmount(() => {
 }
 
 .home__visual {
-  position: relative;
+  position: absolute;
   z-index: 1;
-  display: grid;
-  align-self: stretch;
-  min-width: 0;
-  place-items: center;
+  inset: 0;
+  pointer-events: none;
 }
 
 .home__copy {
@@ -239,6 +219,7 @@ onBeforeUnmount(() => {
   z-index: 2;
   display: flex;
   align-items: center;
+  grid-column: 2;
   min-width: 0;
   padding: 0 clamp(8px, 2.4vw, 48px) 4vh clamp(20px, 3.4vw, 72px);
   visibility: hidden;
@@ -265,48 +246,42 @@ onBeforeUnmount(() => {
 
 .home__prefix {
   display: block;
-  margin-bottom: clamp(18px, 2.4vh, 32px);
-  font-size: clamp(1.05rem, 1.55vw, 1.65rem);
-  font-weight: 400;
-  line-height: 1.2;
-  letter-spacing: 0.18em;
-}
-
-.home__typewriter {
-  font-size: clamp(1.75rem, 2.55vw, 3.4rem);
-  font-weight: 700;
-  line-height: 1.08;
+  margin-bottom: clamp(10px, 1.5vh, 18px);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: var(--hero-type-size);
+  font-weight: 500;
+  line-height: 1.02;
   letter-spacing: -0.045em;
 }
 
-@media (min-width: 768px) {
-  .home__visual {
-    transform: translate3d(-7%, 0, 0) scale(1.16);
-  }
+.home__typewriter {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: var(--hero-type-size);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.045em;
 }
 
 @media (max-width: 1023px) {
   .home__hero {
-    grid-template-columns: minmax(0, 54fr) minmax(0, 46fr);
+    grid-template-columns: minmax(0, 52fr) minmax(0, 48fr);
   }
 
   .home__copy {
     padding-right: 0;
     padding-left: 24px;
   }
-
-  .home__typewriter {
-    font-size: clamp(1.4rem, 3vw, 2.35rem);
-  }
 }
 
 @media (max-width: 767px),
   (orientation: landscape) and (max-height: 500px) and (max-width: 1024px) {
   .home {
+    --hero-type-size: clamp(1.18rem, 5.55vw, 2rem);
+
     min-height: 100dvh;
     overflow-y: auto;
     background:
-      radial-gradient(circle at 50% 52%, var(--color-glow), transparent 43%),
+      radial-gradient(circle at 42% 43%, var(--color-glow), transparent 46%),
       var(--color-surface);
   }
 
@@ -320,16 +295,8 @@ onBeforeUnmount(() => {
   }
 
   .home__visual {
-    position: absolute;
-    z-index: 1;
-    top: 50%;
-    left: 50%;
-    width: min(142vw, 820px);
-    height: min(108vw, 700px);
-    opacity: 0.35;
-    filter: blur(2.5px);
-    transform: translate3d(-50%, -50%, 0);
-    pointer-events: none;
+    opacity: 0.43;
+    filter: blur(1.8px);
   }
 
   .home__copy {
@@ -345,13 +312,11 @@ onBeforeUnmount(() => {
   }
 
   .home__prefix {
-    margin-bottom: 18px;
-    font-size: clamp(1rem, 4.4vw, 1.3rem);
+    margin-bottom: 12px;
   }
 
   .home__typewriter {
     max-width: 100%;
-    font-size: clamp(1.18rem, 5.55vw, 2rem);
     letter-spacing: -0.055em;
   }
 }
@@ -360,11 +325,6 @@ onBeforeUnmount(() => {
   .home__hero {
     min-height: 100dvh;
     padding-top: calc(var(--header-height) + 8px);
-  }
-
-  .home__visual {
-    width: min(78vw, 620px);
-    height: min(68vw, 520px);
   }
 
   .home__copy {

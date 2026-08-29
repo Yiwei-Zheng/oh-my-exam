@@ -11,11 +11,11 @@ const baseProps = {
 }
 
 describe('CharacterBlackHole', () => {
-  it('moves text offsets along fixed paths', () => {
+  it('provides sixteen static character streams while GPU rendering loads', () => {
     const wrapper = mount(CharacterBlackHole, { props: baseProps })
 
-    expect(wrapper.findAll('animate[attributeName="startOffset"]')).toHaveLength(5)
-    expect(wrapper.findAll('.black-hole__stream')).toHaveLength(5)
+    expect(wrapper.attributes('data-renderer')).toBe('svg')
+    expect(wrapper.findAll('.black-hole__fallback-text')).toHaveLength(16)
   })
 
   it('renders a static version for reduced motion', () => {
@@ -23,6 +23,7 @@ describe('CharacterBlackHole', () => {
       props: { ...baseProps, reducedMotion: true },
     })
 
-    expect(wrapper.find('animate').exists()).toBe(false)
+    expect(wrapper.attributes('data-renderer')).toBe('svg')
+    expect(wrapper.classes()).toContain('black-hole--reduced')
   })
 })

@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
+import type {
+  BlackHoleRenderer,
+  BlackHoleStage,
+} from '@/features/home/components/blackHoleRenderer'
 import { ACADEMIC_ORBIT_SEGMENTS } from '@/i18n/invariantContent'
+import { useTheme } from '@/shared/composables/useTheme'
 
 const props = withDefaults(
   defineProps<{
-    stage: 'dormant' | 'forming' | 'ready'
+    stage: BlackHoleStage
     paused: boolean
     reducedMotion: boolean
     compact?: boolean
@@ -15,417 +20,305 @@ const props = withDefaults(
   { compact: false, targetId: undefined },
 )
 
-const svg = ref<SVGSVGElement>()
-const streams = ACADEMIC_ORBIT_SEGMENTS.map((segments, index) => ({
-  id: `academic-stream-${index}`,
-  text: `${segments.join('  ·  ')}  ·  `.repeat(3),
-  duration: `${24 + index * 3}s`,
-  begin: `${index * -4.7}s`,
+const { isDark } = useTheme()
+const host = ref<HTMLElement>()
+const gpuReady = ref(false)
+const gpuFailed = ref(false)
+const fallbackText = ACADEMIC_ORBIT_SEGMENTS.map((segments) =>
+  `${segments.join('  ·  ')}  ·  `.repeat(2),
+)
+let renderer: BlackHoleRenderer | undefined
+let resizeObserver: ResizeObserver | undefined
+let initializationId = 0
+
+const rendererState = computed(() => ({
+  stage: props.stage,
+  paused: props.paused,
+  reducedMotion: props.reducedMotion,
+  dark: isDark.value,
 }))
 
-function syncAnimationState() {
-  void nextTick(() => {
-    const graphic = svg.value
-    if (!graphic || typeof graphic.pauseAnimations !== 'function') return
-
-    if (props.paused || props.reducedMotion || props.stage === 'dormant') {
-      graphic.pauseAnimations()
-    } else {
-      graphic.unpauseAnimations()
-    }
-  })
+function supportsWebGl2() {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.WebGL2RenderingContext !== 'undefined'
+  )
 }
 
-watch(
-  () => [props.paused, props.reducedMotion, props.stage],
-  syncAnimationState,
-)
-onMounted(syncAnimationState)
+async function initializeRenderer() {
+  if (!host.value || props.reducedMotion || !supportsWebGl2()) return
+
+  const currentInitialization = ++initializationId
+
+  try {
+    const { createBlackHoleRenderer } =
+      await import('@/features/home/components/blackHoleRenderer')
+    if (!host.value || currentInitialization !== initializationId) return
+
+    renderer = await createBlackHoleRenderer(host.value, rendererState.value)
+    if (currentInitialization !== initializationId) {
+      renderer.destroy()
+      renderer = undefined
+      return
+    }
+
+    renderer.canvas.addEventListener(
+      'webglcontextlost',
+      (event) => {
+        event.preventDefault()
+        gpuReady.value = false
+        gpuFailed.value = true
+      },
+      { once: true },
+    )
+    resizeObserver = new ResizeObserver(() => renderer?.resize())
+    resizeObserver.observe(host.value)
+    gpuReady.value = true
+  } catch (error) {
+    gpuFailed.value = true
+    if (import.meta.env.DEV) {
+      console.warn(
+        'Black-hole GPU renderer unavailable; using SVG fallback.',
+        error,
+      )
+    }
+  }
+}
+
+watch(rendererState, (state) => renderer?.setState(state), { deep: true })
+
+onMounted(() => {
+  void initializeRenderer()
+})
+
+onBeforeUnmount(() => {
+  initializationId += 1
+  resizeObserver?.disconnect()
+  renderer?.destroy()
+})
 </script>
 
 <template>
   <figure
+    ref="host"
     class="black-hole"
     :class="[
       `black-hole--${stage}`,
-      { 'black-hole--paused': paused, 'black-hole--reduced': reducedMotion },
+      {
+        'black-hole--gpu-ready': gpuReady,
+        'black-hole--gpu-failed': gpuFailed,
+        'black-hole--reduced': reducedMotion,
+      },
     ]"
     :data-stage="stage"
+    :data-renderer="gpuReady ? 'webgl' : 'svg'"
     role="img"
     :aria-label="label"
   >
     <svg
-      ref="svg"
-      class="black-hole__svg"
-      viewBox="0 0 900 620"
+      class="black-hole__fallback"
+      viewBox="0 0 1000 700"
+      preserveAspectRatio="none"
       aria-hidden="true"
     >
       <defs>
-        <radialGradient
-          id="hole-core"
-          cx="45%"
-          cy="40%"
-        >
-          <stop
-            offset="0"
-            stop-color="#020306"
-          />
-          <stop
-            offset="72%"
-            stop-color="#06070a"
-          />
-          <stop
-            offset="100%"
-            stop-color="#000"
-          />
+        <radialGradient id="fallback-core" cx="42%" cy="38%">
+          <stop offset="0" stop-color="#111522" />
+          <stop offset="64%" stop-color="#050609" />
+          <stop offset="100%" stop-color="#000" />
         </radialGradient>
-        <linearGradient
-          id="disk-hot"
-          x1="0"
-          y1="0"
-          x2="1"
-          y2="0"
-        >
-          <stop
-            offset="0"
-            stop-color="var(--color-hole-hot)"
-            stop-opacity="0"
-          />
-          <stop
-            offset=".18"
-            stop-color="var(--color-hole-hot)"
-            stop-opacity=".72"
-          />
-          <stop
-            offset=".47"
-            stop-color="var(--color-hole-white)"
-          />
-          <stop
-            offset=".68"
-            stop-color="var(--color-hole-hot)"
-            stop-opacity=".9"
-          />
-          <stop
-            offset="1"
-            stop-color="var(--color-hole-hot)"
-            stop-opacity="0"
-          />
-        </linearGradient>
-        <filter
-          id="soft-glow"
-          x="-35%"
-          y="-70%"
-          width="170%"
-          height="240%"
-          color-interpolation-filters="sRGB"
-        >
-          <feGaussianBlur stdDeviation="13" />
+        <filter id="fallback-glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="8" />
         </filter>
-        <filter
-          id="rim-glow"
-          x="-40%"
-          y="-40%"
-          width="180%"
-          height="180%"
-          color-interpolation-filters="sRGB"
-        >
-          <feGaussianBlur
-            stdDeviation="7"
-            result="blur"
-          />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <mask id="stream-visibility">
-          <rect
-            width="900"
-            height="620"
-            fill="white"
-          />
-          <ellipse
-            cx="450"
-            cy="310"
-            rx="114"
-            ry="111"
-            fill="black"
-          />
-        </mask>
         <path
-          id="academic-stream-0"
-          d="M120 310 A330 190 0 1 1 780 310 A330 190 0 1 1 120 310"
+          id="fallback-upper"
+          d="M-80 15 C65 75 120 145 190 235 C235 292 316 287 348 260 C395 220 348 175 276 196 C190 220 179 333 244 375"
         />
         <path
-          id="academic-stream-1"
-          d="M153 310 A297 158 0 1 1 747 310 A297 158 0 1 1 153 310"
+          id="fallback-lower"
+          d="M-100 710 C2 607 83 544 155 451 C205 387 294 338 360 302 C417 270 428 230 369 207 C302 181 226 240 229 319 C232 420 337 467 398 399"
         />
         <path
-          id="academic-stream-2"
-          d="M188 310 A262 130 0 1 1 712 310 A262 130 0 1 1 188 310"
-        />
-        <path
-          id="academic-stream-3"
-          d="M220 310 A230 104 0 1 1 680 310 A230 104 0 1 1 220 310"
-        />
-        <path
-          id="academic-stream-4"
-          d="M90 310 A360 220 0 1 1 810 310 A360 220 0 1 1 90 310"
+          id="fallback-right"
+          d="M1080 705 C835 666 664 611 493 493 C399 429 339 362 300 306 C270 262 273 217 318 203 C370 187 410 230 397 278 C381 337 314 355 273 321"
         />
       </defs>
 
-      <g
-        class="black-hole__system"
-        transform="rotate(16 450 310)"
-      >
-        <ellipse
-          class="black-hole__outer-haze"
-          cx="450"
-          cy="310"
-          rx="374"
-          ry="142"
-        />
-        <ellipse
-          class="black-hole__rear-disk black-hole__rear-disk--wide"
-          cx="450"
-          cy="310"
-          rx="365"
-          ry="70"
-        />
-        <ellipse
-          class="black-hole__rear-disk"
-          cx="450"
-          cy="310"
-          rx="319"
-          ry="46"
-        />
-
-        <g
-          class="black-hole__streams"
-          mask="url(#stream-visibility)"
+      <g class="black-hole__fallback-streams">
+        <text
+          v-for="index in 5"
+          :key="`upper-${index}`"
+          :class="`black-hole__fallback-text tone-${index % 3}`"
         >
-          <text
-            v-for="(stream, index) in streams"
-            :key="stream.id"
-            class="black-hole__stream"
-            :class="`black-hole__stream--${index + 1}`"
+          <textPath
+            href="#fallback-upper"
+            :startOffset="`${(index - 1) * 17}%`"
           >
-            <textPath
-              :href="`#${stream.id}`"
-              startOffset="0%"
-            >
-              {{ stream.text }}
-              <animate
-                v-if="!reducedMotion"
-                attributeName="startOffset"
-                from="0%"
-                to="-100%"
-                :dur="stream.duration"
-                :begin="stream.begin"
-                repeatCount="indefinite"
-              />
-            </textPath>
-          </text>
-        </g>
-
-        <ellipse
-          class="black-hole__lens black-hole__lens--hot"
-          cx="450"
-          cy="310"
-          rx="155"
-          ry="151"
-        />
-        <ellipse
-          class="black-hole__lens black-hole__lens--cool"
-          cx="450"
-          cy="310"
-          rx="128"
-          ry="126"
-        />
-        <ellipse
-          class="black-hole__core"
-          cx="450"
-          cy="310"
-          rx="114"
-          ry="111"
-        />
-        <path
-          class="black-hole__front-glow"
-          d="M62 350 Q450 244 838 350"
-        />
-        <path
-          class="black-hole__front-band"
-          d="M48 354 Q450 250 852 354"
-        />
-        <path
-          class="black-hole__front-thread"
-          d="M73 368 Q450 270 827 368"
-        />
+            {{ fallbackText[index % fallbackText.length] }}
+          </textPath>
+        </text>
+        <text
+          v-for="index in 7"
+          :key="`lower-${index}`"
+          :class="`black-hole__fallback-text tone-${index % 3}`"
+        >
+          <textPath
+            href="#fallback-lower"
+            :startOffset="`${(index - 1) * 13}%`"
+          >
+            {{ fallbackText[(index + 1) % fallbackText.length] }}
+          </textPath>
+        </text>
+        <text
+          v-for="index in 4"
+          :key="`right-${index}`"
+          :class="`black-hole__fallback-text tone-${index % 3}`"
+        >
+          <textPath href="#fallback-right" :startOffset="`${index * 18}%`">
+            {{ fallbackText[(index + 2) % fallbackText.length] }}
+          </textPath>
+        </text>
       </g>
+
+      <circle class="black-hole__fallback-halo" cx="240" cy="266" r="105" />
+      <circle class="black-hole__fallback-ring" cx="240" cy="266" r="86" />
+      <circle class="black-hole__fallback-core" cx="240" cy="266" r="80" />
     </svg>
 
-    <span
-      :id="targetId"
-      class="black-hole__target"
-      aria-hidden="true"
-    />
+    <span :id="targetId" class="black-hole__target" aria-hidden="true" />
   </figure>
 </template>
 
 <style scoped>
 .black-hole {
   position: relative;
-  width: min(64vw, 900px);
-  aspect-ratio: 900 / 620;
+  width: 100%;
+  height: 100%;
   margin: 0;
-  color: var(--color-ink);
-  contain: layout paint;
+  overflow: hidden;
+  contain: strict;
+  isolation: isolate;
 }
-.black-hole__svg {
+
+.black-hole :deep(.black-hole__canvas) {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
+  opacity: 0;
+  transition: opacity 260ms ease;
 }
-.black-hole__system {
-  transition: opacity 620ms ease;
+
+.black-hole--gpu-ready :deep(.black-hole__canvas) {
+  opacity: 1;
 }
-.black-hole__outer-haze {
-  fill: none;
-  stroke: var(--color-hole-hot);
-  stroke-width: 40;
-  opacity: 0.13;
-  filter: url(#soft-glow);
+
+.black-hole__fallback {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+  transition: opacity 260ms ease;
 }
-.black-hole__rear-disk {
-  fill: none;
-  stroke: url(#disk-hot);
-  stroke-width: 17;
-  opacity: 0.66;
-  filter: url(#soft-glow);
+
+.black-hole--gpu-ready .black-hole__fallback {
+  opacity: 0;
 }
-.black-hole__rear-disk--wide {
-  stroke-width: 34;
-  opacity: 0.28;
+
+.black-hole__fallback-streams,
+.black-hole__fallback-halo,
+.black-hole__fallback-ring,
+.black-hole__fallback-core {
+  opacity: 0;
+  transition: opacity 500ms ease;
 }
-.black-hole__lens {
-  fill: none;
-  transform-box: fill-box;
-  transform-origin: center;
+
+.black-hole--forming .black-hole__fallback-streams,
+.black-hole--forming .black-hole__fallback-halo,
+.black-hole--forming .black-hole__fallback-ring,
+.black-hole--forming .black-hole__fallback-core,
+.black-hole--ready .black-hole__fallback-streams,
+.black-hole--ready .black-hole__fallback-halo,
+.black-hole--ready .black-hole__fallback-ring,
+.black-hole--ready .black-hole__fallback-core {
+  opacity: 1;
 }
-.black-hole__lens--hot {
-  stroke: var(--color-hole-hot);
-  stroke-width: 22;
-  opacity: 0.55;
-  filter: url(#soft-glow);
-}
-.black-hole__lens--cool {
-  stroke: var(--color-hole-cool);
-  stroke-width: 11;
-  opacity: 0.98;
-  filter: url(#rim-glow);
-}
-.black-hole__core {
-  fill: url(#hole-core);
-}
-.black-hole__front-glow,
-.black-hole__front-band,
-.black-hole__front-thread {
-  fill: none;
-  stroke-linecap: round;
-}
-.black-hole__front-glow {
-  stroke: var(--color-hole-hot);
-  stroke-width: 44;
-  opacity: 0.38;
-  filter: url(#soft-glow);
-}
-.black-hole__front-band {
-  stroke: url(#disk-hot);
-  stroke-width: 15;
-  filter: url(#rim-glow);
-}
-.black-hole__front-thread {
-  stroke: var(--color-hole-white);
-  stroke-width: 2.6;
+
+.black-hole__fallback-text {
+  fill: var(--color-ink);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 14px;
+  letter-spacing: 0.055em;
   opacity: 0.72;
 }
-.black-hole__stream {
-  fill: var(--color-ink);
-  font-size: 14px;
-  font-weight: 400;
-  letter-spacing: 0.055em;
-  opacity: 0.67;
-}
-.black-hole__stream--2,
-.black-hole__stream--4 {
+
+.black-hole__fallback-text.tone-1 {
   fill: var(--color-hole-hot);
-  opacity: 0.82;
 }
-.black-hole__stream--3 {
+
+.black-hole__fallback-text.tone-2 {
   fill: var(--color-hole-cool);
-  opacity: 0.9;
 }
+
+.black-hole__fallback-halo {
+  fill: none;
+  stroke: var(--color-hole-hot);
+  stroke-width: 32;
+  filter: url('#fallback-glow');
+}
+
+.black-hole__fallback-ring {
+  fill: none;
+  stroke: var(--color-hole-cool);
+  stroke-width: 9;
+  filter: url('#fallback-glow');
+}
+
+.black-hole__fallback-core {
+  fill: url('#fallback-core');
+}
+
 .black-hole__target {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 25%;
+  z-index: 3;
+  top: 38%;
+  left: 24%;
+  width: 23vmin;
+  max-width: 230px;
+  min-width: 112px;
   aspect-ratio: 1;
   border-radius: 50%;
   transform: translate3d(-50%, -50%, 0);
   pointer-events: none;
 }
-.black-hole--dormant .black-hole__system {
-  opacity: 0;
-}
-.black-hole--forming .black-hole__system {
-  opacity: 1;
-}
-.black-hole--ready .black-hole__system {
-  opacity: 1;
-}
-.black-hole--forming .black-hole__lens--cool {
-  animation: photon-arrival 900ms var(--ease-out-expo) both;
-}
-.black-hole--ready:not(.black-hole--paused):not(.black-hole--reduced)
-  .black-hole__lens--hot {
-  animation: lens-breathe 5.8s ease-in-out infinite alternate;
-}
-@keyframes photon-arrival {
-  from {
-    opacity: 0;
-    scale: 0.52;
+
+@media (max-width: 767px),
+  (orientation: landscape) and (max-height: 500px) and (max-width: 1024px) {
+  .black-hole__target {
+    top: 43%;
+    left: 42%;
+    width: 30vmin;
+    min-width: 96px;
   }
-  to {
-    opacity: 0.98;
-    scale: 1;
+
+  .black-hole__fallback {
+    transform: translate3d(18%, 5%, 0) scale(0.9);
+    transform-origin: center;
   }
 }
-@keyframes lens-breathe {
-  from {
-    opacity: 0.42;
-    scale: 0.985;
-  }
-  to {
-    opacity: 0.68;
-    scale: 1.025;
-  }
-}
-@media (max-width: 767px) {
-  .black-hole {
-    width: min(142vw, 820px);
-  }
-  .black-hole__stream {
-    font-size: 15px;
-    opacity: 0.78;
-  }
-}
+
 @media (prefers-reduced-motion: reduce) {
-  .black-hole__system,
-  .black-hole__lens {
+  .black-hole :deep(.black-hole__canvas),
+  .black-hole__fallback,
+  .black-hole__fallback-streams,
+  .black-hole__fallback-halo,
+  .black-hole__fallback-ring,
+  .black-hole__fallback-core {
     transition: none;
-    animation: none !important;
   }
 }
 </style>

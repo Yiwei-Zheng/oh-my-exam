@@ -18,10 +18,13 @@ entry remains outstanding until that workflow is implemented.
 
 The homepage supports system-aware light and dark themes, persistent language and
 theme preferences, an accessible globe language menu, an optional session intro,
-reduced-motion fallbacks, and keyboard controls for pausing or replaying motion.
-Theme changes update tokens directly without full-page transition snapshots. Its
-event-horizon artwork is generated with SVG and CSS rather than bundled reference
-imagery or WebGL; the geometry remains fixed while text offsets flow along paths.
+reduced-motion fallbacks, and a keyboard-accessible intro replay control.
+Theme changes use an interruptible transform-only circular reveal without
+full-page transition snapshots. Its event-horizon artwork uses a dynamically
+loaded PixiJS WebGL renderer with a runtime glyph atlas and merged geometry;
+three character streams bend into the accretion plane while a static SVG remains
+available for reduced-motion and unsupported browsers. Hidden tabs pause motion
+automatically; the visible pause control has been removed.
 
 The backend exposes question-level PDF routes at
 `/api/v1/exams/{exam_id}/questions/{question_id}/{question|answer}.pdf`. The
@@ -37,6 +40,7 @@ viewing.
 - Vue Router for URL boundaries.
 - Pinia for client-only state.
 - Vue I18n for Chinese and English resources.
+- PixiJS for the lazily loaded homepage WebGL artwork.
 - Vitest, Vue Test Utils, ESLint, vue-tsc, and Prettier for quality checks.
 - Vite proxies `/api` to `http://127.0.0.1:8000` by default. Override the target
   with `VITE_API_PROXY_TARGET`.
