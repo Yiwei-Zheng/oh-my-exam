@@ -8,7 +8,9 @@ version = "0.1.0"
 description = "Hosted API for the Oh-My-Exam question bank"
 requires-python = ">=3.11"
 dependencies = [
+  "argon2-cffi>=23.1,<26",
   "fastapi>=0.115,<1",
+  "PyJWT>=2.10,<3",
   "pymupdf>=1.24,<2",
   "uvicorn[standard]>=0.30,<1",
 ]

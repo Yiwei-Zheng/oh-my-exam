@@ -1,32 +1,56 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 from .catalog import CatalogNotFoundError, GlobalCatalog
 from .config import Settings
+from .identity import IdentityStore, SESSION_COOKIE, User
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_document import QuestionDocumentError, crop_question_pdf
+from .update_jobs import UpdateJobManager
 
 
 class PlaceholderRequest(BaseModel):
     input: str = ""
 
 
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     catalog = GlobalCatalog(settings.database_path)
     papers = FileSystemPaperStore(settings.paper_root)
+    app_database_path = settings.app_database_path or (
+        settings.project_root / "web" / "backend" / "data" / "application.sqlite3"
+    )
+    identity = IdentityStore(app_database_path, settings.jwt_secret)
+    identity.bootstrap_admin(settings.bootstrap_admin_email, settings.bootstrap_admin_password)
+    updates = UpdateJobManager(app_database_path, settings.question_update_command)
     app = FastAPI(title="Oh-My-Exam API", version="0.1.0")
+
+    def current_user(request: Request) -> User:
+        user = identity.user_from_session(request.cookies.get(SESSION_COOKIE))
+        if user is None:
+            raise HTTPException(status_code=401, detail="authentication_required")
+        return user
+
+    def admin_user(user: User = Depends(current_user)) -> User:
+        if user.role != "admin":
+            raise HTTPException(status_code=403, detail="admin_required")
+        return user
 
     if settings.cors_origins:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=list(settings.cors_origins),
             allow_credentials=True,
-            allow_methods=["GET", "POST"],
+            allow_methods=["GET", "POST", "DELETE"],
             allow_headers=["Authorization", "Content-Type"],
         )
 
@@ -44,7 +68,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "backend": "local_filesystem",
                 "access": "development_only_until_authentication_is_ready",
             },
-            "authentication": {"status": "placeholder", "target": "oidc"},
+            "authentication": {"status": "ready", "method": "email_password"},
+            "question_update": {"status": "ready" if updates.configured else "needs_configuration"},
             "primary_database": {"status": "placeholder", "target": "postgresql"},
             "ai_tutor": {"status": "placeholder", "targets": ["ragflow", "deepseek"]},
             "math_harness": {"status": "placeholder", "targets": ["sympy", "matplotlib"]},
@@ -103,9 +128,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return FileResponse(path, media_type="application/pdf", filename=path.name)
 
+    @app.post("/api/v1/auth/login")
+    def login(payload: LoginRequest, response: Response) -> dict[str, object]:
+        user = identity.authenticate(payload.email, payload.password)
+        if user is None:
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+        response.set_cookie(
+            SESSION_COOKIE,
+            identity.issue_session(user),
+            max_age=12 * 60 * 60,
+            httponly=True,
+            secure=settings.secure_cookies,
+            samesite="lax",
+            path="/",
+        )
+        return {"user": user.as_dict()}
+
+    @app.post("/api/v1/auth/logout", status_code=204)
+    def logout(response: Response) -> None:
+        response.delete_cookie(SESSION_COOKIE, path="/", samesite="lax")
+
     @app.get("/api/v1/me")
-    def current_user() -> JSONResponse:
-        return _placeholder("authentication", "Configure an OIDC provider and PostgreSQL user tables.")
+    def me(user: User = Depends(current_user)) -> dict[str, object]:
+        return {"user": user.as_dict()}
+
+    @app.get("/api/v1/admin/statistics")
+    def admin_statistics(_: User = Depends(admin_user)) -> dict[str, object]:
+        return identity.dashboard_statistics()
+
+    @app.get("/api/v1/admin/question-tree")
+    def admin_question_tree(_: User = Depends(admin_user)) -> list[dict[str, object]]:
+        try:
+            return catalog.question_tree()
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/question-update")
+    def latest_question_update(_: User = Depends(admin_user)) -> dict[str, object]:
+        return {"configured": updates.configured, "job": updates.latest()}
+
+    @app.post("/api/v1/admin/question-update", status_code=202)
+    def start_question_update(user: User = Depends(admin_user)) -> dict[str, object]:
+        try:
+            return {"job": updates.start(user.id)}
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/api/v1/ai/answer")
     def ai_answer(_: PlaceholderRequest) -> JSONResponse:

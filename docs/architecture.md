@@ -82,8 +82,9 @@ user state and published catalog data.
 - Packers convert processed question metadata into compact per-subject import
   databases and a normalized global SQLite catalog. Catalogs store server-owned
   document storage keys, never third-party source URLs.
-- The server reads the normalized global catalog and must not import downloader
-  or splitter internals.
+- The server reads the normalized global catalog. Hosted update orchestration
+  invokes a separately configured processing command without a shell; browser
+  routes never import downloader or splitter internals.
 - Clients consume versioned HTTP APIs and must not import server or Python tool internals.
 - Portable SQLite packages remain valid import/export and optional offline assets;
   they are not the hosted multi-user source of truth.
@@ -132,8 +133,9 @@ user state and published catalog data.
 - `requirements/backend-dev.txt`: editable backend and backend-test installation entry point.
 - `requirements/data-processing.txt`: local data tool, GUI, OCR, and test
   installation entry point.
-- `web/backend/`: versioned hosted API and adapters for catalog, identity, paper
-  storage, retrieval, language models, and deterministic math tools.
+- `web/backend/`: versioned hosted API and adapters for catalog, identity,
+  administration, question-update jobs, paper storage, retrieval, language
+  models, and deterministic math tools.
 - `web/frontend/`: bilingual responsive marketing and local question-search surface. It
   owns browser adapters and presentation services, while reusable source
   processing remains under `tools/` and hosted business logic remains under

@@ -1,11 +1,12 @@
 # Oh My Exam Frontend
 
-Vue 3 + TypeScript 前端空工程. 当前仅完成开发环境和模块边界配置, 尚未实现产品页面或业务流程.
+Vue 3 + TypeScript 浏览器客户端，包含双语登录页和管理员后台。后台提供用户统计、活跃度、树状题库浏览及题库更新任务入口，暂不开放注册。
 
 ## 环境
 
 - Node.js 20.17.0, 版本记录在 `.node-version`
 - npm
+- Element Plus 和 ECharts
 - 后端默认运行于 `http://127.0.0.1:8000`
 
 所有前端依赖安装在项目内的 `node_modules/`, npm 缓存写入项目内的

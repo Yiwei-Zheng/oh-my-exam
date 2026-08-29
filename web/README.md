@@ -9,9 +9,33 @@ The frontend calls the backend through versioned HTTP APIs. Neither application
 imports the other's internal code, and production may deploy them together or
 separately without changing this source boundary.
 
-The frontend environment uses Vue 3, TypeScript, and Vite. The old React product
-code has been removed; replacement product pages are intentionally not part of
-the environment setup.
+The frontend uses Vue 3, TypeScript, Vite, Element Plus, and ECharts. It provides
+a bilingual email/password login and an administrator workspace. Public
+registration is disabled.
+
+## Authentication bootstrap
+
+The backend stores users and activity in `web/backend/data/application.sqlite3`
+by default. On the first start, provide `OME_BOOTSTRAP_ADMIN_EMAIL` and
+`OME_BOOTSTRAP_ADMIN_PASSWORD`; the password is Argon2-hashed and the account is
+only inserted when the email does not already exist. Set `OME_JWT_SECRET` in
+production and enable HTTPS cookies with `OME_SECURE_COOKIES=true`.
+
+## Question update command
+
+The administrator update button is enabled when
+`OME_QUESTION_UPDATE_COMMAND_JSON` contains a JSON string array for a command
+packaged with the deployed `web/` artifact. The backend invokes it without a
+shell and allows only one job at a time. The command may report progress as one
+JSON object per stdout line:
+
+```json
+{"stage":"splitting","progress":62,"message":"Splitting new CIE papers"}
+```
+
+Valid stages are `checking`, `downloading`, `splitting`, `cataloging`, and
+`classifying`. Without this deployment command the button remains visible but
+disabled instead of pretending that an update ran.
 
 ## Question document delivery
 

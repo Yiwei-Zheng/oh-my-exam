@@ -53,6 +53,52 @@ class GlobalCatalog:
             for row in rows
         ]
 
+    def question_tree(self) -> list[dict[str, object]]:
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                """
+                SELECT ql.code AS qualification, ql.name AS qualification_name,
+                       eb.code AS board, eb.name AS board_name,
+                       ep.code AS program, ep.name AS program_name,
+                       p.id AS paper_id, p.source_key, p.year,
+                       COUNT(qu.id) AS question_count
+                FROM qualifications ql
+                JOIN exam_programs ep ON ep.qualification_id = ql.id
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
+                LEFT JOIN papers p ON p.exam_program_id = ep.id
+                LEFT JOIN questions qu ON qu.paper_id = p.id
+                GROUP BY ql.id, eb.id, ep.id, p.id
+                ORDER BY ql.code, eb.code, ep.code, p.year DESC, p.source_key
+                """
+            ).fetchall()
+        roots: dict[str, dict[str, object]] = {}
+        boards: dict[tuple[str, str], dict[str, object]] = {}
+        programs: dict[tuple[str, str, str], dict[str, object]] = {}
+        for row in rows:
+            qualification = str(row["qualification"])
+            board = str(row["board"])
+            program = str(row["program"])
+            root = roots.setdefault(qualification, self._tree_node(
+                f"qualification:{qualification}", str(row["qualification_name"]), "qualification"
+            ))
+            board_node = boards.setdefault((qualification, board), self._tree_node(
+                f"board:{qualification}:{board}", str(row["board_name"]), "board"
+            ))
+            if board_node not in root["children"]:
+                root["children"].append(board_node)
+            program_node = programs.setdefault((qualification, board, program), self._tree_node(
+                f"program:{qualification}:{board}:{program}", str(row["program_name"]), "program"
+            ))
+            if program_node not in board_node["children"]:
+                board_node["children"].append(program_node)
+            if row["paper_id"] is not None:
+                label = f"{row['year']} · {row['source_key']}" if row["year"] else str(row["source_key"])
+                program_node["children"].append({
+                    "id": f"paper:{row['paper_id']}", "label": label, "kind": "paper",
+                    "count": int(row["question_count"]), "children": [],
+                })
+        return list(roots.values())
+
     def list_questions(self, exam_id: str, query: str = "", limit: int = 50) -> list[dict[str, object]]:
         with closing(self._connect()) as connection:
             program_id = self._program_id(connection, exam_id)
@@ -225,6 +271,10 @@ class GlobalCatalog:
         connection = sqlite3.connect(uri, uri=True)
         connection.row_factory = sqlite3.Row
         return connection
+
+    @staticmethod
+    def _tree_node(node_id: str, label: str, kind: str) -> dict[str, object]:
+        return {"id": node_id, "label": label, "kind": kind, "children": []}
 
     @staticmethod
     def _program_id(connection: sqlite3.Connection, exam_id: str) -> int:

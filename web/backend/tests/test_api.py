@@ -72,7 +72,7 @@ def _create_global_database(path: Path) -> None:
         )
 
 
-def _client(tmp_path: Path) -> TestClient:
+def _client(tmp_path: Path, *, with_admin: bool = False) -> TestClient:
     database_path = tmp_path / "databases" / "global_exam_catalog.sqlite"
     paper_root = tmp_path / "raw_papers"
     _create_global_database(database_path)
@@ -80,7 +80,14 @@ def _client(tmp_path: Path) -> TestClient:
     paper_dir.mkdir(parents=True)
     _write_pdf(paper_dir / "engaa_2023_s1_qp.pdf", "Question page", "Find the acceleration")
     _write_pdf(paper_dir / "engaa_2023_s1_ms.pdf", "Answer page", "Acceleration is 2")
-    settings = Settings(tmp_path, database_path, paper_root)
+    settings = Settings(
+        tmp_path,
+        database_path,
+        paper_root,
+        app_database_path=tmp_path / "application.sqlite3",
+        bootstrap_admin_email="admin@example.com" if with_admin else "",
+        bootstrap_admin_password="a-long-test-password" if with_admin else "",
+    )
     return TestClient(create_app(settings))
 
 
@@ -141,17 +148,54 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert unsupported_kind.status_code == 404
 
 
-def test_placeholders_are_explicit(tmp_path: Path) -> None:
+def test_capabilities_and_placeholders_are_explicit(tmp_path: Path) -> None:
     client = _client(tmp_path)
 
     capabilities = client.get("/api/v1/capabilities").json()
     assert capabilities["catalog"]["status"] == "ready"
-    assert capabilities["authentication"]["status"] == "placeholder"
+    assert capabilities["authentication"]["status"] == "ready"
+    assert capabilities["question_update"]["status"] == "needs_configuration"
     assert capabilities["tmua_data"]["status"] == "missing"
 
     response = client.post("/api/v1/math/evaluate", json={"input": "x + x"})
     assert response.status_code == 501
     assert response.json()["capability"] == "math_harness"
+
+
+def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
+    client = _client(tmp_path, with_admin=True)
+
+    unauthorized = client.get("/api/v1/admin/statistics")
+    assert unauthorized.status_code == 401
+
+    invalid = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "wrong"},
+    )
+    assert invalid.status_code == 401
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": "ADMIN@example.com", "password": "a-long-test-password"},
+    )
+    assert login.status_code == 200
+    assert login.json()["user"]["role"] == "admin"
+    assert login.cookies.get("ome_session")
+
+    stats = client.get("/api/v1/admin/statistics")
+    assert stats.status_code == 200
+    assert stats.json()["users_total"] == 1
+    assert stats.json()["active_7d"] == 1
+
+    tree = client.get("/api/v1/admin/question-tree")
+    assert tree.status_code == 200
+    assert tree.json()[0]["children"][0]["children"][0]["children"][0]["count"] == 1
+
+    update = client.post("/api/v1/admin/question-update")
+    assert update.status_code == 503
+
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    assert client.get("/api/v1/me").status_code == 401
 
 
 def test_paper_store_rejects_globs_and_paths(tmp_path: Path) -> None:

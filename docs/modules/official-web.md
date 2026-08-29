@@ -2,77 +2,46 @@
 
 ## Scope
 
-`web/frontend/` owns the bilingual responsive browser client. Its sibling
-`web/backend/` owns the hosted API. The frontend consumes backend capabilities
-only through versioned HTTP APIs.
+`web/frontend/` owns the bilingual browser client. `web/backend/` owns the
+hosted API, identity store, administrator services, and update-job orchestration.
+The deployable web product must not require repository-root `tools/` at runtime.
 
 ## Current state
 
-The previous React website and browser-side SQLite, OCR, matching, PDF rendering,
-and source-URL proxy implementation have been removed. The Vue application now
-contains a bilingual promotional homepage and branded not-found page. The
-homepage is intentionally a product statement rather than an application entry:
-it does not expose registration, authentication, search, marking, or other
-unfinished workflows. The long-term requirement for a clear question-search
-entry remains outstanding until that workflow is implemented.
+The former promotional WebGL homepage has been removed. The root route now
+directs users to an email/password login. Registration is closed. Authenticated
+administrators can access a responsive control desk with user totals, seven-day
+active users, role counts, a fourteen-day activity chart, a hierarchical
+question catalog, and question-update job state.
 
-The homepage supports system-aware light and dark themes, persistent language and
-theme preferences, an accessible globe language menu, an optional session intro,
-reduced-motion fallbacks, and a keyboard-accessible intro replay control.
-Theme changes use an interruptible transform-only circular reveal without
-full-page transition snapshots. Its event-horizon artwork uses a dynamically
-loaded PixiJS WebGL renderer with a runtime glyph atlas and merged geometry. A
-finite formation sequence starts with the isolated core, draws glyphs inward
-from all sides for about four seconds, then settles them into the disk without
-continuing edge inflow. A static SVG remains available for reduced-motion and
-unsupported browsers. Hidden tabs pause motion automatically; the visible pause
-control has been removed.
-The GPU scene uses an astrophotographic composition rather than a schematic
-ring: an asymmetric orange-white accretion disk and gravitational lens surround
-an enlarged inclined dark core while broad red upper and lower lensing bands
-wrap a dense disk of academic glyphs.
+Passwords use Argon2. The server sends a signed, HttpOnly, same-site session
+cookie; the frontend does not store bearer tokens. Administrator routes enforce
+the role in both the Vue navigation guard and FastAPI dependencies. The server
+remains the authoritative security boundary.
 
-The backend exposes question-level PDF routes at
-`/api/v1/exams/{exam_id}/questions/{question_id}/{question|answer}.pdf`. The
-server resolves the source paper by internal catalog identity and returns only
-the recorded crop regions as a compact vector PDF. Clients do not receive an
-upstream URL or need to download the complete source paper to display one
-question. The full-paper endpoint remains available for explicit source-paper
-viewing.
+The update endpoint starts at most one job and persists its state. A deployment
+command packaged with `web/` performs source checking, downloading, splitting,
+cataloging, and classification. The browser only starts the job and polls its
+status. If the command is absent, the interface explains the missing
+configuration and does not simulate success.
 
 ## Toolchain
 
-- Vue 3 with TypeScript and Vite.
-- Vue Router for URL boundaries.
-- Pinia for client-only state.
-- Vue I18n for Chinese and English resources.
-- PixiJS for the lazily loaded homepage WebGL artwork.
-- Vitest, Vue Test Utils, ESLint, vue-tsc, and Prettier for quality checks.
-- Vite proxies `/api` to `http://127.0.0.1:8000` by default. Override the target
-  with `VITE_API_PROXY_TARGET`.
-- Production hosting must rewrite unknown browser paths to `index.html` so Vue
-  Router can render the branded not-found route on direct visits.
-
-Dependencies install into `web/frontend/node_modules/`. The project `.npmrc`
-places npm cache under `web/frontend/.npm-cache/`; global package installation is
-not part of the workflow. `.node-version` pins the expected Node runtime.
+- Vue 3, Vue Router, Pinia, and Vue I18n.
+- Element Plus for accessible form, tree, feedback, and progress primitives.
+- ECharts for the activity time series, loaded with the administrator route.
+- FastAPI, Argon2, and PyJWT on the backend.
+- Vitest, ESLint, vue-tsc, Prettier, and Pytest for verification.
 
 ## Boundaries
 
-- `App.vue` is an application shell, not a business-logic container.
-- Routes belong under `src/router/`.
-- Client state belongs under `src/stores/`.
-- All user-visible text must come from `src/i18n/` resources.
-- Future product code should be grouped by feature.
-- Frontend modules must not import backend or Python tool internals.
-- The browser must not connect directly to PostgreSQL, object storage, retrieval,
-  or model providers.
-- Analytics is disabled. If a provider is selected later, integrate it behind a
-  provider-neutral boundary in the application shell only after its event model,
-  consent requirements, data retention, and privacy documentation are approved.
-  Do not place provider calls inside feature components.
-- Brand, hero, and academic orbit copy intentionally remains English across both
-  locales and is centralized under `src/i18n/invariantContent.ts`.
+- Frontend features call only versioned HTTP APIs.
+- Credentials, source URLs, download logic, and processing commands never enter
+  browser code.
+- The update command is an argument array and is never passed through a shell.
+- User-visible text belongs in the Chinese/English i18n resources.
+- Production hosting rewrites browser routes to `index.html` and serves the API
+  under the same site or an explicitly allowed CORS origin.
 
 ## Verification
 
@@ -80,3 +49,4 @@ not part of the workflow. `.node-version` pins the expected Node runtime.
 - `npm run typecheck`
 - `npm test`
 - `npm run build`
+- `python -m pytest web/backend/tests`
