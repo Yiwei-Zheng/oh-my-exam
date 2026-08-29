@@ -42,6 +42,7 @@ interface StreamDefinition {
   phase: number
   tone: number
   opacity: number
+  qualityRank: number
   text: string
 }
 
@@ -88,15 +89,15 @@ vec2 cubicBezier(vec2 p0, vec2 p1, vec2 p2, vec2 p3, float t) {
 }
 
 vec2 pathPosition(float progress, vec4 pathA, vec4 pathB) {
-  float entryEnd = 0.56;
+  float entryEnd = 0.80;
   vec2 source = pathA.xy * uViewport;
   vec2 control1 = pathA.zw * uViewport;
   vec2 control2 = pathB.xy * uViewport;
   float approachAngle = pathB.z;
-  float outerRadius = uCoreRadius * (2.65 + pathB.w);
+  float outerRadius = uCoreRadius * (1.45 + pathB.w);
   vec2 approach = uCore + rotatePoint(
-    vec2(cos(approachAngle) * outerRadius, sin(approachAngle) * outerRadius * 0.34),
-    0.28
+    vec2(cos(approachAngle) * outerRadius, sin(approachAngle) * outerRadius * 0.52),
+    -0.34
   );
 
   if (progress < entryEnd) {
@@ -105,10 +106,10 @@ vec2 pathPosition(float progress, vec4 pathA, vec4 pathB) {
   }
 
   float orbitProgress = (progress - entryEnd) / (1.0 - entryEnd);
-  float angle = approachAngle + orbitProgress * 4.72;
-  float radius = mix(outerRadius, uCoreRadius * 1.035, pow(orbitProgress, 0.82));
-  vec2 orbit = vec2(cos(angle) * radius, sin(angle) * radius * 0.34);
-  return uCore + rotatePoint(orbit, 0.28);
+  float angle = approachAngle + orbitProgress * 2.72;
+  float radius = mix(outerRadius, uCoreRadius * 0.985, pow(orbitProgress, 0.72));
+  vec2 orbit = vec2(cos(angle) * radius, sin(angle) * radius * 0.52);
+  return uCore + rotatePoint(orbit, -0.34);
 }
 
 void main(void) {
@@ -117,9 +118,10 @@ void main(void) {
   vec2 center = pathPosition(progress, aPathA, aPathB);
   vec2 nextCenter = pathPosition(min(progress + 0.0025, 0.999), aPathA, aPathB);
   vec2 tangent = normalize(nextCenter - center + vec2(0.0001));
+  tangent *= aPathA.x > 0.5 ? -1.0 : 1.0;
   vec2 normal = vec2(-tangent.y, tangent.x);
 
-  float compression = mix(1.14, 0.58, smoothstep(0.28, 1.0, progress));
+  float compression = mix(1.18, 0.48, smoothstep(0.18, 1.0, progress));
   float size = aMeta.w * compression;
   vec2 position = center
     + tangent * aCorner.x * size
@@ -131,15 +133,21 @@ void main(void) {
   float edgeFade = smoothstep(0.012, 0.055, progress)
     * (1.0 - smoothstep(0.91, 0.998, progress));
 
-  float orbiting = step(0.56, progress);
-  float orbitProgress = clamp((progress - 0.56) / 0.44, 0.0, 1.0);
-  float orbitAngle = aPathB.z + orbitProgress * 4.72;
-  vFront = orbiting * step(0.0, sin(orbitAngle));
+  vec2 diskPosition = rotatePoint(center - uCore, 0.34);
+  vFront = step(0.0, diskPosition.y);
   float passVisible = uPass < 0.5 ? 1.0 - vFront : vFront;
+
+  vec2 viewportPosition = center / uViewport;
+  float titleX = smoothstep(0.54, 0.59, viewportPosition.x)
+    * (1.0 - smoothstep(0.88, 0.93, viewportPosition.x));
+  float titleY = smoothstep(0.37, 0.42, viewportPosition.y)
+    * (1.0 - smoothstep(0.61, 0.66, viewportPosition.y));
+  float titleProtection = titleX * titleY;
 
   vUV = aUV;
   vTone = aStyle.x;
-  vAlpha = aStyle.w * reveal * edgeFade * streamVisible * passVisible;
+  vAlpha = aStyle.w * reveal * edgeFade * streamVisible * passVisible
+    * (1.0 - titleProtection * 0.96);
   vDistance = length(center - uCore) / max(uCoreRadius, 1.0);
 
   mat3 matrix = uProjectionMatrix * uWorldTransformMatrix * uTransformMatrix;
@@ -164,16 +172,16 @@ void main(void) {
   float glyph = texture(uGlyphTexture, vUV).a;
   if (glyph < 0.015 || vAlpha < 0.005) discard;
 
-  vec3 lightInk = vec3(0.10, 0.105, 0.11);
-  vec3 darkInk = vec3(0.92, 0.95, 0.97);
-  vec3 ink = mix(lightInk, darkInk, uTheme);
-  vec3 hot = mix(vec3(0.64, 0.29, 0.12), vec3(1.0, 0.58, 0.23), uTheme);
-  vec3 cool = mix(vec3(0.16, 0.43, 0.57), vec3(0.52, 0.83, 1.0), uTheme);
-  vec3 color = vTone < 0.5 ? ink : (vTone < 1.5 ? hot : cool);
+  vec3 paperInk = vec3(0.075, 0.082, 0.09);
+  vec3 starlight = vec3(0.91, 0.94, 0.96);
+  vec3 ink = mix(paperInk, starlight, uTheme);
+  vec3 hot = vec3(1.0, 0.47, 0.16);
+  vec3 color = mix(ink, starlight, (1.0 - smoothstep(1.8, 4.7, vDistance)) * (1.0 - uTheme));
 
-  float horizonHeat = 1.0 - smoothstep(1.04, 2.35, vDistance);
-  color = mix(color, mix(hot, cool, 0.32), horizonHeat * 0.38);
-  float alpha = glyph * vAlpha * mix(0.82, 1.0, horizonHeat);
+  float horizonHeat = 1.0 - smoothstep(1.01, 2.15, vDistance);
+  color = mix(color, hot, horizonHeat * (0.54 + vTone * 0.12));
+  color += vec3(1.0, 0.82, 0.58) * pow(horizonHeat, 3.0) * 0.32;
+  float alpha = glyph * vAlpha * mix(0.76, 1.0, horizonHeat);
   finalColor = vec4(color * alpha, alpha);
 }
 `
@@ -212,6 +220,17 @@ float hash(vec2 point) {
   return fract(sin(dot(point, vec2(127.1, 311.7))) * 43758.5453123);
 }
 
+float noise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  local = local * local * (3.0 - 2.0 * local);
+  return mix(
+    mix(hash(cell), hash(cell + vec2(1.0, 0.0)), local.x),
+    mix(hash(cell + vec2(0.0, 1.0)), hash(cell + vec2(1.0)), local.x),
+    local.y
+  );
+}
+
 vec2 rotatePoint(vec2 point, float angle) {
   float sine = sin(angle);
   float cosine = cos(angle);
@@ -222,49 +241,68 @@ void main(void) {
   vec2 point = vScene - uCore;
   float distanceToCore = length(point);
   float radius = max(uCoreRadius, 1.0);
-  if (distanceToCore > radius * 4.9) discard;
+  if (distanceToCore > radius * 6.8) discard;
 
-  vec2 diskPoint = rotatePoint(point, -0.28);
-  float normalizedRadius = distanceToCore / radius;
-  float horizon = 1.0 - smoothstep(0.975, 1.02, normalizedRadius);
-  float photon = exp(-pow((normalizedRadius - 1.055) / 0.043, 2.0));
-  float outerLens = exp(-pow((normalizedRadius - 1.19) / 0.13, 2.0));
+  vec2 diskPoint = rotatePoint(point, 0.34);
+  vec2 horizonPoint = vec2(diskPoint.x, diskPoint.y / 0.79);
+  float normalizedRadius = length(horizonPoint) / radius;
+  float angle = atan(horizonPoint.y, horizonPoint.x);
+  float horizon = 1.0 - smoothstep(0.965, 1.015, normalizedRadius);
+  float photon = exp(-pow((normalizedRadius - 1.035) / 0.026, 2.0));
+  float lensRadius = length(vec2(diskPoint.x, diskPoint.y / 0.70)) / radius;
+  float lensRing = exp(-pow((lensRadius - 1.18) / 0.105, 2.0));
 
-  float warpedY = diskPoint.y
-    + sign(diskPoint.y) * radius * 0.018 * pow(abs(diskPoint.x) / radius, 1.5);
-  float band = exp(-pow(warpedY / (radius * 0.092), 2.0));
-  band *= smoothstep(4.45, 1.08, abs(diskPoint.x) / radius);
-  band *= 1.0 - horizon;
+  float directWidth = radius * (0.045 + 0.018 * abs(diskPoint.x) / radius);
+  float directDisk = exp(-pow(diskPoint.y / directWidth, 2.0));
+  directDisk *= smoothstep(5.2, 1.06, abs(diskPoint.x) / radius);
+  directDisk *= 1.0 - horizon;
 
-  float angle = atan(point.y, point.x);
-  float hotArc = photon * smoothstep(-0.25, 0.85, sin(angle + 0.65));
-  float striation = 0.72 + 0.28 * sin(diskPoint.x * 0.095 + uTime * 0.22);
-  band *= striation;
+  float farSide = lensRing * smoothstep(-0.22, 0.55, -sin(angle));
+  float nearSide = lensRing * smoothstep(-0.40, 0.72, sin(angle)) * 0.48;
+  float lensDisk = (farSide + nearSide) * (1.0 - horizon);
 
-  vec3 hot = mix(vec3(0.63, 0.27, 0.10), vec3(1.0, 0.56, 0.20), uTheme);
-  vec3 cool = mix(vec3(0.24, 0.55, 0.68), vec3(0.62, 0.87, 1.0), uTheme);
-  vec3 whiteLight = mix(vec3(0.72, 0.83, 0.85), vec3(0.95, 0.98, 1.0), uTheme);
+  float radialGrain = noise(vec2(angle * 18.0, normalizedRadius * 31.0 - uTime * 0.18));
+  float fineLines = 0.56 + 0.44 * pow(abs(sin(angle * 43.0 + normalizedRadius * 19.0)), 7.0);
+  float turbulence = mix(0.48, 1.18, radialGrain) * fineLines;
+  directDisk *= turbulence;
+  lensDisk *= mix(0.62, 1.22, radialGrain);
+
+  float beaming = 0.03 + 1.36 * pow(smoothstep(-0.42, 0.94, -cos(angle + 0.35)), 2.0);
+  float hotCrescent = photon * beaming;
+
+  vec3 ember = vec3(0.78, 0.20, 0.035);
+  vec3 hot = vec3(1.0, 0.46, 0.12);
+  vec3 gold = vec3(1.0, 0.72, 0.34);
+  vec3 whiteLight = vec3(1.0, 0.91, 0.72);
   vec3 color = vec3(0.0);
   float alpha = 0.0;
 
-  float halo = outerLens * mix(0.13, 0.2, uTheme);
-  color += mix(hot, cool, 0.58) * halo;
-  alpha += halo;
+  float spaceFalloff = 1.0 - smoothstep(1.1, 6.6, distanceToCore / radius);
+  float nebula = noise(vScene * 0.006 + vec2(uTime * 0.006, 0.0));
+  float spaceAlpha = spaceFalloff * mix(0.80, 0.14, uTheme) * (0.70 + nebula * 0.30);
+  color += vec3(0.004, 0.006, 0.012) * spaceAlpha;
+  alpha += spaceAlpha;
 
-  color += hot * band * mix(0.14, 0.24, uTheme);
-  alpha += band * mix(0.11, 0.19, uTheme);
+  float diskLight = directDisk * (0.58 + 0.52 * beaming);
+  color += mix(ember, gold, turbulence) * diskLight * 1.18;
+  color += mix(hot, whiteLight, farSide) * lensDisk * 0.98;
+  alpha += diskLight * 0.82 + lensDisk * 0.76;
 
-  color += cool * photon * (0.67 + 0.23 * uTheme);
-  color += hot * hotArc * 0.75;
-  color += whiteLight * photon * 0.35;
-  alpha += photon * 0.93;
+  float diffuseGlow = exp(-pow((normalizedRadius - 1.20) / 0.34, 2.0));
+  color += ember * diffuseGlow * 0.17;
+  alpha += diffuseGlow * 0.10;
 
-  float grain = hash(floor(vScene * 0.72));
-  float dust = step(0.993, grain) * (1.0 - smoothstep(1.2, 4.6, normalizedRadius));
-  color += mix(cool, hot, hash(vScene * 0.013)) * dust * 0.55;
-  alpha += dust * 0.6;
+  color += hot * photon * 0.20;
+  color += whiteLight * hotCrescent * 1.34;
+  alpha += photon * 0.30 + hotCrescent * 0.74;
 
-  vec3 core = mix(vec3(0.008, 0.009, 0.012), vec3(0.001), smoothstep(0.0, 1.0, normalizedRadius));
+  float starCell = hash(floor(vScene * 0.20));
+  float star = step(0.9965, starCell) * pow(hash(floor(vScene * 0.43)), 4.0);
+  star *= smoothstep(1.25, 2.0, normalizedRadius) * spaceFalloff;
+  color += vec3(0.72, 0.82, 1.0) * star;
+  alpha += star * 0.84;
+
+  vec3 core = mix(vec3(0.003, 0.004, 0.008), vec3(0.0), smoothstep(0.0, 1.0, normalizedRadius));
   color = mix(color, core, horizon);
   alpha = mix(alpha, 1.0, horizon);
 
@@ -324,18 +362,19 @@ function makeStreamDefinitions(): StreamDefinition[] {
   )
   const streams: StreamDefinition[] = []
 
-  for (let index = 0; index < 7; index += 1) {
-    const spread = index - 3
+  for (let index = 0; index < 6; index += 1) {
+    const spread = index - 2.5
     streams.push({
-      source: [-0.13 + index * 0.012, 0.84 + index * 0.052],
-      control1: [0.015 + index * 0.012, 0.77 + index * 0.025],
-      control2: [0.12 + index * 0.014, 0.59 + index * 0.012],
-      approachAngle: 2.34 + spread * 0.055,
-      orbitOffset: spread * 0.055,
-      speed: 0.031 + (index % 3) * 0.003,
+      source: [-0.18 + index * 0.025, 0.92 + index * 0.055],
+      control1: [-0.02 + index * 0.018, 0.78 + index * 0.032],
+      control2: [0.1 + index * 0.016, 0.58 + index * 0.018],
+      approachAngle: 2.48 + spread * 0.045,
+      orbitOffset: spread * 0.04,
+      speed: 0.025 + (index % 3) * 0.0025,
       phase: index * 0.061,
-      tone: index % 4 === 0 ? 1 : index % 5 === 0 ? 2 : 0,
-      opacity: 0.72 + (index % 3) * 0.08,
+      tone: index % 4 === 0 ? 1 : 0,
+      opacity: 0.58 + (index % 3) * 0.07,
+      qualityRank: [0, 3, 6, 9, 14, 22][index] ?? index,
       text: texts[index % texts.length] ?? '',
     })
   }
@@ -343,31 +382,37 @@ function makeStreamDefinitions(): StreamDefinition[] {
   for (let index = 0; index < 5; index += 1) {
     const spread = index - 2
     streams.push({
-      source: [-0.12 + index * 0.025, -0.16 + index * 0.045],
-      control1: [0.01 + index * 0.018, 0.04 + index * 0.035],
-      control2: [0.12 + index * 0.016, 0.17 + index * 0.025],
-      approachAngle: 3.88 + spread * 0.07,
-      orbitOffset: spread * 0.07,
-      speed: 0.034 + (index % 2) * 0.004,
+      source: [-0.16 + index * 0.032, -0.17 + index * 0.035],
+      control1: [-0.02 + index * 0.022, 0.03 + index * 0.028],
+      control2: [0.11 + index * 0.017, 0.2 + index * 0.022],
+      approachAngle: 3.8 + spread * 0.052,
+      orbitOffset: spread * 0.045,
+      speed: 0.026 + (index % 2) * 0.003,
       phase: 0.17 + index * 0.073,
-      tone: index % 3 === 0 ? 2 : index % 4 === 0 ? 1 : 0,
-      opacity: 0.68 + (index % 2) * 0.1,
+      tone: index % 4 === 0 ? 1 : 0,
+      opacity: 0.56 + (index % 2) * 0.08,
+      qualityRank: [1, 4, 7, 11, 19][index] ?? index,
       text: texts[(index + 2) % texts.length] ?? '',
     })
   }
 
-  for (let index = 0; index < 4; index += 1) {
-    const spread = index - 1.5
+  const rightQualityRanks = [
+    2, 5, 8, 10, 12, 13, 15, 16, 17, 18, 20, 21, 23, 24, 25, 26, 27, 28,
+  ]
+  for (let index = 0; index < 30; index += 1) {
+    const spread = index - 14.5
+    const sourceY = -0.2 + index * 0.049
     streams.push({
-      source: [0.83 + index * 0.09, 1.12 - index * 0.025],
-      control1: [0.75 + index * 0.025, 0.98 - index * 0.018],
-      control2: [0.49 + index * 0.018, 0.73 - index * 0.018],
-      approachAngle: 0.72 + spread * 0.075,
-      orbitOffset: spread * 0.075,
-      speed: 0.029 + index * 0.003,
+      source: [1.1 + (index % 3) * 0.035, sourceY],
+      control1: [0.83 + (index % 2) * 0.018, 0.02 + index * 0.034],
+      control2: [0.49 + Math.abs(spread) * 0.0035, 0.26 + index * 0.0125],
+      approachAngle: spread * 0.018,
+      orbitOffset: spread * 0.014,
+      speed: 0.021 + (index % 4) * 0.002,
       phase: 0.31 + index * 0.081,
-      tone: index % 2 === 0 ? 1 : 0,
-      opacity: 0.62 + index * 0.06,
+      tone: index % 6 === 0 ? 1 : 0,
+      opacity: 0.7 + (index % 4) * 0.055,
+      qualityRank: rightQualityRanks[index] ?? index + 11,
       text: texts[(index + 1) % texts.length] ?? '',
     })
   }
@@ -384,8 +429,6 @@ function createGlyphGeometry(glyphs: Map<string, AtlasGlyph>) {
   const styles: number[] = []
   const indices: number[] = []
   const streams = makeStreamDefinitions()
-  // Keep all three entry directions represented when mobile quality hides four streams.
-  const qualityRanks = [0, 1, 2, 3, 4, 12, 13, 5, 6, 7, 8, 14, 9, 10, 11, 15]
   const cornerValues = [
     [-0.5, -0.5],
     [0.5, -0.5],
@@ -395,13 +438,13 @@ function createGlyphGeometry(glyphs: Map<string, AtlasGlyph>) {
 
   let glyphIndex = 0
   streams.forEach((stream, streamIndex) => {
-    const characters = Array.from(stream.text).slice(0, 94)
+    const characters = Array.from(stream.text).slice(0, 180)
     characters.forEach((character, characterIndex) => {
       const glyph = glyphs.get(character)
       if (!glyph) return
 
       const progress = characterIndex / Math.max(characters.length, 1)
-      const fontSize = 27 + (streamIndex % 4) * 1.35
+      const fontSize = 13.5 + (streamIndex % 4) * 0.8
       const glyphUvs = [
         [glyph.u0, glyph.v0],
         [glyph.u1, glyph.v0],
@@ -419,7 +462,7 @@ function createGlyphGeometry(glyphs: Map<string, AtlasGlyph>) {
         styles.push(
           stream.tone,
           streamIndex,
-          qualityRanks[streamIndex] ?? streamIndex,
+          stream.qualityRank,
           stream.opacity,
         )
       })
@@ -562,7 +605,7 @@ export async function createBlackHoleRenderer(
       uniforms.uniforms.uViewport = viewport
       uniforms.uniforms.uCore = core
       uniforms.uniforms.uCoreRadius = radius
-      uniforms.uniforms.uStreamLimit = mobile ? 12 : 16
+      uniforms.uniforms.uStreamLimit = mobile ? 17 : 41
     })
   }
 

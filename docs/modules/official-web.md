@@ -25,6 +25,10 @@ loaded PixiJS WebGL renderer with a runtime glyph atlas and merged geometry;
 three character streams bend into the accretion plane while a static SVG remains
 available for reduced-motion and unsupported browsers. Hidden tabs pause motion
 automatically; the visible pause control has been removed.
+The GPU scene uses an astrophotographic composition rather than a schematic
+ring: an asymmetric orange-white accretion disk and gravitational lens surround
+an inclined dark core while a dense perspective sheet of academic glyphs bends
+toward it.
 
 The backend exposes question-level PDF routes at
 `/api/v1/exams/{exam_id}/questions/{question_id}/{question|answer}.pdf`. The

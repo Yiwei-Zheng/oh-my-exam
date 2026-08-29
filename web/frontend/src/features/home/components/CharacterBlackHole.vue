@@ -144,6 +144,14 @@ onBeforeUnmount(() => {
         />
       </defs>
 
+      <ellipse
+        class="black-hole__fallback-space"
+        cx="240"
+        cy="266"
+        rx="330"
+        ry="285"
+      />
+
       <g class="black-hole__fallback-streams">
         <text
           v-for="index in 5"
@@ -180,9 +188,34 @@ onBeforeUnmount(() => {
         </text>
       </g>
 
-      <circle class="black-hole__fallback-halo" cx="240" cy="266" r="105" />
-      <circle class="black-hole__fallback-ring" cx="240" cy="266" r="86" />
-      <circle class="black-hole__fallback-core" cx="240" cy="266" r="80" />
+      <path
+        class="black-hole__fallback-disk"
+        d="M-80 438 C95 356 174 300 240 266 C346 211 505 155 722 74"
+      />
+      <ellipse
+        class="black-hole__fallback-halo"
+        cx="240"
+        cy="266"
+        rx="105"
+        ry="85"
+        transform="rotate(-19 240 266)"
+      />
+      <ellipse
+        class="black-hole__fallback-ring"
+        cx="240"
+        cy="266"
+        rx="87"
+        ry="69"
+        transform="rotate(-19 240 266)"
+      />
+      <ellipse
+        class="black-hole__fallback-core"
+        cx="240"
+        cy="266"
+        rx="80"
+        ry="63"
+        transform="rotate(-19 240 266)"
+      />
     </svg>
 
     <span :id="targetId" class="black-hole__target" aria-hidden="true" />
@@ -230,6 +263,8 @@ onBeforeUnmount(() => {
 }
 
 .black-hole__fallback-streams,
+.black-hole__fallback-space,
+.black-hole__fallback-disk,
 .black-hole__fallback-halo,
 .black-hole__fallback-ring,
 .black-hole__fallback-core {
@@ -238,10 +273,14 @@ onBeforeUnmount(() => {
 }
 
 .black-hole--forming .black-hole__fallback-streams,
+.black-hole--forming .black-hole__fallback-space,
+.black-hole--forming .black-hole__fallback-disk,
 .black-hole--forming .black-hole__fallback-halo,
 .black-hole--forming .black-hole__fallback-ring,
 .black-hole--forming .black-hole__fallback-core,
 .black-hole--ready .black-hole__fallback-streams,
+.black-hole--ready .black-hole__fallback-space,
+.black-hole--ready .black-hole__fallback-disk,
 .black-hole--ready .black-hole__fallback-halo,
 .black-hole--ready .black-hole__fallback-ring,
 .black-hole--ready .black-hole__fallback-core {
@@ -261,7 +300,19 @@ onBeforeUnmount(() => {
 }
 
 .black-hole__fallback-text.tone-2 {
-  fill: var(--color-hole-cool);
+  fill: color-mix(in srgb, var(--color-ink), white 28%);
+}
+
+.black-hole__fallback-space {
+  fill: rgb(2 4 8 / 78%);
+  filter: url('#fallback-glow');
+}
+
+.black-hole__fallback-disk {
+  fill: none;
+  stroke: #ff8b30;
+  stroke-width: 13;
+  filter: url('#fallback-glow');
 }
 
 .black-hole__fallback-halo {
@@ -273,8 +324,8 @@ onBeforeUnmount(() => {
 
 .black-hole__fallback-ring {
   fill: none;
-  stroke: var(--color-hole-cool);
-  stroke-width: 9;
+  stroke: #ffd29a;
+  stroke-width: 6;
   filter: url('#fallback-glow');
 }
 
@@ -315,6 +366,8 @@ onBeforeUnmount(() => {
   .black-hole :deep(.black-hole__canvas),
   .black-hole__fallback,
   .black-hole__fallback-streams,
+  .black-hole__fallback-space,
+  .black-hole__fallback-disk,
   .black-hole__fallback-halo,
   .black-hole__fallback-ring,
   .black-hole__fallback-core {

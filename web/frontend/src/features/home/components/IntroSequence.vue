@@ -295,8 +295,8 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 50%;
   left: 45%;
-  width: 0.72em;
-  aspect-ratio: 1;
+  width: 0.78em;
+  height: 0.62em;
   border-radius: 50%;
   content: '';
   opacity: 0;
@@ -310,18 +310,18 @@ onBeforeUnmount(() => {
     #050609 58%,
     #000 100%
   );
-  transform: translate3d(-50%, -50%, 0) scale(0.12);
+  transform: translate3d(-50%, -50%, 0) rotate(-19deg) scale(0.12);
   transition:
     opacity 190ms ease,
     transform 520ms var(--ease-out-expo);
 }
 
 .intro__letter--origin::after {
-  border: 0.052em solid #c9e8ff;
+  border: 0.044em solid #ffe1b5;
   box-shadow:
-    0 0 0.13em 0.065em rgb(201 232 255 / 88%),
-    0 0 0.25em 0.12em rgb(255 184 110 / 58%);
-  transform: translate3d(-50%, -50%, 0) scale(0.58);
+    -0.09em 0 0.14em 0.07em rgb(255 238 202 / 90%),
+    0 0 0.27em 0.13em rgb(255 121 42 / 64%);
+  transform: translate3d(-50%, -50%, 0) rotate(-19deg) scale(0.58);
   transition:
     opacity 240ms ease,
     transform 540ms var(--ease-out-expo);
@@ -365,7 +365,7 @@ onBeforeUnmount(() => {
 .intro--formation .intro__letter--origin::before,
 .intro--formation .intro__letter--origin::after {
   opacity: 1;
-  transform: translate3d(-50%, -50%, 0) scale(1);
+  transform: translate3d(-50%, -50%, 0) rotate(-19deg) scale(1);
 }
 
 .intro--formation {

@@ -24,6 +24,9 @@ or backend integration.
 - The event horizon uses a large upper-left to lower-right accretion plane.
   Academic characters flow consistently along fixed paths rather than rotating
   the complete composition.
+- The black hole is rendered in an astrophotographic style: an inclined dark
+  core, asymmetric orange-white accretion light, gravitational lensing arcs,
+  sparse stars, and a dense perspective sheet of academic characters.
 
 ## Interaction and accessibility
 
