@@ -15,12 +15,12 @@ Set-Location frontend
 npm install
 ```
 
-Start the API from the repository root:
+Start the complete development application from the repository root:
 
 ```powershell
 $env:OME_BOOTSTRAP_ADMIN_EMAIL = 'admin@example.com'
 $env:OME_BOOTSTRAP_ADMIN_PASSWORD = 'replace-this-development-password'
-python scripts\start_api.py
+.\start-dev.cmd
 ```
 
 The bootstrap variables are needed only until the first administrator exists.
@@ -28,13 +28,17 @@ Local development creates and reuses `backend/data/application.secret` when
 `OME_JWT_SECRET` is omitted. Production must provide an explicit secret through
 the protected systemd environment file.
 
-Start Vite from `frontend/`:
+The launcher starts the API on port 8000 and Vite on port 4173, streams both
+logs into one terminal, and stops both process trees on Ctrl+C. The same
+launcher works on macOS and Linux through Python:
 
-```powershell
-npm run dev
+```bash
+python scripts/start_dev.py
 ```
 
 Vite proxies `/api` to `http://127.0.0.1:8000`. Use `VITE_API_PROXY_TARGET` to override it.
+Use `python scripts/start_dev.py --check` for a non-starting prerequisite and
+port check, or add `--lan` to expose both development servers on the LAN.
 
 ## Validation
 
