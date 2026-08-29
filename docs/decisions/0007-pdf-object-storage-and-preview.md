@@ -12,21 +12,20 @@ several gigabytes of data and make source corrections expensive.
 
 ## Decision
 
-Original documents are immutable objects identified by an internal document id,
-version, SHA-256 checksum, and path-independent storage key. Identical content
-is deduplicated. Local and bare-metal deployments store objects below
-`backend/data/objects/`; the storage interface remains compatible with a future
-S3-compatible implementation.
+Original documents are immutable pipeline inputs addressed through internal
+paper ids and validated relative storage keys. Local and bare-metal deployments
+store them below `backend/data/raw_papers/`; the API resolves paths beneath that
+root and does not expose them to the browser. Content-addressed deduplication and
+an S3-compatible backend are future work.
 
 Question and answer previews are rendered from the original PDF and normalized
 page regions. Normal question display returns a clipped vector PDF. The browser
-uses PDF.js for full-paper and question-level viewing. Temporary thumbnails may
-be generated below `backend/data/cache/` and removed by retention policy, but
-they are not catalog assets.
+embeds backend PDF responses for full-paper and question-level viewing.
+Temporary thumbnails may be generated below `backend/data/cache/` and removed
+by retention policy, but they are not catalog assets.
 
 The browser never receives a filesystem path, storage key, or upstream source
-URL. It uses versioned endpoints addressed by public ids. Full-paper responses
-support byte-range requests; question and answer responses use cache validators.
+URL. It uses versioned endpoints addressed by public ids.
 
 After migration counts, checksums, region bounds, and representative rendering
 tests pass, existing processed-question JPG files and duplicate report images

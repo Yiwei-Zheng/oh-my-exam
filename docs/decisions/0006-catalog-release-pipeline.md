@@ -7,9 +7,9 @@ Accepted on 2026-08-29.
 ## Context
 
 Downloading, splitting, text extraction, linking, classification, packaging,
-and publication are long-running operations. They must survive browser
-disconnects and worker restarts. Publishing partial output directly into the
-active catalog would expose inconsistent questions.
+and publication are long-running operations. They must continue after browser
+disconnects. Publishing partial output directly into the active catalog would
+expose inconsistent questions.
 
 ## Decision
 
@@ -28,16 +28,16 @@ discover
   -> publish
 ```
 
-Steps are idempotent and resumable. Different subjects may run concurrently,
-initially with a global concurrency limit of two. Publication is serialized.
-FastAPI creates and controls runs; Celery workers execute them; PostgreSQL is
-the authoritative source for run state. Redis is transport infrastructure, not
-the authoritative job database.
+Steps are idempotent and retryable. FastAPI records runs in the application
+SQLite database and launches the packaged release command as an isolated local
+subprocess. The command emits structured progress for the administrator UI.
+Publication is serialized by constructing one candidate catalog at a time.
+Distributed execution is not part of this release.
 
-Each successful build creates an immutable catalog release. Deterministic
-validation runs automatically. A passing release becomes active immediately;
-there is no manual review gate. A failing release leaves the previous active
-release unchanged. Rollback switches the active release pointer.
+Each build creates a temporary candidate database. Deterministic validation
+runs automatically. A passing candidate atomically replaces the active catalog;
+there is no manual review gate. A failing candidate leaves the previous active
+catalog unchanged. Catalog-release history and rollback are future work.
 
 Answer extraction initially stores only raw extracted text and normalized
 Markdown. Marking-point structures are deferred. Extraction failure does not
@@ -50,16 +50,14 @@ Previous revisions remain available for rollback and audit.
 
 - Web requests never run a complete pipeline inline.
 - Pipeline logs are streamed to the browser with Server-Sent Events.
-- Portable SQLite databases become exports of a selected release, not the
-  hosted source of truth.
-- A worker crash marks work interrupted and allows resumption from the latest
-  successful step.
+- Portable SQLite databases remain pipeline inputs; the active normalized
+  catalog is the published query source.
+- An API restart can interrupt a local subprocess. The durable run remains
+  inspectable and the administrator can retry it.
 
 ## References
 
-- Celery 5.6 user guide and workflow documentation:
-  https://docs.celeryq.dev/en/stable/userguide/
-- PostgreSQL schemas:
-  https://www.postgresql.org/docs/current/ddl-schemas.html
-- Alembic migration environments:
-  https://alembic.sqlalchemy.org/en/latest/tutorial.html
+- Python subprocess management:
+  https://docs.python.org/3/library/subprocess.html
+- SQLite atomic commit:
+  https://sqlite.org/atomiccommit.html

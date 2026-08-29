@@ -13,7 +13,11 @@ Browser -> Caddy -> frontend/dist
                                -> isolated pipeline subprocess
 ```
 
-The current self-hosted release uses separate SQLite databases for identity/job state and the normalized question catalog. Both live below `backend/data`; portable subject databases are pipeline inputs. PostgreSQL remains the scale-out direction recorded in the architecture decisions, but documentation and deployment commands do not pretend it is already required.
+The current self-hosted release uses separate SQLite databases for identity/job
+state and the normalized question catalog. Both live below `backend/data`;
+portable subject databases are pipeline inputs. A future scale-out design may
+adopt PostgreSQL, but it is not a runtime dependency or accepted migration in
+this release.
 
 ## Repository
 
@@ -62,7 +66,6 @@ The browser uses the hierarchy qualification, exam board, program, year, session
 - [Vue application structure](https://vuejs.org/guide/scaling-up/tooling.html)
 - [Feature-Sliced Design](https://fsd.how/docs/reference/slices-segments/)
 - [SQLite atomic commit](https://sqlite.org/atomiccommit.html)
-- [PDF.js](https://mozilla.github.io/pdf.js/getting_started/)
 - [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/)
 - [Caddy common patterns](https://caddyserver.com/docs/caddyfile/patterns)
 - [systemd service units](https://www.freedesktop.org/software/systemd/man/latest/systemd.service.html)

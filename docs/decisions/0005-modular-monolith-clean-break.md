@@ -27,8 +27,8 @@ backend/
 
 The backend owns accounts, catalog metadata, source PDFs, processing pipelines,
 portable database export, and audit records. Pipeline core code remains usable
-without HTTP or GUI dependencies. FastAPI routes and Celery tasks are adapters
-over the same application services.
+without HTTP or GUI dependencies. FastAPI routes and the local pipeline
+executor are adapters over the same application services.
 
 Use a clean-break migration:
 

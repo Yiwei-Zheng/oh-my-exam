@@ -16,8 +16,8 @@ Python virtual environment, a production frontend build, Caddy, and systemd.
 The deployed services are:
 
 - `ome-api.service`: FastAPI application.
-- `ome-worker.service`: Celery worker.
-- PostgreSQL and Redis as local system services or externally managed services.
+- Backend-owned pipeline subprocesses launched by the API service.
+- SQLite databases and original PDFs below the protected backend data root.
 - Caddy serving frontend static assets and proxying `/api/` to FastAPI.
 
 Provide idempotent native installation, database migration, upgrade, backup,

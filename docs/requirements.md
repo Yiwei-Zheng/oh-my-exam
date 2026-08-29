@@ -54,11 +54,11 @@ architecture must allow new exam families without global rewrites.
   restarted by an administrator.
 - The current release serializes publication. Distributed workers and
   cross-host resumption are future scale-out capabilities.
-- Each build produces an immutable catalog release.
+- Each build produces an isolated candidate catalog.
 - Deterministic validation runs automatically. A passing release becomes active
   without manual review; a failing release leaves the previous release active.
-- Administrator corrections create revisions, become active immediately, and
-  remain reversible and auditable.
+- Administrator corrections create append-only revisions and become active
+  immediately. A rollback UI is future work.
 - Structured marking points are out of scope for the current iteration.
 
 ## Data and storage

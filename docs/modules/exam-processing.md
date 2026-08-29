@@ -29,7 +29,8 @@ snapshot. Retrying a successful step must not duplicate authoritative records.
 
 Adapters may define source discovery, naming, catalog interpretation, and
 PDF-layout rules. They implement pipeline contracts and are tested with fixed
-fixtures. Adapters do not publish directly and do not import FastAPI or Celery.
+fixtures. Adapters do not publish directly and do not import FastAPI or runtime
+executor adapters.
 
 Configuration uses source-controlled defaults below `backend/config/exams/`.
 Browser input selects supported operations; it cannot upload or execute

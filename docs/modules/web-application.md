@@ -13,8 +13,8 @@ collapses navigation. Phone uses route-based drill-down. The selected catalog
 path and document state are deep-linkable.
 
 The document rail contains question PDF, answer PDF, structured text, and source
-paper views. Full paper and clipped views use PDF.js. Large trees and lists are
-lazy and virtualized.
+paper views. Full paper and clipped views embed authorized backend PDF
+responses. Large trees and lists load lazily.
 
 ## Visual system
 
