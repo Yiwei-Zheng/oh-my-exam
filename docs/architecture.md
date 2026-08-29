@@ -148,6 +148,14 @@ user state and published catalog data.
   S3-compatible object store.
 - API requests identify papers by internal ids. The server must never act as an
   unrestricted proxy for a client-supplied URL.
+- Normal question display requests identify a question and document side through
+  the versioned API. The server resolves the original paper and replays stored
+  crop regions into a question-level vector PDF; crop calculation remains a
+  backend service rather than browser or route-handler logic.
+- Born-digital papers use vector extracts by default. Scanned papers may use a
+  compressed raster fallback when clipping would retain the full source-page
+  image. Explicit full-paper viewing remains a separate endpoint and may use
+  byte-range requests and session caching.
 - RAGFlow is a replaceable retrieval adapter. DeepSeek is a replaceable model
   adapter. Both are called only from the server.
 - Mathematical tools run through typed, restricted contracts in an isolated

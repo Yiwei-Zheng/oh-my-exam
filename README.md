@@ -34,7 +34,16 @@ Useful endpoints:
 - `GET http://127.0.0.1:8000/api/v1/health`
 - `GET http://127.0.0.1:8000/api/v1/capabilities`
 - `GET http://127.0.0.1:8000/api/v1/exams`
+- `GET http://127.0.0.1:8000/api/v1/exams/{exam_id}/questions/{question_id}/question.pdf`
+- `GET http://127.0.0.1:8000/api/v1/exams/{exam_id}/questions/{question_id}/answer.pdf`
+- `GET http://127.0.0.1:8000/api/v1/exams/{exam_id}/papers/{paper_id}/{question|answer}`
 - `GET http://127.0.0.1:8000/docs`
+
+The question-level routes resolve a server-owned source paper and replay its
+stored crop regions into a compact vector PDF. Use them for normal question and
+mark-scheme display. The paper route returns the complete source PDF and remains
+appropriate for explicit full-paper viewing or workflows that reuse many
+questions from the same paper.
 
 Do not expose this initial server directly to the public internet because
 authentication is still a documented placeholder.
