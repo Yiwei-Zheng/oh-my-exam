@@ -1,37 +1,18 @@
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('../fonts/SpaceGrotesk-Variable.woff2') format('woff2');
-  font-weight: 300 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'IBM Plex Mono';
-  src: url('../fonts/IBMPlexMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'IBM Plex Mono';
-  src: url('../fonts/IBMPlexMono-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
 :root {
-  --color-bg: #f4f8ff;
-  --color-paper: #fffefa;
-  --color-ink: #172946;
-  --color-muted: #61728e;
-  --color-line: #d9e3f2;
-  --color-blue: #3978e9;
-  --color-blue-dark: #285da9;
-  --color-pink: #f45d8c;
-  --color-yellow: #ffd75c;
-  --color-danger: #bd2f55;
-  --font-display: 'Space Grotesk', Arial, sans-serif;
-  --font-utility: 'IBM Plex Mono', Consolas, monospace;
+  --color-bg: #f5f5f7;
+  --color-paper: #ffffff;
+  --color-ink: #1d1d1f;
+  --color-muted: #6e6e73;
+  --color-line: #d2d2d7;
+  --color-blue: #0071e3;
+  --color-blue-dark: #0066cc;
+  --color-pink: #ff375f;
+  --color-yellow: #ffd60a;
+  --color-danger: #d70015;
+  --font-display:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+    'Microsoft YaHei', sans-serif;
+  --font-utility: ui-monospace, 'SFMono-Regular', Consolas, monospace;
   font-family: var(--font-display);
   color: var(--color-ink);
   background: var(--color-bg);
@@ -39,7 +20,7 @@
   text-rendering: optimizeLegibility;
   --el-color-primary: var(--color-blue);
   --el-color-danger: var(--color-danger);
-  --el-border-radius-base: 12px;
+  --el-border-radius-base: 8px;
   --el-font-family: var(--font-display);
 }
 html {

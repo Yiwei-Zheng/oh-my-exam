@@ -1,105 +1,118 @@
 <script setup lang="ts">
-import {
-  DataAnalysis,
-  Document,
-  Refresh,
-  Search,
-  SwitchButton,
-  User,
-  UserFilled,
-} from '@element-plus/icons-vue'
-import {
-  ElAlert,
-  ElButton,
-  ElEmpty,
-  ElIcon,
-  ElInput,
-  ElProgress,
-  ElSkeleton,
-  ElTree,
-} from 'element-plus'
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElAlert, ElInput, ElSkeleton, ElTree } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
 import { ApiError, apiRequest } from '../../shared/api'
 import { useLocale } from '../../shared/composables/useLocale'
 import { useAuthStore } from '../../stores/auth'
-const ActivityChart = defineAsyncComponent(() => import('./components/ActivityChart.vue'))
 
-interface Statistics {
-  users_total: number
-  active_7d: number
-  roles: Record<'admin' | 'student' | 'teacher', number>
-  activity: Array<{ date: string; count: number }>
-}
 interface TreeNode {
   id: string
   label: string
   kind: string
   count?: number
+  paper_id?: number
+  exam_id?: string
+  year?: number
+  session?: string
   children: TreeNode[]
 }
+
+interface QuestionSummary {
+  id: number
+  exam_id: string
+  paper_id: number
+  paper_key: string
+  local_key: string
+  question_number: string
+  content: string
+}
+
+interface AnswerStructured {
+  version: number
+  raw_text: string
+  markdown: string
+  status: string
+}
+
+interface QuestionDetail extends QuestionSummary {
+  answer_structured: AnswerStructured | null
+}
+
 interface UpdateJob {
   id: number
   status: 'running' | 'completed' | 'failed'
   stage: string
   progress: number
   message: string
-  started_at: string
-  finished_at: string | null
 }
 
 const { t } = useI18n()
 const { locale, toggleLocale } = useLocale()
 const router = useRouter()
 const auth = useAuthStore()
-const statistics = ref<Statistics | null>(null)
+
 const tree = ref<TreeNode[]>([])
 const treeRef = ref<InstanceType<typeof ElTree>>()
-const search = ref('')
+const questions = ref<QuestionSummary[]>([])
+const selectedPaper = ref<TreeNode | null>(null)
+const selectedQuestion = ref<QuestionDetail | null>(null)
+const treeSearch = ref('')
+const questionSearch = ref('')
+const previewMode = ref<'question' | 'answer' | 'text'>('question')
 const loading = ref(true)
+const questionsLoading = ref(false)
 const error = ref('')
 const updateConfigured = ref(false)
 const updateJob = ref<UpdateJob | null>(null)
+const rawText = ref('')
+const markdown = ref('')
+const saving = ref(false)
 let pollTimer: number | undefined
 
-const roleCards = computed(
-  () =>
-    [
-      {
-        key: 'student',
-        value: statistics.value?.roles.student ?? 0,
-        icon: User,
-        tone: 'blue',
-      },
-      {
-        key: 'teacher',
-        value: statistics.value?.roles.teacher ?? 0,
-        icon: UserFilled,
-        tone: 'yellow',
-      },
-      {
-        key: 'admin',
-        value: statistics.value?.roles.admin ?? 0,
-        icon: DataAnalysis,
-        tone: 'pink',
-      },
-    ] as const,
-)
+const visibleQuestions = computed(() => {
+  const query = questionSearch.value.trim().toLowerCase()
+  if (!query) return questions.value
+  return questions.value.filter(
+    (item) =>
+      item.question_number.toLowerCase().includes(query) ||
+      item.content.toLowerCase().includes(query),
+  )
+})
 
-async function loadDashboard() {
+const questionPdf = computed(() => documentUrl('question'))
+const answerPdf = computed(() => documentUrl('answer'))
+const fullQuestionPdf = computed(() => paperUrl('question'))
+const fullAnswerPdf = computed(() => paperUrl('answer'))
+
+function documentUrl(kind: 'question' | 'answer') {
+  const question = selectedQuestion.value
+  if (!question) return ''
+  return `/api/v1/exams/${encodeURIComponent(question.exam_id)}/questions/${question.id}/${kind}.pdf`
+}
+
+function paperUrl(kind: 'question' | 'answer') {
+  const paper = selectedPaper.value
+  if (!paper?.exam_id || !paper.paper_id) return ''
+  return `/api/v1/exams/${encodeURIComponent(paper.exam_id)}/papers/${paper.paper_id}/${kind}`
+}
+
+function filterTree(value: string, data: TreeNode) {
+  return !value || data.label.toLowerCase().includes(value.toLowerCase())
+}
+
+async function loadWorkspace() {
   loading.value = true
   error.value = ''
   try {
-    const [stats, nodes, update] = await Promise.all([
-      apiRequest<Statistics>('/api/v1/admin/statistics'),
+    const [nodes, update] = await Promise.all([
       apiRequest<TreeNode[]>('/api/v1/admin/question-tree'),
       apiRequest<{ configured: boolean; job: UpdateJob | null }>(
         '/api/v1/admin/question-update',
       ),
     ])
-    statistics.value = stats
     tree.value = nodes
     updateConfigured.value = update.configured
     updateJob.value = update.job
@@ -112,21 +125,70 @@ async function loadDashboard() {
   }
 }
 
-function filterTree(value: string, data: TreeNode) {
-  return !value || data.label.toLowerCase().includes(value.toLowerCase())
+async function selectTreeNode(node: TreeNode) {
+  if (node.kind !== 'paper' || !node.paper_id) return
+  selectedPaper.value = node
+  selectedQuestion.value = null
+  questionsLoading.value = true
+  try {
+    questions.value = await apiRequest<QuestionSummary[]>(
+      `/api/v1/admin/papers/${node.paper_id}/questions`,
+    )
+    if (questions.value[0]) await selectQuestion(questions.value[0])
+  } catch (caught) {
+    error.value =
+      caught instanceof ApiError ? caught.detail : t('admin.loadFailed')
+  } finally {
+    questionsLoading.value = false
+  }
 }
-function applyFilter() {
-  treeRef.value?.filter(search.value)
+
+async function selectQuestion(question: QuestionSummary) {
+  previewMode.value = 'question'
+  try {
+    const detail = await apiRequest<QuestionDetail>(
+      `/api/v1/exams/${encodeURIComponent(question.exam_id)}/questions/${question.id}`,
+    )
+    selectedQuestion.value = { ...detail, exam_id: question.exam_id }
+    rawText.value = detail.answer_structured?.raw_text ?? ''
+    markdown.value = detail.answer_structured?.markdown ?? ''
+  } catch (caught) {
+    error.value =
+      caught instanceof ApiError ? caught.detail : t('admin.loadFailed')
+  }
+}
+
+async function saveAnswerRevision() {
+  if (!selectedQuestion.value) return
+  saving.value = true
+  try {
+    const result = await apiRequest<{ answer_structured: AnswerStructured }>(
+      `/api/v1/admin/questions/${selectedQuestion.value.id}/answer-text`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          raw_text: rawText.value,
+          markdown: markdown.value,
+        }),
+      },
+    )
+    selectedQuestion.value.answer_structured = result.answer_structured
+  } catch (caught) {
+    error.value =
+      caught instanceof ApiError ? caught.detail : t('admin.saveFailed')
+  } finally {
+    saving.value = false
+  }
 }
 
 async function startUpdate() {
   if (!updateConfigured.value || updateJob.value?.status === 'running') return
   try {
-    const payload = await apiRequest<{ job: UpdateJob }>(
-      '/api/v1/admin/question-update',
-      { method: 'POST' },
-    )
-    updateJob.value = payload.job
+    updateJob.value = (
+      await apiRequest<{ job: UpdateJob }>('/api/v1/admin/question-update', {
+        method: 'POST',
+      })
+    ).job
     schedulePoll()
   } catch (caught) {
     error.value =
@@ -151,640 +213,670 @@ async function logout() {
   await auth.logout()
   await router.replace('/login')
 }
-onMounted(loadDashboard)
+
+onMounted(loadWorkspace)
+watch(treeSearch, (value) => treeRef.value?.filter(value))
 onBeforeUnmount(() => {
   if (pollTimer) window.clearTimeout(pollTimer)
 })
 </script>
 
 <template>
-  <div class="admin-shell">
-    <aside class="admin-sidebar">
-      <div class="brand-lockup">
-        <img
-          src="/app-icon.png"
-          alt=""
-          width="52"
-          height="52"
-        >
-        <div><strong>Oh My Exam</strong><span>CONTROL DESK</span></div>
+  <main class="workspace">
+    <header class="toolbar">
+      <div
+        class="window-mark"
+        aria-hidden="true"
+      >
+        <span /><span /><span />
       </div>
-      <nav :aria-label="t('admin.navigation')">
-        <a
-          class="active"
-          href="#overview"
-        ><el-icon><DataAnalysis /></el-icon>{{ t('admin.overview') }}</a><a href="#questions"><el-icon><Document /></el-icon>{{ t('admin.questionBank') }}</a>
-      </nav>
-      <div class="sidebar-footer">
+      <img
+        src="/app-icon.png"
+        alt=""
+        width="34"
+        height="34"
+      >
+      <div class="title-block">
+        <strong>{{ t('admin.libraryTitle') }}</strong>
+        <span>{{ selectedPaper?.label ?? t('admin.librarySubtitle') }}</span>
+      </div>
+      <div class="toolbar-actions">
+        <div
+          v-if="updateJob"
+          class="job-pill"
+          :class="updateJob.status"
+        >
+          <span>{{ updateJob.message }}</span>
+          <small>{{ updateJob.progress }}%</small>
+        </div>
         <button
+          class="toolbar-button primary"
+          type="button"
+          :disabled="!updateConfigured || updateJob?.status === 'running'"
+          @click="startUpdate"
+        >
+          {{ t('admin.runPipeline') }}
+        </button>
+        <button
+          class="toolbar-button"
           type="button"
           @click="toggleLocale"
         >
-          {{ locale === 'zh-CN' ? 'English' : '中文' }}
-        </button><button
+          {{ locale === 'zh-CN' ? 'EN' : '中文' }}
+        </button>
+        <button
+          class="avatar"
           type="button"
+          :title="t('admin.signOut')"
           @click="logout"
         >
-          <el-icon><SwitchButton /></el-icon>{{ t('admin.signOut') }}
+          {{ auth.user?.email?.slice(0, 1).toUpperCase() ?? 'A' }}
         </button>
       </div>
-    </aside>
+    </header>
 
-    <main
-      id="overview"
-      class="admin-main"
-      tabindex="-1"
+    <el-alert
+      v-if="error"
+      class="workspace-error"
+      :title="error"
+      type="error"
+      closable
+      show-icon
+      @close="error = ''"
+    />
+
+    <section
+      class="browser"
+      :aria-label="t('admin.questionTree')"
     >
-      <header class="admin-header">
-        <div>
-          <p class="eyebrow">
-            {{ t('admin.eyebrow') }}
-          </p>
-          <h1>{{ t('admin.title') }}</h1>
-          <p>{{ t('admin.welcome', { email: auth.user?.email }) }}</p>
+      <aside class="source-pane">
+        <div class="pane-heading">
+          <span>{{ t('admin.sources') }}</span><small>{{ tree.length }}</small>
         </div>
-        <div class="status-chip">
-          <span />{{ t('admin.systemOnline') }}
-        </div>
-      </header>
-      <el-alert
-        v-if="error"
-        :title="error"
-        type="error"
-        show-icon
-        closable
-        @close="error = ''"
-      />
-
-      <section
-        class="metrics-grid"
-        :aria-label="t('admin.userStatistics')"
-      >
-        <article class="metric-card total">
-          <span>{{ t('admin.usersTotal') }}</span><strong>{{ statistics?.users_total ?? '—' }}</strong><small>{{ t('admin.accounts') }}</small>
-        </article>
-        <article class="metric-card active-users">
-          <span>{{ t('admin.active7d') }}</span><strong>{{ statistics?.active_7d ?? '—' }}</strong><small>{{ t('admin.uniqueUsers') }}</small>
-        </article>
-        <article
-          v-for="item in roleCards"
-          :key="item.key"
-          class="metric-card role-card"
-          :class="item.tone"
-        >
-          <el-icon><component :is="item.icon" /></el-icon>
-          <div>
-            <span>{{ t(`roles.${item.key}`) }}</span><strong>{{ item.value }}</strong>
-          </div>
-        </article>
-      </section>
-
-      <section class="dashboard-grid">
-        <article class="panel activity-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-index">
-                ACTIVITY / 14D
-              </p>
-              <h2>{{ t('admin.activityTitle') }}</h2>
-            </div>
-          </div>
+        <el-input
+          v-model="treeSearch"
+          class="pane-search"
+          :placeholder="t('admin.searchTree')"
+          clearable
+        />
+        <div class="tree-scroll">
           <el-skeleton
             v-if="loading"
-            :rows="5"
+            :rows="8"
             animated
-          /><template v-else>
-            <ActivityChart :data="statistics?.activity ?? []" />
-            <table class="sr-only">
-              <caption>
-                {{
-                  t('admin.activityTitle')
-                }}
-              </caption>
-              <tbody>
-                <tr
-                  v-for="item in statistics?.activity"
-                  :key="item.date"
-                >
-                  <th>{{ item.date }}</th>
-                  <td>{{ item.count }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </template>
-        </article>
-
-        <article class="panel update-panel">
-          <div class="update-icon">
-            <el-icon><Refresh /></el-icon>
-          </div>
-          <p class="section-index">
-            SYNC / PIPELINE
-          </p>
-          <h2>{{ t('admin.updateTitle') }}</h2>
-          <p>{{ t('admin.updateDescription') }}</p>
-          <div
-            class="pipeline-stages"
-            aria-hidden="true"
-          >
-            <span
-              v-for="stage in [
-                'checking',
-                'downloading',
-                'splitting',
-                'cataloging',
-                'classifying',
-              ]"
-              :key="stage"
-              :class="{
-                done:
-                  updateJob && ['completed', stage].includes(updateJob.stage),
-                current: updateJob?.stage === stage,
-              }"
-            />
-          </div>
-          <div
-            v-if="updateJob"
-            class="job-status"
-            aria-live="polite"
-          >
-            <strong>{{ t(`updateStatus.${updateJob.status}`) }}</strong><span>{{ updateJob.message }}</span><el-progress
-              :percentage="updateJob.progress"
-              :status="
-                updateJob.status === 'failed'
-                  ? 'exception'
-                  : updateJob.status === 'completed'
-                    ? 'success'
-                    : undefined
-              "
-            />
-          </div>
-          <p
-            v-else-if="!updateConfigured"
-            class="config-note"
-          >
-            {{ t('admin.updateNeedsConfig') }}
-          </p>
-          <el-button
-            type="primary"
-            size="large"
-            :icon="Refresh"
-            :loading="updateJob?.status === 'running'"
-            :disabled="!updateConfigured"
-            @click="startUpdate"
-          >
-            {{ t('admin.updateButton') }}
-          </el-button>
-        </article>
-      </section>
-
-      <section
-        id="questions"
-        class="panel question-panel"
-      >
-        <div class="panel-heading">
-          <div>
-            <p class="section-index">
-              LIBRARY / TREE
-            </p>
-            <h2>{{ t('admin.questionTree') }}</h2>
-          </div>
-          <el-input
-            v-model="search"
-            class="tree-search"
-            :placeholder="t('admin.searchQuestions')"
-            clearable
-            @input="applyFilter"
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-        </div>
-        <div class="tree-spine">
-          <el-empty
-            v-if="!loading && tree.length === 0"
-            :description="t('admin.noQuestions')"
-          /><el-tree
+          />
+          <el-tree
             v-else
             ref="treeRef"
             :data="tree"
             node-key="id"
+            highlight-current
             :filter-node-method="filterTree"
             :props="{ label: 'label', children: 'children' }"
-            :default-expanded-keys="tree.slice(0, 1).map((node) => node.id)"
+            @node-click="selectTreeNode"
           >
             <template #default="{ data }">
-              <span class="tree-node"><span>{{ data.label }}</span><small v-if="data.count !== undefined">{{ data.count }} {{ t('admin.questions') }}</small></span>
+              <span class="tree-row">
+                <span
+                  class="node-icon"
+                  :class="data.kind"
+                  aria-hidden="true"
+                />
+                <span class="node-label">{{ data.label }}</span>
+                <small v-if="data.count !== undefined">{{ data.count }}</small>
+              </span>
             </template>
           </el-tree>
         </div>
-      </section>
-    </main>
-  </div>
+      </aside>
+
+      <aside class="list-pane">
+        <div class="pane-heading">
+          <span>{{ t('admin.questions') }}</span><small>{{ questions.length }}</small>
+        </div>
+        <el-input
+          v-model="questionSearch"
+          class="pane-search"
+          :placeholder="t('admin.searchQuestions')"
+          clearable
+        />
+        <div
+          class="question-list"
+          :class="{ loading: questionsLoading }"
+        >
+          <button
+            v-for="question in visibleQuestions"
+            :key="question.id"
+            type="button"
+            :class="{ selected: selectedQuestion?.id === question.id }"
+            @click="selectQuestion(question)"
+          >
+            <strong>{{
+              t('admin.questionNumber', { number: question.question_number })
+            }}</strong>
+            <span>{{ question.content || question.local_key }}</span>
+          </button>
+          <div
+            v-if="!questionsLoading && !questions.length"
+            class="empty-state"
+          >
+            <strong>{{ t('admin.choosePaper') }}</strong>
+            <span>{{ t('admin.choosePaperHint') }}</span>
+          </div>
+        </div>
+      </aside>
+
+      <article class="preview-pane">
+        <template v-if="selectedQuestion">
+          <div class="preview-toolbar">
+            <div
+              class="segmented"
+              role="tablist"
+            >
+              <button
+                type="button"
+                :class="{ active: previewMode === 'question' }"
+                @click="previewMode = 'question'"
+              >
+                {{ t('admin.questionPdf') }}
+              </button>
+              <button
+                type="button"
+                :class="{ active: previewMode === 'answer' }"
+                @click="previewMode = 'answer'"
+              >
+                {{ t('admin.answerPdf') }}
+              </button>
+              <button
+                type="button"
+                :class="{ active: previewMode === 'text' }"
+                @click="previewMode = 'text'"
+              >
+                {{ t('admin.structuredText') }}
+              </button>
+            </div>
+            <div class="document-links">
+              <a
+                :href="fullQuestionPdf"
+                target="_blank"
+              >{{
+                t('admin.fullQuestionPaper')
+              }}</a>
+              <a
+                :href="fullAnswerPdf"
+                target="_blank"
+              >{{
+                t('admin.fullAnswerPaper')
+              }}</a>
+            </div>
+          </div>
+          <iframe
+            v-if="previewMode === 'question'"
+            :key="questionPdf"
+            :src="questionPdf"
+            :title="t('admin.questionPdf')"
+          />
+          <iframe
+            v-else-if="previewMode === 'answer'"
+            :key="answerPdf"
+            :src="answerPdf"
+            :title="t('admin.answerPdf')"
+          />
+          <div
+            v-else
+            class="text-editor"
+          >
+            <div class="editor-heading">
+              <div>
+                <strong>{{ t('admin.answerRevision') }}</strong>
+                <span>{{
+                  t('admin.version', {
+                    version: selectedQuestion.answer_structured?.version ?? 0,
+                  })
+                }}</span>
+              </div>
+              <button
+                class="toolbar-button primary"
+                type="button"
+                :disabled="saving"
+                @click="saveAnswerRevision"
+              >
+                {{ saving ? t('admin.saving') : t('admin.saveRevision') }}
+              </button>
+            </div>
+            <label>{{ t('admin.rawText')
+            }}<el-input
+              v-model="rawText"
+              type="textarea"
+              :rows="9"
+            /></label>
+            <label>{{ t('admin.markdown')
+            }}<el-input
+              v-model="markdown"
+              type="textarea"
+              :rows="12"
+            /></label>
+          </div>
+        </template>
+        <div
+          v-else
+          class="preview-empty"
+        >
+          <div
+            class="paper-glyph"
+            aria-hidden="true"
+          />
+          <strong>{{ t('admin.previewTitle') }}</strong>
+          <span>{{ t('admin.previewHint') }}</span>
+        </div>
+      </article>
+    </section>
+  </main>
 </template>
 
 <style scoped>
-.admin-shell {
+.workspace {
+  min-width: 320px;
   min-height: 100dvh;
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
-  background: var(--color-bg);
+  padding: 18px;
+  background: #e9eaec;
+  color: #1d1d1f;
 }
-.admin-sidebar {
-  position: sticky;
-  top: 0;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  padding: 24px 18px;
-  background: #163158;
-  color: #fff;
-}
-.brand-lockup {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 6px 28px;
-}
-.brand-lockup img {
-  border-radius: 16px;
-}
-.brand-lockup strong,
-.brand-lockup span {
-  display: block;
-}
-.brand-lockup strong {
-  font-size: 17px;
-}
-.brand-lockup span {
-  margin-top: 3px;
-  color: #9db8e1;
-  font: 700 10px var(--font-utility);
-  letter-spacing: 0.12em;
-}
-nav {
-  display: grid;
-  gap: 8px;
-}
-nav a {
-  min-height: 48px;
+.toolbar {
+  height: 64px;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 0 14px;
-  border-radius: 14px;
-  color: #bad0ef;
-  text-decoration: none;
-  font-weight: 650;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: rgba(250, 250, 252, 0.84);
+  backdrop-filter: blur(24px) saturate(160%);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
 }
-nav a:hover,
-nav a.active {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-}
-nav a.active::before {
-  content: '';
-  width: 4px;
-  height: 20px;
-  margin-left: -14px;
-  border-radius: 0 4px 4px 0;
-  background: var(--color-pink);
-}
-.sidebar-footer {
-  margin-top: auto;
-  display: grid;
-  gap: 4px;
-}
-.sidebar-footer button {
-  min-height: 44px;
+.window-mark {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: #bad0ef;
-  text-align: left;
-  cursor: pointer;
+  gap: 7px;
+  margin-right: 5px;
 }
-.sidebar-footer button:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+.window-mark span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff5f57;
 }
-.admin-main {
+.window-mark span:nth-child(2) {
+  background: #febc2e;
+}
+.window-mark span:nth-child(3) {
+  background: #28c840;
+}
+.toolbar img {
+  border-radius: 9px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+.title-block {
   min-width: 0;
-  padding: clamp(24px, 4vw, 56px);
+  display: grid;
+  line-height: 1.2;
 }
-.admin-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 24px;
-  align-items: flex-start;
-  margin-bottom: 32px;
+.title-block strong {
+  font-size: 14px;
 }
-.eyebrow,
-.section-index {
-  margin: 0 0 8px;
-  color: var(--color-blue-dark);
-  font: 700 11px var(--font-utility);
-  letter-spacing: 0.12em;
+.title-block span {
+  max-width: 44vw;
+  overflow: hidden;
+  color: #6e6e73;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.admin-header h1 {
-  margin: 0;
-  font-size: clamp(36px, 5vw, 64px);
-  letter-spacing: -0.055em;
-}
-.admin-header p:last-child {
-  margin: 10px 0 0;
-  color: var(--color-muted);
-}
-.status-chip {
+.toolbar-actions {
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
-  border: 1px solid #cfe0d7;
-  border-radius: 999px;
-  background: #f5fff9;
-  color: #277247;
-  font-size: 13px;
-  font-weight: 700;
 }
-.status-chip span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #38a169;
-  box-shadow: 0 0 0 4px #dff5e8;
+.toolbar-button,
+.avatar {
+  min-height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  color: #1d1d1f;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
 }
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 14px;
-  margin: 24px 0;
+.toolbar-button {
+  padding: 0 12px;
 }
-.metric-card,
-.panel {
-  border: 1px solid var(--color-line);
-  border-radius: 22px;
-  background: #fff;
-  box-shadow: 0 9px 28px rgba(52, 83, 132, 0.06);
-}
-.metric-card {
-  min-height: 132px;
-  padding: 20px;
-}
-.metric-card span,
-.metric-card small {
-  display: block;
-  color: var(--color-muted);
-}
-.metric-card strong {
-  display: block;
-  margin: 10px 0 2px;
-  font: 700 clamp(30px, 3vw, 44px) var(--font-utility);
-  color: var(--color-ink);
-}
-.total {
-  background: #2f6fd8;
-}
-.total span,
-.total small,
-.total strong {
+.toolbar-button.primary {
+  border-color: #0071e3;
+  background: #0071e3;
   color: #fff;
 }
-.active-users {
-  background: #fff5c9;
+.toolbar-button:disabled {
+  opacity: 0.46;
+  cursor: default;
 }
-.role-card {
+.avatar {
+  width: 32px;
+  border-radius: 50%;
+  background: linear-gradient(#8e8e93, #636366);
+  color: white;
+}
+.job-pill {
+  max-width: 220px;
   display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 96px;
+  gap: 8px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: #e8f2ff;
+  color: #0066cc;
+  font-size: 11px;
 }
-.role-card .el-icon {
-  flex: 0 0 auto;
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
-  background: #edf4ff;
-  color: var(--color-blue);
-  font-size: 20px;
-}
-.role-card strong {
-  margin: 4px 0 0;
-  font-size: 28px;
-}
-.role-card.yellow .el-icon {
-  background: #fff4bd;
-  color: #a66c00;
-}
-.role-card.pink .el-icon {
-  background: #ffe7ef;
-  color: #c43f6a;
-}
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.75fr);
-  gap: 18px;
-}
-.panel {
-  padding: 24px;
-}
-.panel-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
-}
-.panel h2 {
-  margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.025em;
-}
-.update-panel {
-  position: relative;
+.job-pill span {
   overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.update-panel::after {
-  content: '';
-  position: absolute;
-  right: -30px;
-  top: -34px;
-  width: 120px;
-  height: 120px;
-  border-radius: 40px;
-  background: #dce9ff;
-  transform: rotate(16deg);
+.job-pill.failed {
+  background: #fff0f0;
+  color: #c22323;
 }
-.update-icon {
-  position: relative;
-  z-index: 1;
+.workspace-error {
+  margin: 0;
+  border-radius: 0;
+}
+.browser {
+  height: calc(100dvh - 100px);
+  min-height: 560px;
+  display: grid;
+  grid-template-columns: minmax(240px, 300px) minmax(230px, 290px) minmax(
+      440px,
+      1fr
+    );
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 0 0 14px 14px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.12);
+}
+.source-pane,
+.list-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #d2d2d7;
+  background: rgba(246, 246, 248, 0.9);
+}
+.list-pane {
+  background: #fff;
+}
+.pane-heading {
+  height: 38px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  color: #6e6e73;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pane-heading small {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.07);
+}
+.pane-search {
+  width: auto;
+  margin: 0 10px 9px;
+}
+.tree-scroll,
+.question-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 7px 12px;
+}
+.tree-row {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+.node-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-row small {
+  margin-left: auto;
+  color: #8e8e93;
+}
+.node-icon {
+  width: 14px;
+  height: 11px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: #5aa7f8;
+  box-shadow: inset 0 2px rgba(255, 255, 255, 0.35);
+}
+.node-icon.paper {
+  height: 15px;
+  border: 1px solid #b8b8bd;
+  background: #fff;
+  box-shadow: none;
+}
+.question-list button {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 0;
+  border-bottom: 1px solid #ededf0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.question-list button:hover {
+  background: #f5f5f7;
+}
+.question-list button.selected {
+  border-radius: 7px;
+  background: #0071e3;
+  color: #fff;
+}
+.question-list button strong {
+  font-size: 13px;
+}
+.question-list button span {
+  display: -webkit-box;
+  overflow: hidden;
+  color: #6e6e73;
+  font-size: 11px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.question-list button.selected span {
+  color: rgba(255, 255, 255, 0.78);
+}
+.empty-state,
+.preview-empty {
   display: grid;
   place-items: center;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 22px;
-  border-radius: 16px;
-  background: var(--color-blue);
-  color: #fff;
-  font-size: 22px;
+  align-content: center;
+  gap: 7px;
+  color: #86868b;
+  text-align: center;
 }
-.update-panel > p:not(.section-index):not(.config-note) {
+.empty-state {
+  min-height: 220px;
+  padding: 20px;
+}
+.empty-state span,
+.preview-empty span {
+  max-width: 320px;
+  font-size: 12px;
+}
+.preview-pane {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #d7d7da;
+}
+.preview-toolbar {
   min-height: 48px;
-  color: var(--color-muted);
-}
-.pipeline-stages {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  margin: 22px 0;
-}
-.pipeline-stages span {
-  height: 6px;
-  border-radius: 999px;
-  background: #e3e9f2;
-}
-.pipeline-stages .current,
-.pipeline-stages .done {
-  background: var(--color-blue);
-}
-.job-status {
-  display: grid;
-  gap: 6px;
-  margin: 12px 0 18px;
-}
-.job-status span,
-.config-note {
-  color: var(--color-muted);
-  font-size: 13px;
-}
-.update-panel .el-button {
-  width: 100%;
-  min-height: 48px;
-}
-.question-panel {
-  margin-top: 18px;
-}
-.tree-search {
-  max-width: 340px;
-}
-.tree-spine {
-  min-height: 280px;
-  margin-top: 22px;
-  padding: 10px 10px 10px 20px;
-  border-left: 5px solid #a9c6f7;
-  border-radius: 4px;
-}
-.tree-node {
-  width: 100%;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding-right: 8px;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #c7c7cc;
+  background: rgba(246, 246, 248, 0.92);
 }
-.tree-node small {
-  color: var(--color-muted);
-  font: 600 11px var(--font-utility);
+.segmented {
+  display: flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(118, 118, 128, 0.14);
 }
-@media (max-width: 1100px) {
-  .metrics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.segmented button {
+  min-height: 28px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #3a3a3c;
+  font-size: 11px;
+  cursor: pointer;
+}
+.segmented button.active {
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+.document-links {
+  display: flex;
+  gap: 10px;
+}
+.document-links a {
+  color: #0066cc;
+  font-size: 11px;
+  text-decoration: none;
+}
+.preview-pane iframe {
+  width: 100%;
+  min-height: 0;
+  flex: 1;
+  border: 0;
+  background: #737373;
+}
+.preview-empty {
+  height: 100%;
+}
+.paper-glyph {
+  width: 76px;
+  height: 96px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #fff 0 78%, #e5e5ea 78%);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.text-editor {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 18px;
+  padding: clamp(18px, 3vw, 36px);
+  background: #f5f5f7;
+}
+.editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.editor-heading div {
+  display: grid;
+}
+.editor-heading span {
+  color: #86868b;
+  font-size: 11px;
+}
+.text-editor label {
+  display: grid;
+  gap: 7px;
+  color: #6e6e73;
+  font-size: 11px;
+  font-weight: 700;
+}
+@media (max-width: 1050px) {
+  .browser {
+    grid-template-columns: 240px 250px minmax(420px, 1fr);
+    overflow-x: auto;
   }
-  .metrics-grid .role-card:last-child {
-    grid-column: span 2;
-  }
-  .dashboard-grid {
-    grid-template-columns: 1fr;
+  .job-pill {
+    display: none;
   }
 }
-@media (max-width: 760px) {
-  .admin-shell {
-    display: block;
-  }
-  .admin-sidebar {
-    position: static;
-    width: 100%;
-    height: auto;
-    padding: 14px 16px;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
-  }
-  .brand-lockup {
+@media (max-width: 720px) {
+  .workspace {
     padding: 0;
   }
-  .brand-lockup img {
-    width: 44px;
-    height: 44px;
+  .toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    height: auto;
+    min-height: 58px;
+    border-radius: 0;
   }
-  .brand-lockup div {
+  .window-mark,
+  .title-block span {
     display: none;
   }
-  nav {
-    display: flex;
+  .toolbar-actions {
+    gap: 5px;
   }
-  nav a {
-    min-height: 44px;
-    padding: 0 10px;
-    font-size: 14px;
+  .toolbar-button {
+    padding: 0 8px;
   }
-  nav a.active::before {
-    display: none;
+  .browser {
+    height: auto;
+    min-height: calc(100dvh - 58px);
+    grid-template-columns: 100%;
+    overflow: visible;
+    border-radius: 0;
   }
-  .sidebar-footer {
-    margin: 0 0 0 auto;
-    display: flex;
+  .source-pane,
+  .list-pane {
+    min-height: 280px;
+    max-height: 46dvh;
+    border-right: 0;
+    border-bottom: 1px solid #d2d2d7;
   }
-  .sidebar-footer button {
-    width: 44px;
-    overflow: hidden;
-    white-space: nowrap;
-    padding: 0 12px;
+  .preview-pane {
+    min-height: 70dvh;
   }
-  .admin-main {
-    padding: 24px 16px 40px;
-  }
-  .admin-header {
-    display: block;
-  }
-  .status-chip {
-    width: max-content;
-    margin-top: 18px;
-  }
-  .metrics-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-  .role-card {
-    min-height: 88px;
-  }
-  .metrics-grid .role-card:last-child {
-    grid-column: auto;
-  }
-  .panel-heading {
+  .preview-toolbar {
     align-items: flex-start;
     flex-direction: column;
   }
-  .tree-search {
-    max-width: none;
+  .document-links {
     width: 100%;
+    justify-content: space-between;
   }
-}
-@media (max-width: 450px) {
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
-  .metrics-grid .role-card:last-child {
-    grid-column: auto;
-  }
-  nav a .el-icon {
-    display: none;
-  }
-  .sidebar-footer button:first-child {
-    display: none;
+  .preview-pane iframe {
+    min-height: 62dvh;
   }
 }
 </style>
