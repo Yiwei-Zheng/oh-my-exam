@@ -9,6 +9,13 @@ The frontend calls the backend through versioned HTTP APIs. Neither application
 imports the other's internal code, and production may deploy them together or
 separately without changing this source boundary.
 
+## One-click local start
+
+On Windows, double-click `web/start-dev.cmd` to open the backend and frontend
+development servers in separate terminal windows. Close both windows to stop
+the application. Run `web\start-dev.cmd --check` to validate prerequisites
+without starting either server.
+
 The frontend uses Vue 3, TypeScript, Vite, Element Plus, and ECharts. It provides
 a bilingual email/password login and an administrator workspace. Public
 registration is disabled.
