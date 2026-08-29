@@ -27,7 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     catalog = GlobalCatalog(settings.database_path)
     papers = FileSystemPaperStore(settings.paper_root)
     app_database_path = settings.app_database_path or (
-        settings.project_root / "web" / "backend" / "data" / "application.sqlite3"
+        settings.project_root / "backend" / "data" / "application.sqlite3"
     )
     identity = IdentityStore(app_database_path, settings.jwt_secret)
     identity.bootstrap_admin(settings.bootstrap_admin_email, settings.bootstrap_admin_password)
@@ -181,22 +181,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/v1/math/evaluate")
     def math_evaluate(_: PlaceholderRequest) -> JSONResponse:
         return _placeholder("math_harness", "Implement the restricted expression grammar and sandbox runner.")
-
-    frontend_dist = settings.frontend_dist_path
-    if frontend_dist is not None and (frontend_dist / "index.html").is_file():
-        frontend_dist = frontend_dist.resolve()
-
-        @app.get("/{frontend_path:path}", include_in_schema=False)
-        def frontend(frontend_path: str) -> FileResponse:
-            if frontend_path == "api" or frontend_path.startswith("api/"):
-                raise HTTPException(status_code=404, detail="api_route_not_found")
-            candidate = (frontend_dist / frontend_path).resolve()
-            if candidate.is_relative_to(frontend_dist) and candidate.is_file():
-                return FileResponse(candidate, headers={"Cache-Control": "public, max-age=3600"})
-            return FileResponse(
-                frontend_dist / "index.html",
-                headers={"Cache-Control": "no-cache"},
-            )
 
     return app
 

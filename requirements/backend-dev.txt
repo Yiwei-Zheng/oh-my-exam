@@ -1,2 +1,2 @@
 # Editable backend with test dependencies. Run from the repository root.
--e ./web/backend[test]
+-e ./backend[test]

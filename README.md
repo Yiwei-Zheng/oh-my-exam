@@ -4,7 +4,7 @@ This repository is starting with the local exam paper processing pipeline.
 
 ## Hosted API
 
-The first hosted server slice lives in `web/backend/`. It exposes the existing
+The hosted server lives in `backend/`. It exposes the existing
 admissions-test subject packages through a read-only API and serves locally
 retained PDFs by internal exam and paper ids. Email/password authentication and
 the administrator workspace are available; PostgreSQL, RAGFlow/DeepSeek, and
@@ -17,16 +17,16 @@ repository root. Use `python3` instead of `python` on Linux when required:
 python scripts/setup_env.py --group backend-dev
 ```
 
-Cross-platform web start:
+Start the development API:
 
 ```powershell
 # Windows
-python web\start.py
+python scripts\start_api.py
 ```
 
 ```bash
-# macOS or Linux
-python3 web/start.py
+# Linux
+python3 scripts/start_api.py
 ```
 
 Useful endpoints:
@@ -50,23 +50,23 @@ For public deployment, set a strong `OME_JWT_SECRET`, enable
 
 ## Official Web
 
-The new Vue 3 + TypeScript client environment lives in `web/frontend/`. The
-hosted API is its sibling under `web/backend/`; the two communicate only through
+The Vue 3 + TypeScript client lives in `frontend/`. The hosted API is its sibling
+under `backend/`; the two communicate only through
 versioned HTTP APIs. The old React search implementation has been removed, and
 the replacement product pages have not been implemented yet.
 
 ```powershell
-Set-Location web\frontend
+Set-Location frontend
 npm install
 npm run dev
 ```
 
-Frontend packages and npm cache stay under `web/frontend/`; no global npm
+Frontend packages and npm cache stay under `frontend/`; no global npm
 installation is required.
 
 For a phone or tablet on the same trusted LAN, run `npm run dev:lan` and open
 `http://<computer-ipv4>:4173/`. See
-[`docs/modules/official-web.md`](docs/modules/official-web.md) for the visual
+[`docs/modules/web-application.md`](docs/modules/web-application.md) for the visual
 system, technical boundary, responsive strategy, and verification matrix.
 
 ## Exam Pipeline

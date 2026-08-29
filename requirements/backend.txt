@@ -1,2 +1,2 @@
 # Production backend dependencies. Run from the repository root.
-./web/backend
+./backend

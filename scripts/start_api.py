@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start the prepared Oh My Exam web server on Windows, macOS, or Linux."""
+"""Start the Oh My Exam API for local development."""
 
 from __future__ import annotations
 
@@ -9,14 +9,13 @@ from pathlib import Path
 import sys
 
 
-WEB_ROOT = Path(__file__).resolve().parent
-BACKEND_SOURCE = WEB_ROOT / "backend" / "src"
-FRONTEND_INDEX = WEB_ROOT / "frontend" / "dist" / "index.html"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BACKEND_SOURCE = PROJECT_ROOT / "backend" / "src"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Start the prepared Oh My Exam web server."
+        description="Start the Oh My Exam API."
     )
     parser.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")))
@@ -27,11 +26,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    if not FRONTEND_INDEX.is_file():
-        raise SystemExit(
-            "Frontend build not found: web/frontend/dist/index.html\n"
-            "未找到前端构建：web/frontend/dist/index.html"
-        )
     if not BACKEND_SOURCE.is_dir():
         raise SystemExit("Backend source not found / 未找到后端源码")
 
@@ -45,9 +39,9 @@ def main() -> None:
         print("[OK] Web server is ready / Web 服务器已就绪")
         return
 
-    os.environ.setdefault("OME_WEB_ROOT", str(WEB_ROOT))
+    os.environ.setdefault("OME_PROJECT_ROOT", str(PROJECT_ROOT))
     uvicorn.run(
-        "oh_my_exam_server.main:app",
+        "oh_my_exam.main:app",
         host=args.host,
         port=args.port,
         workers=max(1, args.workers),
