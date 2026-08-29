@@ -64,6 +64,7 @@ uniform vec2 uCore;
 uniform float uCoreRadius;
 uniform float uTime;
 uniform float uFormation;
+uniform float uSettled;
 uniform float uStreamLimit;
 uniform float uPass;
 uniform float uMotionScale;
@@ -114,7 +115,11 @@ vec2 pathPosition(float progress, vec4 pathA, vec4 pathB) {
 
 void main(void) {
   float baseProgress = aMeta.x;
-  float progress = fract(baseProgress + aMeta.z + uTime * aMeta.y * uMotionScale);
+  float infallProgress = fract(baseProgress + aMeta.z + uTime * aMeta.y * uMotionScale);
+  float diskProgress = 0.80 + fract(
+    baseProgress + aMeta.z + uTime * aMeta.y * 0.22 * uMotionScale
+  ) * 0.195;
+  float progress = mix(infallProgress, diskProgress, uSettled);
   vec2 center = pathPosition(progress, aPathA, aPathB);
   vec2 nextCenter = pathPosition(min(progress + 0.0025, 0.999), aPathA, aPathB);
   vec2 tangent = normalize(nextCenter - center + vec2(0.0001));
@@ -129,7 +134,7 @@ void main(void) {
 
   float streamVisible = 1.0 - step(uStreamLimit, aStyle.z);
   float reveal = 1.0 - smoothstep(uFormation - 0.035, uFormation + 0.055, baseProgress);
-  reveal *= smoothstep(0.035, 0.16, uFormation);
+  reveal *= smoothstep(0.18, 0.34, uFormation);
   float edgeFade = smoothstep(0.012, 0.055, progress)
     * (1.0 - smoothstep(0.91, 0.998, progress));
 
@@ -249,16 +254,17 @@ void main(void) {
   float angle = atan(horizonPoint.y, horizonPoint.x);
   float horizon = 1.0 - smoothstep(0.965, 1.015, normalizedRadius);
   float photon = exp(-pow((normalizedRadius - 1.035) / 0.026, 2.0));
-  float lensRadius = length(vec2(diskPoint.x, diskPoint.y / 0.70)) / radius;
-  float lensRing = exp(-pow((lensRadius - 1.18) / 0.105, 2.0));
+  float lensRadius = length(vec2(diskPoint.x, diskPoint.y / 0.78)) / radius;
+  float lensRing = exp(-pow((lensRadius - 1.38) / 0.15, 2.0));
+  float outerLensRing = exp(-pow((lensRadius - 1.67) / 0.23, 2.0));
 
-  float directWidth = radius * (0.045 + 0.018 * abs(diskPoint.x) / radius);
+  float directWidth = radius * (0.068 + 0.024 * abs(diskPoint.x) / radius);
   float directDisk = exp(-pow(diskPoint.y / directWidth, 2.0));
-  directDisk *= smoothstep(5.2, 1.06, abs(diskPoint.x) / radius);
+  directDisk *= smoothstep(5.8, 1.04, abs(diskPoint.x) / radius);
   directDisk *= 1.0 - horizon;
 
-  float farSide = lensRing * smoothstep(-0.22, 0.55, -sin(angle));
-  float nearSide = lensRing * smoothstep(-0.40, 0.72, sin(angle)) * 0.48;
+  float farSide = (lensRing + outerLensRing * 0.72) * smoothstep(-0.22, 0.55, -sin(angle));
+  float nearSide = (lensRing + outerLensRing * 0.58) * smoothstep(-0.40, 0.72, sin(angle)) * 0.62;
   float lensDisk = (farSide + nearSide) * (1.0 - horizon);
 
   float radialGrain = noise(vec2(angle * 18.0, normalizedRadius * 31.0 - uTime * 0.18));
@@ -270,45 +276,44 @@ void main(void) {
   float beaming = 0.03 + 1.36 * pow(smoothstep(-0.42, 0.94, -cos(angle + 0.35)), 2.0);
   float hotCrescent = photon * beaming;
 
-  vec3 ember = vec3(0.78, 0.20, 0.035);
-  vec3 hot = vec3(1.0, 0.46, 0.12);
-  vec3 gold = vec3(1.0, 0.72, 0.34);
+  vec3 ember = vec3(0.84, 0.075, 0.018);
+  vec3 hot = vec3(1.0, 0.25, 0.045);
+  vec3 gold = vec3(1.0, 0.56, 0.16);
   vec3 whiteLight = vec3(1.0, 0.91, 0.72);
   vec3 color = vec3(0.0);
   float alpha = 0.0;
+  float coreFormation = smoothstep(0.0, 0.055, uFormation);
+  float diskFormation = smoothstep(0.15, 0.72, uFormation);
 
   float spaceFalloff = 1.0 - smoothstep(1.1, 6.6, distanceToCore / radius);
   float nebula = noise(vScene * 0.006 + vec2(uTime * 0.006, 0.0));
-  float spaceAlpha = spaceFalloff * mix(0.80, 0.14, uTheme) * (0.70 + nebula * 0.30);
+  float spaceAlpha = spaceFalloff * mix(0.80, 0.14, uTheme) * (0.70 + nebula * 0.30) * coreFormation;
   color += vec3(0.004, 0.006, 0.012) * spaceAlpha;
   alpha += spaceAlpha;
 
-  float diskLight = directDisk * (0.58 + 0.52 * beaming);
+  float diskLight = directDisk * (0.58 + 0.52 * beaming) * diskFormation;
+  lensDisk *= diskFormation;
   color += mix(ember, gold, turbulence) * diskLight * 1.18;
   color += mix(hot, whiteLight, farSide) * lensDisk * 0.98;
   alpha += diskLight * 0.82 + lensDisk * 0.76;
 
-  float diffuseGlow = exp(-pow((normalizedRadius - 1.20) / 0.34, 2.0));
+  float diffuseGlow = exp(-pow((normalizedRadius - 1.38) / 0.48, 2.0)) * diskFormation;
   color += ember * diffuseGlow * 0.17;
   alpha += diffuseGlow * 0.10;
 
-  color += hot * photon * 0.20;
-  color += whiteLight * hotCrescent * 1.34;
-  alpha += photon * 0.30 + hotCrescent * 0.74;
+  color += hot * photon * 0.20 * diskFormation;
+  color += whiteLight * hotCrescent * 1.34 * diskFormation;
+  alpha += (photon * 0.30 + hotCrescent * 0.74) * diskFormation;
 
   float starCell = hash(floor(vScene * 0.20));
   float star = step(0.9965, starCell) * pow(hash(floor(vScene * 0.43)), 4.0);
-  star *= smoothstep(1.25, 2.0, normalizedRadius) * spaceFalloff;
+  star *= smoothstep(1.25, 2.0, normalizedRadius) * spaceFalloff * coreFormation;
   color += vec3(0.72, 0.82, 1.0) * star;
   alpha += star * 0.84;
 
   vec3 core = mix(vec3(0.003, 0.004, 0.008), vec3(0.0), smoothstep(0.0, 1.0, normalizedRadius));
-  color = mix(color, core, horizon);
-  alpha = mix(alpha, 1.0, horizon);
-
-  float formationAlpha = smoothstep(0.0, 0.24, uFormation);
-  alpha *= formationAlpha;
-  color *= formationAlpha;
+  color = mix(color, core * coreFormation, horizon);
+  alpha = mix(alpha, coreFormation, horizon);
   finalColor = vec4(color * alpha, alpha);
 }
 `
@@ -514,6 +519,7 @@ function makeUniforms(pass = 0) {
     uCoreRadius: { value: 100, type: 'f32' },
     uTime: { value: 0, type: 'f32' },
     uFormation: { value: 0, type: 'f32' },
+    uSettled: { value: 0, type: 'f32' },
     uStreamLimit: { value: 16, type: 'f32' },
     uPass: { value: pass, type: 'f32' },
     uMotionScale: { value: 1, type: 'f32' },
@@ -587,6 +593,8 @@ export async function createBlackHoleRenderer(
   let state = initialState
   let elapsed = 0
   let formation = state.stage === 'ready' ? 1 : 0
+  let formationAge = state.stage === 'ready' ? 4.4 : 0
+  let settled = state.stage === 'ready' ? 1 : 0
   let destroyed = false
 
   const resize = () => {
@@ -599,7 +607,7 @@ export async function createBlackHoleRenderer(
       height * (mobile ? 0.43 : 0.38),
     ])
     const viewport = new Float32Array([width, height])
-    const radius = Math.min(width, height) * (mobile ? 0.15 : 0.115)
+    const radius = Math.min(width, height) * (mobile ? 0.185 : 0.145)
 
     ;[backUniforms, frontUniforms, coreUniforms].forEach((uniforms) => {
       uniforms.uniforms.uViewport = viewport
@@ -615,6 +623,7 @@ export async function createBlackHoleRenderer(
     ;[backUniforms, frontUniforms, coreUniforms].forEach((uniforms) => {
       uniforms.uniforms.uTime = elapsed
       uniforms.uniforms.uFormation = formation
+      uniforms.uniforms.uSettled = settled
       uniforms.uniforms.uTheme = theme
       uniforms.uniforms.uMotionScale = motionScale
     })
@@ -623,11 +632,19 @@ export async function createBlackHoleRenderer(
   const tick = (ticker: { deltaMS: number }) => {
     if (state.paused || destroyed) return
     const deltaSeconds = Math.min(ticker.deltaMS / 1000, 0.05)
-    if (!state.reducedMotion && state.stage === 'ready') {
+    if (!state.reducedMotion && state.stage !== 'dormant') {
       elapsed += deltaSeconds * 0.6
     }
+    if (!state.reducedMotion && state.stage !== 'dormant') {
+      formationAge = Math.min(formationAge + deltaSeconds, 4.4)
+      const settleProgress = Math.max(
+        0,
+        Math.min(1, (formationAge - 2.65) / 1.35),
+      )
+      settled = settleProgress * settleProgress * (3 - 2 * settleProgress)
+    }
     const formationTarget = state.stage === 'dormant' ? 0 : 1
-    const formationSpeed = state.stage === 'dormant' ? 4.2 : 1.15
+    const formationSpeed = state.stage === 'dormant' ? 4.2 : 0.42
     formation +=
       Math.sign(formationTarget - formation) *
       Math.min(
@@ -640,7 +657,15 @@ export async function createBlackHoleRenderer(
   const setState = (nextState: BlackHoleRendererState) => {
     const enteringReady = state.stage !== 'ready' && nextState.stage === 'ready'
     state = nextState
-    if (enteringReady && nextState.reducedMotion) formation = 1
+    if (nextState.stage === 'dormant') {
+      formationAge = 0
+      settled = 0
+    }
+    if (enteringReady && nextState.reducedMotion) {
+      formation = 1
+      formationAge = 4.4
+      settled = 1
+    }
     syncUniforms()
 
     if (state.paused || state.reducedMotion) {

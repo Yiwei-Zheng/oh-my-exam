@@ -27,6 +27,9 @@ or backend integration.
 - The black hole is rendered in an astrophotographic style: an inclined dark
   core, asymmetric orange-white accretion light, gravitational lensing arcs,
   sparse stars, and a dense perspective sheet of academic characters.
+- Formation begins with the isolated core, attracts characters from all sides
+  for about four seconds, then stops external inflow and retains only slow motion
+  inside the enlarged red accretion disk.
 
 ## Interaction and accessibility
 

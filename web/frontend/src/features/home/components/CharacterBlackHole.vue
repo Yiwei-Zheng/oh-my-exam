@@ -148,8 +148,8 @@ onBeforeUnmount(() => {
         class="black-hole__fallback-space"
         cx="240"
         cy="266"
-        rx="330"
-        ry="285"
+        rx="390"
+        ry="330"
       />
 
       <g class="black-hole__fallback-streams">
@@ -196,24 +196,24 @@ onBeforeUnmount(() => {
         class="black-hole__fallback-halo"
         cx="240"
         cy="266"
-        rx="105"
-        ry="85"
+        rx="168"
+        ry="132"
         transform="rotate(-19 240 266)"
       />
       <ellipse
         class="black-hole__fallback-ring"
         cx="240"
         cy="266"
-        rx="87"
-        ry="69"
+        rx="124"
+        ry="96"
         transform="rotate(-19 240 266)"
       />
       <ellipse
         class="black-hole__fallback-core"
         cx="240"
         cy="266"
-        rx="80"
-        ry="63"
+        rx="104"
+        ry="81"
         transform="rotate(-19 240 266)"
       />
     </svg>
@@ -310,15 +310,15 @@ onBeforeUnmount(() => {
 
 .black-hole__fallback-disk {
   fill: none;
-  stroke: #ff8b30;
-  stroke-width: 13;
+  stroke: #f13718;
+  stroke-width: 24;
   filter: url('#fallback-glow');
 }
 
 .black-hole__fallback-halo {
   fill: none;
-  stroke: var(--color-hole-hot);
-  stroke-width: 32;
+  stroke: #e93418;
+  stroke-width: 44;
   filter: url('#fallback-glow');
 }
 
@@ -338,9 +338,9 @@ onBeforeUnmount(() => {
   z-index: 3;
   top: 38%;
   left: 24%;
-  width: 23vmin;
-  max-width: 230px;
-  min-width: 112px;
+  width: 30vmin;
+  max-width: 300px;
+  min-width: 140px;
   aspect-ratio: 1;
   border-radius: 50%;
   transform: translate3d(-50%, -50%, 0);
@@ -352,8 +352,8 @@ onBeforeUnmount(() => {
   .black-hole__target {
     top: 43%;
     left: 42%;
-    width: 30vmin;
-    min-width: 96px;
+    width: 37vmin;
+    min-width: 118px;
   }
 
   .black-hole__fallback {

@@ -19,7 +19,7 @@ export const messages = {
     },
     home: {
       blackHoleAriaLabel:
-        'Academic formulas, equations, symbols, and code flow from three directions into a black hole.',
+        'Academic formulas, equations, symbols, and code converge from all directions into a black hole and settle into its accretion disk.',
       accessibleHeadline:
         "OH, I'M answering faster, getting higher scores, learning deeper, and thinking clearer.",
     },
@@ -46,7 +46,8 @@ export const messages = {
       skipToContent: '跳到主要内容',
     },
     home: {
-      blackHoleAriaLabel: '学术公式、方程、符号和代码从三个方向流入黑洞。',
+      blackHoleAriaLabel:
+        '学术公式、方程、符号和代码从四面八方汇入黑洞，并形成吸积盘。',
       accessibleHeadline:
         "OH, I'M：更快作答、取得更高分、学得更深入、思考更清晰。",
     },
