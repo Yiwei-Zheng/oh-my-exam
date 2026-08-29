@@ -10,6 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
   "argon2-cffi>=23.1,<26",
   "fastapi>=0.115,<1",
+  "limits>=5.8,<6",
   "Pillow>=10,<13",
   "PyJWT>=2.10,<3",
   "pymupdf>=1.24,<2",
@@ -39,6 +40,9 @@ ocr = [
   "onnxruntime>=1.20,<2",
   "pytesseract>=0.3.10,<1",
   "rapidocr>=3,<4",
+]
+rate-limit-redis = [
+  "limits[redis]>=5.8,<6",
 ]
 
 [tool.setuptools.packages.find]

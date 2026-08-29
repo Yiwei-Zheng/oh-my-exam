@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .catalog import CatalogNotFoundError, GlobalCatalog
 from .config import Settings
-from .identity import IdentityStore, SESSION_COOKIE, User
+from .identity import DuplicateUserError, IdentityStore, InvalidUserError, SESSION_COOKIE, User
+from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_document import QuestionDocumentError, crop_question_pdf
 from .update_jobs import UpdateJobManager
@@ -20,6 +23,12 @@ class PlaceholderRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class CreateUserRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=15, max_length=1024)
+    role: Literal["student", "teacher", "admin"]
 
 
 class AnswerRevisionRequest(BaseModel):
@@ -36,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     identity = IdentityStore(app_database_path, settings.jwt_secret)
     identity.bootstrap_admin(settings.bootstrap_admin_email, settings.bootstrap_admin_password)
+    login_limiter = LoginRateLimiter(settings.login_rate_limit_storage_uri)
     updates = UpdateJobManager(app_database_path, settings.question_update_command)
     app = FastAPI(title="Oh-My-Exam API", version="0.1.0")
 
@@ -134,10 +144,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return FileResponse(path, media_type="application/pdf", filename=path.name)
 
     @app.post("/api/v1/auth/login")
-    def login(payload: LoginRequest, response: Response) -> dict[str, object]:
+    def login(payload: LoginRequest, request: Request, response: Response) -> dict[str, object]:
+        client_ip = "unknown" if request.client is None else request.client.host
+        try:
+            login_limiter.check(payload.email, client_ip)
+        except LoginRateLimited as exc:
+            raise HTTPException(
+                status_code=429,
+                detail="too_many_login_attempts",
+                headers={"Retry-After": str(exc.retry_after)},
+            ) from exc
         user = identity.authenticate(payload.email, payload.password)
         if user is None:
             raise HTTPException(status_code=401, detail="invalid_credentials")
+        login_limiter.reset_account(payload.email)
         response.set_cookie(
             SESSION_COOKIE,
             identity.issue_session(user),
@@ -160,6 +180,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/admin/statistics")
     def admin_statistics(_: User = Depends(admin_user)) -> dict[str, object]:
         return identity.dashboard_statistics()
+
+    @app.get("/api/v1/admin/users")
+    def admin_users(_: User = Depends(admin_user)) -> dict[str, object]:
+        return {"users": [user.as_dict() for user in identity.list_users()]}
+
+    @app.post("/api/v1/admin/users", status_code=201)
+    def admin_create_user(
+        payload: CreateUserRequest,
+        _: User = Depends(admin_user),
+    ) -> dict[str, object]:
+        try:
+            user = identity.create_user(payload.email, payload.password, payload.role)
+        except DuplicateUserError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except InvalidUserError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return {"user": user.as_dict()}
 
     @app.get("/api/v1/admin/question-tree")
     def admin_question_tree(_: User = Depends(admin_user)) -> list[dict[str, object]]:

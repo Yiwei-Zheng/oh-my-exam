@@ -19,6 +19,7 @@ class Settings:
     bootstrap_admin_email: str = ""
     bootstrap_admin_password: str = ""
     question_update_command: tuple[str, ...] = ()
+    login_rate_limit_storage_uri: str = "memory://"
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -69,4 +70,5 @@ class Settings:
             os.environ.get("OME_BOOTSTRAP_ADMIN_EMAIL", ""),
             os.environ.get("OME_BOOTSTRAP_ADMIN_PASSWORD", ""),
             command,
+            os.environ.get("OME_LOGIN_RATE_LIMIT_STORAGE_URI", "memory://"),
         )

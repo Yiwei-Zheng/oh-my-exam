@@ -20,9 +20,13 @@ Start the API from the repository root:
 ```powershell
 $env:OME_BOOTSTRAP_ADMIN_EMAIL = 'admin@example.com'
 $env:OME_BOOTSTRAP_ADMIN_PASSWORD = 'replace-this-development-password'
-$env:OME_JWT_SECRET = 'replace-with-at-least-32-random-bytes'
 python scripts\start_api.py
 ```
+
+The bootstrap variables are needed only until the first administrator exists.
+Local development creates and reuses `backend/data/application.secret` when
+`OME_JWT_SECRET` is omitted. Production must provide an explicit secret through
+the protected systemd environment file.
 
 Start Vite from `frontend/`:
 

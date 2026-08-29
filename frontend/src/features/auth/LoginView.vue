@@ -33,10 +33,13 @@ async function submit() {
       typeof route.query.redirect === 'string' ? route.query.redirect : '/admin'
     await router.replace(user.role === 'admin' ? destination : '/login')
   } catch (caught) {
-    error.value =
-      caught instanceof ApiError && caught.status === 401
-        ? t('auth.invalidCredentials')
-        : t('auth.unavailable')
+    if (caught instanceof ApiError && caught.status === 401) {
+      error.value = t('auth.invalidCredentials')
+    } else if (caught instanceof ApiError && caught.status === 429) {
+      error.value = t('auth.rateLimited')
+    } else {
+      error.value = t('auth.unavailable')
+    }
   } finally {
     loading.value = false
   }

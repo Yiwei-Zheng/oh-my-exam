@@ -21,7 +21,11 @@ architecture must allow new exam families without global rewrites.
 - Roles are student, teacher, and administrator.
 - Public registration is disabled until a later requirement enables it.
 - Bootstrap administrator credentials come from deployment configuration.
+- Bootstrap creates the first administrator only; authenticated administrators
+  can create additional administrator, teacher, and student accounts.
 - Passwords use a memory-hard password hash and are never stored in plaintext.
+- New managed accounts require at least 15 password characters. Login attempts
+  are limited independently by normalized account and client IP.
 - Browser authentication uses secure HttpOnly cookies; credentials and bearer
   tokens are not stored in frontend source or local storage.
 - Source PDFs are protected resources. The browser receives internal document

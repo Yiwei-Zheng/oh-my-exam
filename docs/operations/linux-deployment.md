@@ -15,6 +15,11 @@ cd /srv/oh-my-exam/frontend && npm ci && npm run build
 
 Copy `.env.example` to `/etc/oh-my-exam/oh-my-exam.env`, set production secrets, and set `OME_SECURE_COOKIES=true`. The environment file must be readable only by the service account and administrators.
 
+The reference one-worker service uses process-local login rate-limit storage.
+Before configuring multiple API workers, install
+`backend[rate-limit-redis]`, run Redis as a native or managed service, and set
+`OME_LOGIN_RATE_LIMIT_STORAGE_URI` to its protected Redis URI.
+
 Install `deploy/systemd/oh-my-exam-api.service` and adapt the domain in `deploy/caddy/Caddyfile`. Then run:
 
 ```bash

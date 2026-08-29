@@ -36,11 +36,20 @@ class User:
         }
 
 
+class DuplicateUserError(Exception):
+    pass
+
+
+class InvalidUserError(Exception):
+    pass
+
+
 class IdentityStore:
     def __init__(self, database_path: Path, jwt_secret: str = "") -> None:
         self.database_path = database_path.resolve()
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.passwords = PasswordHasher()
+        self._dummy_password_hash = self.passwords.hash(secrets.token_urlsafe(32))
         self.jwt_secret = jwt_secret or self._load_or_create_secret()
         self._migrate()
 
@@ -57,17 +66,44 @@ class IdentityStore:
                 (normalized, self.passwords.hash(password)),
             )
 
+    def create_user(self, email: str, password: str, role: str) -> User:
+        normalized = email.strip().lower()
+        if "@" not in normalized or len(normalized) > 254:
+            raise InvalidUserError("invalid_email")
+        if role not in ROLES:
+            raise InvalidUserError("invalid_role")
+        if len(password) < 15:
+            raise InvalidUserError("password_too_short")
+        try:
+            with self._connect() as connection:
+                cursor = connection.execute(
+                    "INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)",
+                    (normalized, self.passwords.hash(password), role),
+                )
+                row = connection.execute("SELECT * FROM users WHERE id = ?", (cursor.lastrowid,)).fetchone()
+        except sqlite3.IntegrityError as exc:
+            raise DuplicateUserError("email_already_exists") from exc
+        return self._user(row)
+
+    def list_users(self) -> list[User]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM users ORDER BY created_at DESC, id DESC"
+            ).fetchall()
+        return [self._user(row) for row in rows]
+
     def authenticate(self, email: str, password: str) -> User | None:
         normalized = self._normalize_email(email)
         with self._connect() as connection:
             row = connection.execute("SELECT * FROM users WHERE email = ?", (normalized,)).fetchone()
-            if row is None or not row["is_active"]:
-                return None
             try:
-                valid = self.passwords.verify(row["password_hash"], password)
+                valid = self.passwords.verify(
+                    self._dummy_password_hash if row is None else row["password_hash"],
+                    password,
+                )
             except VerifyMismatchError:
                 return None
-            if not valid:
+            if row is None or not row["is_active"] or not valid:
                 return None
             now = self._now()
             connection.execute("UPDATE users SET last_login_at = ? WHERE id = ?", (now, row["id"]))

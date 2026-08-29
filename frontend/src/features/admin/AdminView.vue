@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElAlert, ElInput, ElSkeleton, ElTree } from 'element-plus'
+import {
+  ElAlert,
+  ElDialog,
+  ElInput,
+  ElOption,
+  ElSelect,
+  ElSkeleton,
+  ElTree,
+} from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
@@ -49,6 +57,14 @@ interface UpdateJob {
   message: string
 }
 
+interface AdminUser {
+  id: number
+  email: string
+  role: 'student' | 'teacher' | 'admin'
+  is_active: boolean
+  created_at: string
+}
+
 const { t } = useI18n()
 const { locale, toggleLocale } = useLocale()
 const router = useRouter()
@@ -70,6 +86,13 @@ const updateJob = ref<UpdateJob | null>(null)
 const rawText = ref('')
 const markdown = ref('')
 const saving = ref(false)
+const usersOpen = ref(false)
+const usersLoading = ref(false)
+const users = ref<AdminUser[]>([])
+const creatingUser = ref(false)
+const newUserEmail = ref('')
+const newUserPassword = ref('')
+const newUserRole = ref<AdminUser['role']>('student')
 let pollTimer: number | undefined
 
 const visibleQuestions = computed(() => {
@@ -214,6 +237,47 @@ async function logout() {
   await router.replace('/login')
 }
 
+async function openUsers() {
+  usersOpen.value = true
+  usersLoading.value = true
+  try {
+    users.value = (
+      await apiRequest<{ users: AdminUser[] }>('/api/v1/admin/users')
+    ).users
+  } catch (caught) {
+    error.value =
+      caught instanceof ApiError ? caught.detail : t('admin.usersLoadFailed')
+  } finally {
+    usersLoading.value = false
+  }
+}
+
+async function createUser() {
+  if (!newUserEmail.value || newUserPassword.value.length < 15) return
+  creatingUser.value = true
+  try {
+    const created = await apiRequest<{ user: AdminUser }>(
+      '/api/v1/admin/users',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email: newUserEmail.value,
+          password: newUserPassword.value,
+          role: newUserRole.value,
+        }),
+      },
+    )
+    users.value = [created.user, ...users.value]
+    newUserEmail.value = ''
+    newUserPassword.value = ''
+  } catch (caught) {
+    error.value =
+      caught instanceof ApiError ? caught.detail : t('admin.userCreateFailed')
+  } finally {
+    creatingUser.value = false
+  }
+}
+
 onMounted(loadWorkspace)
 watch(treeSearch, (value) => treeRef.value?.filter(value))
 onBeforeUnmount(() => {
@@ -256,6 +320,13 @@ onBeforeUnmount(() => {
           @click="startUpdate"
         >
           {{ t('admin.runPipeline') }}
+        </button>
+        <button
+          class="toolbar-button"
+          type="button"
+          @click="openUsers"
+        >
+          {{ t('admin.manageUsers') }}
         </button>
         <button
           class="toolbar-button"
@@ -471,6 +542,72 @@ onBeforeUnmount(() => {
         </div>
       </article>
     </section>
+
+    <el-dialog
+      v-model="usersOpen"
+      class="users-dialog"
+      :title="t('admin.manageUsers')"
+      width="min(680px, calc(100vw - 28px))"
+    >
+      <form
+        class="create-user"
+        @submit.prevent="createUser"
+      >
+        <el-input
+          v-model="newUserEmail"
+          type="email"
+          :placeholder="t('auth.email')"
+        />
+        <el-input
+          v-model="newUserPassword"
+          type="password"
+          show-password
+          :placeholder="t('admin.newUserPassword')"
+        />
+        <el-select
+          v-model="newUserRole"
+          :aria-label="t('admin.newUserRole')"
+        >
+          <el-option
+            v-for="role in ['student', 'teacher', 'admin']"
+            :key="role"
+            :label="t(`roles.${role}`)"
+            :value="role"
+          />
+        </el-select>
+        <button
+          class="toolbar-button primary"
+          type="submit"
+          :disabled="creatingUser || newUserPassword.length < 15"
+        >
+          {{ creatingUser ? t('admin.creatingUser') : t('admin.createUser') }}
+        </button>
+      </form>
+      <p class="password-hint">
+        {{ t('admin.passwordHint') }}
+      </p>
+      <el-skeleton
+        v-if="usersLoading"
+        :rows="4"
+        animated
+      />
+      <div
+        v-else
+        class="user-list"
+      >
+        <div
+          v-for="user in users"
+          :key="user.id"
+          class="user-row"
+        >
+          <span class="user-avatar">{{ user.email.slice(0, 1).toUpperCase() }}</span>
+          <span><strong>{{ user.email }}</strong><small>{{ t(`roles.${user.role}`) }}</small></span>
+          <span :class="['user-status', { inactive: !user.is_active }]">
+            {{ user.is_active ? t('admin.activeUser') : t('admin.inactiveUser') }}
+          </span>
+        </div>
+      </div>
+    </el-dialog>
   </main>
 </template>
 
@@ -819,6 +956,59 @@ onBeforeUnmount(() => {
   font-size: 11px;
   font-weight: 700;
 }
+.create-user {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(180px, 1fr) 130px auto;
+  gap: 8px;
+}
+.password-hint {
+  margin: 8px 0 18px;
+  color: #86868b;
+  font-size: 11px;
+}
+.user-list {
+  max-height: 46dvh;
+  overflow: auto;
+  border-top: 1px solid #e5e5ea;
+}
+.user-row {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #ededf0;
+}
+.user-row > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+}
+.user-row strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+.user-row small {
+  color: #86868b;
+}
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f2ff;
+  color: #0066cc;
+  font-weight: 700;
+}
+.user-status {
+  margin-left: auto;
+  color: #248a3d;
+  font-size: 11px;
+}
+.user-status.inactive {
+  color: #86868b;
+}
 @media (max-width: 1050px) {
   .browser {
     grid-template-columns: 240px 250px minmax(420px, 1fr);
@@ -849,6 +1039,9 @@ onBeforeUnmount(() => {
   }
   .toolbar-button {
     padding: 0 8px;
+  }
+  .create-user {
+    grid-template-columns: 1fr;
   }
   .browser {
     height: auto;

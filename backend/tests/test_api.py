@@ -195,6 +195,33 @@ def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
     assert stats.json()["users_total"] == 1
     assert stats.json()["active_7d"] == 1
 
+    created = client.post(
+        "/api/v1/admin/users",
+        json={
+            "email": "second-admin@example.com",
+            "password": "a-second-long-test-password",
+            "role": "admin",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["user"]["role"] == "admin"
+    users = client.get("/api/v1/admin/users")
+    assert users.status_code == 200
+    assert {user["email"] for user in users.json()["users"]} == {
+        "admin@example.com",
+        "second-admin@example.com",
+    }
+    assert "password" not in created.json()["user"]
+    duplicate = client.post(
+        "/api/v1/admin/users",
+        json={
+            "email": "SECOND-ADMIN@example.com",
+            "password": "another-long-test-password",
+            "role": "admin",
+        },
+    )
+    assert duplicate.status_code == 409
+
     tree = client.get("/api/v1/admin/question-tree")
     assert tree.status_code == 200
     paper_node = tree.json()[0]["children"][0]["children"][0]["children"][0]["children"][0]["children"][0]
@@ -219,6 +246,26 @@ def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
 
     assert client.post("/api/v1/auth/logout").status_code == 204
     assert client.get("/api/v1/me").status_code == 401
+
+
+def test_login_endpoint_throttles_repeated_account_guesses(tmp_path: Path) -> None:
+    client = _client(tmp_path, with_admin=True)
+
+    for _ in range(5):
+        response = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@example.com", "password": "wrong"},
+        )
+        assert response.status_code == 401
+        assert response.json() == {"detail": "invalid_credentials"}
+
+    throttled = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "a-long-test-password"},
+    )
+    assert throttled.status_code == 429
+    assert throttled.json() == {"detail": "too_many_login_attempts"}
+    assert 1 <= int(throttled.headers["retry-after"]) <= 15 * 60
 
 
 def test_paper_store_rejects_globs_and_paths(tmp_path: Path) -> None:
