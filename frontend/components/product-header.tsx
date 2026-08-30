@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -27,9 +28,15 @@ export function ProductHeader() {
         href={user?.role === 'admin' ? '/admin' : '/questions'}
         className="mr-auto flex items-center gap-2 font-semibold tracking-tight"
       >
-        <span className="grid size-7 place-items-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
-          O
-        </span>
+        <Image
+          src="/brand/favicon-mark.png"
+          alt=""
+          width={28}
+          height={28}
+          aria-hidden="true"
+          className="size-7"
+          priority
+        />
         <span>Oh My Exam</span>
       </Link>
       {user?.role === 'admin' && (
