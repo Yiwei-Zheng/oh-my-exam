@@ -1,12 +1,13 @@
 # Oh My Exam Frontend
 
-Vue 3 + TypeScript 浏览器客户端，包含双语登录页和管理员后台。后台提供用户统计、活跃度、树状题库浏览及题库更新任务入口，暂不开放注册。
+Next.js + TypeScript + shadcn 浏览器客户端. 设计系统固定使用 preset
+`b27I38wi` (Rhea, neutral, blue, Figtree, Hugeicons). 管理后台包含题目搜索、
+AI Token 账单、题目资产盘点和账号管理.
 
 ## 环境
 
-- Node.js 20.17.0, 版本记录在 `.node-version`
+- Node.js 20.19 或更高版本
 - npm
-- Element Plus 和 ECharts
 - 后端默认运行于 `http://127.0.0.1:8000`
 
 所有前端依赖安装在项目内的 `node_modules/`, npm 缓存写入项目内的
@@ -20,16 +21,15 @@ npm run dev
 npm run dev:lan
 npm run lint
 npm run typecheck
-npm test
 npm run build
 ```
 
-开发服务器把 `/api` 转发到后端. 如需修改目标地址, 设置 `VITE_API_PROXY_TARGET`.
+开发服务器把 `/api` 转发到后端. 如需修改目标地址, 设置 `OME_API_PROXY_TARGET`.
 
 ## 约定
 
-- `src/router/`: URL 与页面路由边界.
-- `src/stores/`: Pinia 客户端状态.
-- `src/i18n/`: 中英文翻译资源.
-- 后续业务模块按 feature 建目录, 不在 `App.vue` 中堆积业务逻辑.
+- `app/`: App Router 页面边界.
+- `components/ui/`: shadcn 组件源码.
+- `components/admin/`: 管理端模块.
+- `components/locale-provider.tsx`: 中英文文案与语言状态.
 - 前端只通过版本化 HTTP API 使用后端能力.

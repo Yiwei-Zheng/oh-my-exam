@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start the API and Vite development server as one local process group."""
+"""Start the API and Next.js development server as one local process group."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def require_runtime() -> str:
         )
     npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
     if npm is None:
-        raise RuntimeError("npm was not found on PATH. Install Node.js 20.17 or later.")
+        raise RuntimeError("npm was not found on PATH. Install Node.js 20.19 or later.")
     if not (FRONTEND_ROOT / "node_modules").is_dir():
         raise RuntimeError("Frontend dependencies not found. Run: cd frontend && npm install")
     return npm
@@ -124,15 +124,14 @@ def main() -> int:
         "run",
         "dev",
         "--",
-        "--host",
+        "--hostname",
         host,
         "--port",
         str(args.frontend_port),
-        "--strictPort",
     ]
     environment = os.environ.copy()
     environment.setdefault(
-        "VITE_API_PROXY_TARGET", f"http://127.0.0.1:{args.api_port}"
+        "OME_API_PROXY_TARGET", f"http://127.0.0.1:{args.api_port}"
     )
 
     print(f"Frontend: http://127.0.0.1:{args.frontend_port}")

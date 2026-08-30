@@ -212,6 +212,20 @@ def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
     assert stats.json()["users_total"] == 1
     assert stats.json()["active_7d"] == 1
 
+    assets = client.get("/api/v1/admin/assets")
+    assert assets.status_code == 200
+    assert assets.json()["questions"] == 1
+    assert assets.json()["papers"] == 1
+    assert assets.json()["source_documents"] == 2
+    assert assets.json()["searchable_coverage"] == 1.0
+    assert assets.json()["answer_coverage"] == 1.0
+
+    ai_usage = client.get("/api/v1/admin/ai-usage")
+    assert ai_usage.status_code == 200
+    assert ai_usage.json()["calls"] == 0
+    assert ai_usage.json()["cost_microusd"] == 0
+    assert ai_usage.json()["items"] == []
+
     created = client.post(
         "/api/v1/admin/users",
         json={

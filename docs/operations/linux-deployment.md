@@ -20,18 +20,22 @@ Before configuring multiple API workers, install
 `backend[rate-limit-redis]`, run Redis as a native or managed service, and set
 `OME_LOGIN_RATE_LIMIT_STORAGE_URI` to its protected Redis URI.
 
-Install `deploy/systemd/oh-my-exam-api.service` and adapt the domain in `deploy/caddy/Caddyfile`. Then run:
+Install both services from `deploy/systemd/` and adapt the domain in
+`deploy/caddy/Caddyfile`. Then run:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now oh-my-exam-api
+sudo systemctl enable --now oh-my-exam-api oh-my-exam-web
 sudo systemctl reload caddy
 curl --fail https://exam.example.com/api/v1/health
 ```
 
 ## Upgrade
 
-Stop the API, back up `backend/data`, update source and dependencies, run `backend/scripts/migrate_catalog_schema.py` against the active catalog, rebuild the frontend, then restart the API. Keep the backup until health, login, tree browsing, question PDF and pipeline activation checks pass.
+Stop both services, back up `backend/data`, update source and dependencies, run
+`backend/scripts/migrate_catalog_schema.py` against the active catalog, rebuild
+the frontend, then restart both services. Keep the backup until health, login,
+tree browsing, question PDF and pipeline activation checks pass.
 
 ## Backup and restore
 

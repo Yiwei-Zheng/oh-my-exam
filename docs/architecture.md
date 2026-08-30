@@ -5,7 +5,7 @@
 Oh-My-Exam is a modular monolith with a browser client and a server application separated by `/api/v1`. The frontend never imports backend code. FastAPI owns authentication, catalog reads and corrections, PDF delivery and pipeline job control. Pipeline modules also expose CLI entry points and do not depend on the GUI.
 
 ```text
-Browser -> Caddy -> frontend/dist
+Browser -> Caddy -> Next.js web server
                  -> /api/v1 -> FastAPI
                                -> backend/data/application.sqlite3
                                -> backend/data/databases/global_exam_catalog.sqlite
@@ -23,7 +23,7 @@ this release.
 
 ```text
 oh-my-exam/
-├── frontend/                 # Vue, TypeScript, i18n and browser-only adapters
+├── frontend/                 # Next.js, React, shadcn, i18n and browser adapters
 ├── backend/
 │   ├── config/exams/         # maintained pipeline configuration
 │   ├── resources/            # maintained source catalogs and syllabuses

@@ -53,6 +53,36 @@ class GlobalCatalog:
             for row in rows
         ]
 
+    def asset_inventory(self) -> dict[str, object]:
+        """Return publication counts and coverage without exposing storage paths."""
+        with closing(self._connect()) as connection:
+            counts = {
+                key: self._count_table(connection, table)
+                for key, table in (
+                    ("exam_programs", "exam_programs"),
+                    ("papers", "papers"),
+                    ("questions", "questions"),
+                    ("source_documents", "paper_documents"),
+                )
+            }
+            searchable = int(connection.execute(
+                """
+                SELECT COUNT(DISTINCT question_id) FROM question_texts
+                WHERE text_kind = 'search' AND trim(content) != ''
+                """
+            ).fetchone()[0]) if self._table_exists(connection, "question_texts") else 0
+            answered = int(connection.execute(
+                "SELECT COUNT(DISTINCT question_id) FROM answers"
+            ).fetchone()[0]) if self._table_exists(connection, "answers") else 0
+        question_total = counts["questions"]
+        return counts | {
+            "searchable_questions": searchable,
+            "answered_questions": answered,
+            "searchable_coverage": searchable / question_total if question_total else 0.0,
+            "answer_coverage": answered / question_total if question_total else 0.0,
+            "by_exam": self.list_exams(),
+        }
+
     def question_tree(self) -> list[dict[str, object]]:
         with closing(self._connect()) as connection:
             rows = connection.execute(
@@ -539,6 +569,12 @@ class GlobalCatalog:
             "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?",
             (table,),
         ).fetchone() is not None
+
+    @classmethod
+    def _count_table(cls, connection: sqlite3.Connection, table: str) -> int:
+        if not cls._table_exists(connection, table):
+            return 0
+        return int(connection.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0])
 
     @staticmethod
     def _tree_node(node_id: str, label: str, kind: str) -> dict[str, object]:

@@ -9,7 +9,9 @@ architecture must allow new exam families without global rewrites.
 
 ## Product surfaces
 
-- The maintained client is a responsive Vue 3 web application.
+- The maintained client is a responsive Next.js web application using the
+  shadcn preset `b27I38wi` (Rhea, neutral base, blue theme, Figtree and
+  Hugeicons) as its design language.
 - Students and teachers browse published questions and their source documents.
 - Administrators use the same application to manage accounts, inspect catalog
   data, run processing pipelines, correct metadata, and monitor publication.
@@ -80,8 +82,8 @@ architecture must allow new exam families without global rewrites.
 
 ## Web experience
 
-- The interface is Apple-inspired, based on restrained macOS document-workspace
-  patterns rather than copied Apple assets or a generic dashboard theme.
+- The interface follows the shared shadcn preset while retaining restrained,
+  document-workspace information density instead of a generic KPI dashboard.
 - Desktop uses adaptive navigation, tree, and preview columns. Tablet collapses
   navigation. Phone uses drill-down routes.
 - The document rail switches between question PDF, answer PDF, structured text,

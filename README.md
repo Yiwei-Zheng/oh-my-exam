@@ -5,7 +5,7 @@ Oh-My-Exam is a bilingual web workspace for browsing exam questions and running 
 ## Repository
 
 ```text
-frontend/   Vue 3 browser application
+frontend/   Next.js + shadcn browser application
 backend/    FastAPI API, pipeline code, configuration, resources, PDFs and databases
 assets/     maintained shared design assets
 tmp/        disposable local scratch files
@@ -71,7 +71,6 @@ Set-Location backend
 Set-Location ..\frontend
 npm run lint
 npm run typecheck
-npm run test
 npm run build
 ```
 

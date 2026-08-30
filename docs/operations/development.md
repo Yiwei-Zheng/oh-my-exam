@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Python 3.11 or later
-- Node.js 20.17 or later
+- Node.js 20.19 or later
 - npm
 - Tesseract on `PATH` only when OCR fallback is required
 
@@ -28,7 +28,7 @@ Local development creates and reuses `backend/data/application.secret` when
 `OME_JWT_SECRET` is omitted. Production must provide an explicit secret through
 the protected systemd environment file.
 
-The launcher starts the API on port 8000 and Vite on port 4173, streams both
+The launcher starts the API on port 8000 and Next.js on port 4173, streams both
 logs into one terminal, and stops both process trees on Ctrl+C. The same
 launcher works on every supported platform through Python:
 
@@ -36,7 +36,7 @@ launcher works on every supported platform through Python:
 python start_server.py
 ```
 
-Vite proxies `/api` to `http://127.0.0.1:8000`. Use `VITE_API_PROXY_TARGET` to override it.
+Next.js proxies `/api` to `http://127.0.0.1:8000`. Use `OME_API_PROXY_TARGET` to override it.
 Use `python start_server.py --check` for a non-starting prerequisite and
 port check, or add `--lan` to expose both development servers on the LAN.
 
@@ -48,7 +48,6 @@ Set-Location backend
 Set-Location ..\frontend
 npm run lint
 npm run typecheck
-npm run test
 npm run build
 ```
 

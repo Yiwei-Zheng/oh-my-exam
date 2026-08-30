@@ -26,6 +26,7 @@ pytest-cache-files-*/
 # Frontend dependencies and build artifacts
 node_modules/
 dist/
+.next/
 coverage/
 *.tsbuildinfo
 

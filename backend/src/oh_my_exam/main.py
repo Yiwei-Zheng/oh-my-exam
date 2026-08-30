@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from .ai_usage import AiUsageStore
 from .catalog import CatalogNotFoundError, GlobalCatalog
 from .config import Settings
 from .identity import (
@@ -66,6 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     identity.bootstrap_admin(settings.bootstrap_admin_email, settings.bootstrap_admin_password)
     login_limiter = LoginRateLimiter(settings.login_rate_limit_storage_uri)
     updates = UpdateJobManager(app_database_path, settings.question_update_command)
+    ai_usage = AiUsageStore(app_database_path)
     app = FastAPI(title="Oh-My-Exam API", version="0.1.0")
 
     def current_user(request: Request) -> User:
@@ -243,6 +245,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/admin/statistics")
     def admin_statistics(_: User = Depends(admin_user)) -> dict[str, object]:
         return identity.dashboard_statistics()
+
+    @app.get("/api/v1/admin/assets")
+    def admin_assets(_: User = Depends(admin_user)) -> dict[str, object]:
+        try:
+            return catalog.asset_inventory()
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/ai-usage")
+    def admin_ai_usage(
+        month: str | None = Query(default=None, pattern=r"^\d{4}-\d{2}$"),
+        _: User = Depends(admin_user),
+    ) -> dict[str, object]:
+        try:
+            return ai_usage.monthly_bill(month)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/api/v1/admin/users")
     def admin_users(_: User = Depends(admin_user)) -> dict[str, object]:

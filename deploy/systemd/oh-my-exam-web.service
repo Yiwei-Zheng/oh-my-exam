@@ -1,0 +1,23 @@
+[Unit]
+Description=Oh-My-Exam Next.js web client
+After=network-online.target oh-my-exam-api.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=oh-my-exam
+Group=oh-my-exam
+WorkingDirectory=/srv/oh-my-exam/frontend
+Environment=NODE_ENV=production
+Environment=PORT=4173
+ExecStart=/usr/bin/npm run start -- --hostname 127.0.0.1 --port 4173
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/srv/oh-my-exam/frontend
+
+[Install]
+WantedBy=multi-user.target

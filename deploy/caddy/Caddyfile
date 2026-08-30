@@ -6,8 +6,6 @@ exam.example.com {
     }
 
     handle {
-        root * /srv/oh-my-exam/frontend/dist
-        try_files {path} /index.html
-        file_server
+        reverse_proxy 127.0.0.1:4173
     }
 }

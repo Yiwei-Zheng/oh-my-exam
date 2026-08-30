@@ -1,0 +1,242 @@
+'use client'
+
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+
+type Locale = 'zh-CN' | 'en'
+
+const zh = {
+  loading: '正在加载…',
+  signOut: '退出登录',
+  switchLanguage: '切换语言',
+  theme: '切换主题',
+  loginTitle: '登录 Oh My Exam',
+  loginHint: '进入题目智能工作台',
+  registerTitle: '使用邀请码创建账户',
+  email: '邮箱',
+  password: '密码',
+  invitation: '邀请码',
+  signIn: '登录',
+  createAccount: '创建账户',
+  useInvitation: '使用邀请码注册',
+  backToLogin: '返回登录',
+  invalidCredentials: '邮箱或密码不正确',
+  rateLimited: '登录尝试过多, 请稍后重试',
+  unavailable: '服务暂时不可用',
+  invalidInvitation: '邀请码无效、已过期或已用完',
+  admin: '管理后台',
+  questions: '题目搜索',
+  searchTitle: '从真实试卷中找到下一道题',
+  searchHint: '搜索题干、试卷编号或 syllabus 术语',
+  searchPlaceholder: '例如: constant acceleration',
+  allExams: '全部考试',
+  search: '搜索',
+  results: '搜索结果',
+  noResults: '没有匹配题目, 请调整关键词',
+  chooseQuestion: '选择一道题以预览原题和相似题',
+  similar: '相似题目',
+  openPdf: '打开 PDF',
+  controlDesk: '管理控制台',
+  controlDeskHint: '题目资产、AI 成本与访问权限集中在一个工作台',
+  overview: '总览',
+  assetInventory: '题目资产',
+  aiBilling: 'AI Token 账单',
+  accounts: '账号管理',
+  totalQuestions: '题目总数',
+  totalPapers: '试卷总数',
+  answerCoverage: '答案覆盖率',
+  searchableCoverage: '可搜索文本覆盖率',
+  examPrograms: '考试项目',
+  sourceDocuments: '源文档',
+  assetsHint: '按考试项目盘点已发布的试卷与题目',
+  billingHint: '按模型核对输入、输出 Token 与实际入账成本',
+  noUsage: '当前账期尚无 AI 调用记录',
+  currentMonth: '本月',
+  inputTokens: '输入 Token',
+  outputTokens: '输出 Token',
+  cost: '费用',
+  provider: '供应商',
+  model: '模型',
+  calls: '调用次数',
+  accountHint: '创建账号并管理一次性邀请码',
+  existingAccounts: '现有账号',
+  invitations: '邀请码',
+  role: '角色',
+  status: '状态',
+  createdAt: '创建时间',
+  active: '启用',
+  inactive: '停用',
+  createUser: '创建账号',
+  createInvitation: '创建邀请码',
+  maxUses: '最多使用次数',
+  validDays: '有效天数',
+  copyCode: '复制邀请码',
+  revoke: '撤销',
+  questionLibrary: '题库浏览器',
+  filterLibrary: '筛选资料库',
+  selectPaper: '选择试卷查看题目',
+  structuredText: '结构化文本',
+  questionPdf: '题目 PDF',
+  answerPdf: '答案 PDF',
+  rawText: '原始文本',
+  markdown: 'Markdown',
+  saveRevision: '保存新版本',
+  updateLibrary: '更新题库',
+  updateUnavailable: '流水线尚未配置',
+  userTotal: '账号总数',
+  activeWeek: '本周活跃',
+  systemReady: '系统就绪',
+  searchModuleHint: '管理员可直接检索并核验已发布题目',
+  passwordRule: '密码至少 15 个字符',
+  invitationShownOnce: '请立即复制, 完整邀请码只显示一次',
+  noAccounts: '暂无账号',
+  noInvitations: '暂无邀请码',
+  question: '题目',
+  answer: '答案',
+  text: '文本',
+  saveSuccess: '新版本已保存',
+  loadFailed: '数据加载失败, 请检查服务后重试',
+  pipelineRunning: '正在更新题库',
+} as const
+
+const en: Record<keyof typeof zh, string> = {
+  loading: 'Loading…',
+  signOut: 'Sign out',
+  switchLanguage: 'Switch language',
+  theme: 'Change theme',
+  loginTitle: 'Sign in to Oh My Exam',
+  loginHint: 'Enter the question intelligence workspace',
+  registerTitle: 'Create an account with an invitation',
+  email: 'Email',
+  password: 'Password',
+  invitation: 'Invitation code',
+  signIn: 'Sign in',
+  createAccount: 'Create account',
+  useInvitation: 'Register with an invitation',
+  backToLogin: 'Back to sign in',
+  invalidCredentials: 'Email or password is incorrect',
+  rateLimited: 'Too many attempts. Try again later',
+  unavailable: 'The service is temporarily unavailable',
+  invalidInvitation: 'The invitation is invalid, expired, or exhausted',
+  admin: 'Admin',
+  questions: 'Question search',
+  searchTitle: 'Find the next question worth solving',
+  searchHint: 'Search question text, paper ids, or syllabus terms',
+  searchPlaceholder: 'e.g. constant acceleration',
+  allExams: 'All exams',
+  search: 'Search',
+  results: 'Results',
+  noResults: 'No matching questions. Try a different query',
+  chooseQuestion: 'Choose a question to preview it and related practice',
+  similar: 'Similar questions',
+  openPdf: 'Open PDF',
+  controlDesk: 'Admin console',
+  controlDeskHint:
+    'Question assets, AI costs, and access control in one workspace',
+  overview: 'Overview',
+  assetInventory: 'Question assets',
+  aiBilling: 'AI token billing',
+  accounts: 'Accounts',
+  totalQuestions: 'Questions',
+  totalPapers: 'Papers',
+  answerCoverage: 'Answer coverage',
+  searchableCoverage: 'Search text coverage',
+  examPrograms: 'Exam programs',
+  sourceDocuments: 'Source documents',
+  assetsHint: 'Inventory published papers and questions by exam program',
+  billingHint: 'Reconcile input, output tokens, and booked cost by model',
+  noUsage: 'No AI usage has been recorded in this billing period',
+  currentMonth: 'This month',
+  inputTokens: 'Input tokens',
+  outputTokens: 'Output tokens',
+  cost: 'Cost',
+  provider: 'Provider',
+  model: 'Model',
+  calls: 'Calls',
+  accountHint: 'Create accounts and manage single-use invitations',
+  existingAccounts: 'Existing accounts',
+  invitations: 'Invitations',
+  role: 'Role',
+  status: 'Status',
+  createdAt: 'Created',
+  active: 'Active',
+  inactive: 'Inactive',
+  createUser: 'Create account',
+  createInvitation: 'Create invitation',
+  maxUses: 'Maximum uses',
+  validDays: 'Valid days',
+  copyCode: 'Copy code',
+  revoke: 'Revoke',
+  questionLibrary: 'Question library',
+  filterLibrary: 'Filter library',
+  selectPaper: 'Choose a paper to view its questions',
+  structuredText: 'Structured text',
+  questionPdf: 'Question PDF',
+  answerPdf: 'Answer PDF',
+  rawText: 'Raw text',
+  markdown: 'Markdown',
+  saveRevision: 'Save new version',
+  updateLibrary: 'Update library',
+  updateUnavailable: 'Pipeline is not configured',
+  userTotal: 'Total accounts',
+  activeWeek: 'Active this week',
+  systemReady: 'System ready',
+  searchModuleHint:
+    'Administrators can search and verify published questions directly',
+  passwordRule: 'Password must be at least 15 characters',
+  invitationShownOnce: 'Copy it now. The full code is shown once',
+  noAccounts: 'No accounts',
+  noInvitations: 'No invitations',
+  question: 'Question',
+  answer: 'Answer',
+  text: 'Text',
+  saveSuccess: 'New version saved',
+  loadFailed: 'Data could not be loaded. Check the service and try again',
+  pipelineRunning: 'Updating question library',
+}
+
+const messages = { 'zh-CN': zh, en }
+export type MessageKey = keyof typeof zh
+
+interface LocaleContextValue {
+  locale: Locale
+  t: (key: MessageKey) => string
+  toggleLocale: () => void
+}
+
+const LocaleContext = createContext<LocaleContextValue | null>(null)
+
+export function LocaleProvider({ children }: { children: React.ReactNode }) {
+  const [locale, setLocale] = useState<Locale>('zh-CN')
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem('ome-locale')
+    // Persisted UI preference is intentionally synchronized after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (stored === 'en' || stored === 'zh-CN') setLocale(stored)
+  }, [])
+
+  const value = useMemo<LocaleContextValue>(
+    () => ({
+      locale,
+      t: (key) => messages[locale][key],
+      toggleLocale: () =>
+        setLocale((current) => {
+          const next = current === 'zh-CN' ? 'en' : 'zh-CN'
+          window.localStorage.setItem('ome-locale', next)
+          document.documentElement.lang = next
+          return next
+        }),
+    }),
+    [locale],
+  )
+
+  return (
+    <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
+  )
+}
+
+export function useLocale() {
+  const value = useContext(LocaleContext)
+  if (!value) throw new Error('useLocale must be used within LocaleProvider')
+  return value
+}

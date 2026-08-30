@@ -1,0 +1,36 @@
+import type { Metadata } from 'next'
+import { Figtree, Geist_Mono } from 'next/font/google'
+
+import './globals.css'
+import { AppProviders } from '@/components/app-providers'
+import { cn } from '@/lib/utils'
+
+const figtree = Figtree({ subsets: ['latin'], variable: '--font-sans' })
+const fontMono = Geist_Mono({ subsets: ['latin'], variable: '--font-mono' })
+
+export const metadata: Metadata = {
+  title: 'Oh My Exam',
+  description: 'Question intelligence workspace',
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html
+      lang="zh-CN"
+      suppressHydrationWarning
+      className={cn(
+        'font-sans antialiased',
+        fontMono.variable,
+        figtree.variable,
+      )}
+    >
+      <body>
+        <AppProviders>{children}</AppProviders>
+      </body>
+    </html>
+  )
+}
