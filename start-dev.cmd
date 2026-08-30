@@ -9,7 +9,7 @@ if not exist ".venv\Scripts\python.exe" (
   exit /b 1
 )
 
-".venv\Scripts\python.exe" "scripts\start_dev.py" %*
+".venv\Scripts\python.exe" "start_server.py" %*
 set "OME_START_EXIT=%ERRORLEVEL%"
 
 if not "%OME_START_EXIT%"=="0" pause

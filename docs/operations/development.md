@@ -30,14 +30,14 @@ the protected systemd environment file.
 
 The launcher starts the API on port 8000 and Vite on port 4173, streams both
 logs into one terminal, and stops both process trees on Ctrl+C. The same
-launcher works on macOS and Linux through Python:
+launcher works on every supported platform through Python:
 
 ```bash
-python scripts/start_dev.py
+python start_server.py
 ```
 
 Vite proxies `/api` to `http://127.0.0.1:8000`. Use `VITE_API_PROXY_TARGET` to override it.
-Use `python scripts/start_dev.py --check` for a non-starting prerequisite and
+Use `python start_server.py --check` for a non-starting prerequisite and
 port check, or add `--lan` to expose both development servers on the LAN.
 
 ## Validation

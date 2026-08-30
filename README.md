@@ -18,19 +18,19 @@ Runtime data belongs under `backend/data/`. Original PDFs remain authoritative. 
 
 ## Development
 
-Prepare the existing project environment, then double-click `start-dev.cmd` on
-Windows or run the unified launcher from the repository root:
+Prepare the existing project environment, then run the unified launcher from
+the repository root:
 
 ```powershell
 python scripts\setup_env.py --group all
 Set-Location frontend
 npm install
 Set-Location ..
-.\start-dev.cmd
+python start_server.py
 ```
 
-The cross-platform equivalent is `python scripts/start_dev.py`. Press Ctrl+C
-to stop both servers together. Pass `--lan` to listen on the local network.
+On Windows, `start-dev.cmd` is also available for double-click startup. Press
+Ctrl+C to stop both servers together. Pass `--lan` to listen on the local network.
 
 Open `http://127.0.0.1:4173`. On first API start, configure an administrator with the variables shown in `.env.example`. The admin workspace provides the exam tree, question-level and full-paper PDF previews, extracted answer text, versioned corrections and catalog-release pipeline control.
 
