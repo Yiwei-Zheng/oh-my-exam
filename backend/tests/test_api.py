@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 import sqlite3
 
 from fastapi.testclient import TestClient
+from PIL import Image
 import pymupdf
 
 import oh_my_exam.main as main_module
@@ -78,6 +80,33 @@ def _create_global_database(path: Path) -> None:
             INSERT INTO answer_versions VALUES (
                 1, 1, 1, 'en', 'Acceleration is 2', '**Acceleration is 2**', 'published'
             );
+            CREATE TABLE syllabuses (
+                id INTEGER PRIMARY KEY, exam_program_id INTEGER, name TEXT
+            );
+            INSERT INTO syllabuses VALUES (1, 1, 'ENGAA test syllabus');
+            CREATE TABLE syllabus_topics (
+                id INTEGER PRIMARY KEY, syllabus_id INTEGER, parent_topic_id INTEGER,
+                code TEXT, title TEXT, description TEXT
+            );
+            INSERT INTO syllabus_topics VALUES (1, 1, NULL, 'mechanics', 'Mechanics', '');
+            INSERT INTO syllabus_topics VALUES (2, 1, 1, 'kinematics', 'Kinematics', '');
+            CREATE TABLE features (
+                id INTEGER PRIMARY KEY, kind TEXT, canonical_code TEXT, parent_feature_id INTEGER
+            );
+            INSERT INTO features VALUES (1, 'concept', 'topic:mechanics', NULL);
+            INSERT INTO features VALUES (2, 'concept', 'topic:kinematics', 1);
+            CREATE TABLE feature_labels (
+                feature_id INTEGER, language TEXT, name TEXT, description TEXT
+            );
+            INSERT INTO feature_labels VALUES (1, 'en', 'Mechanics', '');
+            INSERT INTO feature_labels VALUES (2, 'en', 'Kinematics', '');
+            CREATE TABLE syllabus_topic_features (syllabus_topic_id INTEGER, feature_id INTEGER);
+            INSERT INTO syllabus_topic_features VALUES (1, 1);
+            INSERT INTO syllabus_topic_features VALUES (2, 2);
+            CREATE TABLE question_features (
+                question_id INTEGER, feature_id INTEGER, role TEXT, weight REAL
+            );
+            INSERT INTO question_features VALUES (7, 2, 'primary', 1.0);
             """
         )
 
@@ -128,20 +157,26 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert question.json()["crop_regions"][0]["render_dpi"] == 180
     assert question.json()["answer_structured"]["raw_text"] == "Acceleration is 2"
 
-    question_pdf = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/question.pdf")
-    assert question_pdf.status_code == 200
-    assert question_pdf.headers["content-type"] == "application/pdf"
-    assert question_pdf.headers["content-disposition"] == 'inline; filename="engaa_2023_s1_qp_q07.pdf"'
-    with pymupdf.open(stream=question_pdf.content, filetype="pdf") as cropped:
-        assert cropped.page_count == 1
-        assert cropped[0].rect.width == 200
-        assert cropped[0].rect.height == 50
-        assert "Find the acceleration" in cropped[0].get_text()
+    topics = client.get("/api/v1/topics").json()
+    topics_by_title = {topic["title"]: topic for topic in topics}
+    assert topics_by_title["Mechanics"]["parent_id"] is None
+    assert topics_by_title["Kinematics"]["parent_id"] == topics_by_title["Mechanics"]["id"]
+    topic_results = client.get(
+        "/api/v1/questions/search", params={"topic": "topic:kinematics"}
+    )
+    assert topic_results.status_code == 200
+    assert topic_results.json()[0]["id"] == 7
 
-    answer_pdf = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/answer.pdf")
-    assert answer_pdf.status_code == 200
-    with pymupdf.open(stream=answer_pdf.content, filetype="pdf") as cropped:
-        assert "Acceleration is 2" in cropped[0].get_text()
+    question_image = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/question.jpg")
+    assert question_image.status_code == 200
+    assert question_image.headers["content-type"] == "image/jpeg"
+    assert question_image.headers["content-disposition"] == 'inline; filename="engaa_2023_s1_qp_q07.jpg"'
+    with Image.open(BytesIO(question_image.content)) as cropped:
+        assert cropped.size == (500, 125)
+
+    answer_image = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/answer.jpg")
+    assert answer_image.status_code == 200
+    assert answer_image.content.startswith(b"\xff\xd8")
 
     paper = client.get("/api/v1/exams/admissions:uat:engaa/papers/1/question")
     assert paper.status_code == 200
@@ -171,6 +206,8 @@ def test_question_tree_uses_uppercase_exam_codes_and_collapses_duplicate_year(tm
     year = program["children"][0]
 
     assert program["label"] == "ENGAA"
+    assert program["paper_count"] == 1
+    assert program["question_count"] == 1
     assert year["label"] == "2023"
     assert [child["kind"] for child in year["children"]] == ["paper"]
 
@@ -221,6 +258,15 @@ def test_admin_login_statistics_and_question_tree(tmp_path: Path) -> None:
     assert assets.json()["source_documents"] == 2
     assert assets.json()["searchable_coverage"] == 1.0
     assert assets.json()["answer_coverage"] == 1.0
+
+    resources = client.get("/api/v1/admin/system-resources")
+    assert resources.status_code == 200
+    assert 0 <= resources.json()["cpu"]["percent"] <= 100
+    assert resources.json()["memory"]["total_bytes"] > 0
+    assert resources.json()["disk"]["total_bytes"] > 0
+    assert set(resources.json()["storage"]["categories"]) == {
+        "code", "databases", "papers", "other_data"
+    }
 
     ai_usage = client.get("/api/v1/admin/ai-usage")
     assert ai_usage.status_code == 200

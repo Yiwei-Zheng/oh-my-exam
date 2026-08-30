@@ -39,6 +39,8 @@ export interface Question {
 }
 
 export interface Topic {
+  id: number
+  parent_id: number | null
   code: string
   title: string
   description: string
@@ -57,6 +59,8 @@ export interface TreeNode {
   label: string
   kind: string
   count?: number
+  paper_count?: number
+  question_count?: number
   paper_id?: number
   exam_id?: string
   children: TreeNode[]

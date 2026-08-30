@@ -48,6 +48,9 @@
 }
 
 :root {
+  --motion-swift: 180ms;
+  --motion-smooth: 320ms;
+  --motion-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -133,6 +136,7 @@
   button,
   [role='button'] {
     cursor: pointer;
+    touch-action: manipulation;
   }
   button:disabled,
   [aria-disabled='true'] {
@@ -142,6 +146,60 @@
     color: var(--primary-foreground);
     background: color-mix(in oklch, var(--primary), transparent 18%);
   }
+}
+
+@keyframes ui-page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 16px, 0) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes ui-tree-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -5px, 0) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.ui-page-enter {
+  animation: ui-page-enter 480ms var(--motion-spring) both;
+}
+
+.ui-section-enter {
+  animation: ui-page-enter 320ms var(--motion-spring) both;
+}
+
+.ui-tree-enter {
+  transform-origin: top;
+  animation: ui-tree-enter var(--motion-smooth) var(--motion-spring) both;
+}
+
+.ui-interactive {
+  transition:
+    transform var(--motion-swift) var(--motion-spring),
+    background-color var(--motion-swift) ease-out,
+    border-color var(--motion-swift) ease-out,
+    color var(--motion-swift) ease-out,
+    opacity var(--motion-swift) ease-out;
+}
+
+.ui-interactive:active:not(:disabled) {
+  transform: scale(0.975);
+  transition-duration: 70ms;
+}
+
+.ui-stagger > [data-motion-item] {
+  animation: ui-page-enter 420ms var(--motion-spring) both;
+  animation-delay: calc(var(--motion-index, 0) * 45ms);
 }
 
 @media (prefers-reduced-motion: reduce) {

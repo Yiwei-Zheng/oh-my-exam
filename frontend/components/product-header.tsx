@@ -23,7 +23,7 @@ export function ProductHeader() {
   }
 
   return (
-    <header className="sticky top-0 z-40 flex min-h-14 items-center gap-3 border-b bg-background/92 px-4 backdrop-blur md:px-6">
+    <header className="ui-section-enter sticky top-0 z-40 flex min-h-14 items-center gap-3 border-b bg-background/92 px-4 backdrop-blur md:px-6">
       <Link
         href={user?.role === 'admin' ? '/admin' : '/questions'}
         className="mr-auto flex items-center gap-2 font-semibold tracking-tight"

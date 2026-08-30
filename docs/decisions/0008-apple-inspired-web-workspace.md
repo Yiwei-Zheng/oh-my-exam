@@ -20,17 +20,17 @@ semantic materials, precise spacing, and predictable sheets and popovers.
 
 Desktop uses navigation, lazy question tree, and document workspace columns.
 Tablet uses a collapsible tree and preview. Phone uses drill-down navigation.
-The signature interaction is a document rail switching among question PDF,
-answer PDF, structured text, and source paper while retaining context.
+The signature interaction is a document rail switching among question JPG,
+answer JPG, structured text, and source paper while retaining context.
 
 Use semantic light and dark tokens. Default to the operating-system theme. Use
 the system font stack rather than distributing SF Pro. Blur is limited to
 navigation chrome, popovers, and sheets. PDF and text surfaces remain opaque.
 All visible text uses i18n resources.
 
-Retain Element Plus behind `shared/ui` wrappers for mature trees, tables, forms,
-and dialogs. Business features do not import it directly. Pinia stores client
-state; TanStack Vue Query stores server state; PDF.js renders documents.
+Use repository-owned shadcn primitives configured by preset `b27I38wi` and
+Hugeicons. Feature components call the FastAPI boundary through the shared API
+adapter and do not introduce a second UI framework.
 
 Required quality gates include 320px layouts, portrait and landscape, keyboard
 navigation, visible focus, 44px touch targets, WCAG AA contrast, screen-reader

@@ -35,8 +35,8 @@ curl --fail https://exam.example.com/api/v1/health
 Stop both services, back up `backend/data`, update source and dependencies, run
 `backend/scripts/migrate_catalog_schema.py` against the active catalog, rebuild
 the frontend, then restart both services. Keep the backup until health, login,
-tree browsing, question PDF and pipeline activation checks pass.
+tree browsing, question JPG and pipeline activation checks pass.
 
 ## Backup and restore
 
-Back up the whole private `backend/data` tree while the API is stopped, or use SQLite's online backup API for live databases and independently snapshot immutable PDFs. Restore databases and PDFs as one consistent set. Never restore generated JPG crops; the current application does not use them.
+Back up the whole private `backend/data` tree while the API is stopped, or use SQLite's online backup API for live databases and independently snapshot immutable PDFs. Restore databases and PDFs as one consistent set. Dynamically rendered JPG crops are not backup inputs.

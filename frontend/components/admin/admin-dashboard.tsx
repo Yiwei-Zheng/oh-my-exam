@@ -19,6 +19,7 @@ import type {
   AdminStats,
   AiBill,
   AssetInventory,
+  SystemResources,
 } from '@/components/admin/types'
 import { useLocale } from '@/components/locale-provider'
 import { ProductHeader } from '@/components/product-header'
@@ -46,6 +47,7 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [assets, setAssets] = useState<AssetInventory | null>(null)
   const [bill, setBill] = useState<AiBill | null>(null)
+  const [resources, setResources] = useState<SystemResources | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -61,6 +63,23 @@ export function AdminDashboard() {
       })
       .catch(() => setError(t('loadFailed')))
   }, [t])
+
+  useEffect(() => {
+    if (section !== 'overview') return
+    let active = true
+    const refresh = () =>
+      apiRequest<SystemResources>('/api/v1/admin/system-resources')
+        .then((next) => {
+          if (active) setResources(next)
+        })
+        .catch(() => undefined)
+    void refresh()
+    const timer = window.setInterval(refresh, 2000)
+    return () => {
+      active = false
+      window.clearInterval(timer)
+    }
+  }, [section])
 
   const navigation = [
     {
@@ -82,7 +101,7 @@ export function AdminDashboard() {
           type="button"
           onClick={() => setSection(item.id)}
           className={cn(
-            'flex min-h-10 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors hover:bg-sidebar-accent',
+            'ui-interactive flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors hover:bg-sidebar-accent',
             section === item.id &&
               'bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary',
           )}
@@ -116,7 +135,7 @@ export function AdminDashboard() {
             API v1 · catalog online
           </div>
         </aside>
-        <main className="min-w-0 p-4 md:p-8">
+        <main className="ui-page-enter min-w-0 p-4 md:p-8">
           <div className="mb-6 flex items-start gap-3">
             <Sheet>
               <SheetTrigger
@@ -155,20 +174,23 @@ export function AdminDashboard() {
               {error}
             </p>
           )}
-          {section === 'overview' && (
-            <Overview
-              stats={stats}
-              assets={assets}
-              bill={bill}
-              onOpen={setSection}
-            />
-          )}
-          {section === 'search' && <QuestionSearch compact />}
-          {section === 'assets' && (
-            <AssetsPanel inventory={assets} onInventory={setAssets} />
-          )}
-          {section === 'billing' && <BillingPanel bill={bill} />}
-          {section === 'accounts' && <AccountsPanel />}
+          <div key={section} className="ui-section-enter">
+            {section === 'overview' && (
+              <Overview
+                stats={stats}
+                assets={assets}
+                bill={bill}
+                resources={resources}
+                onOpen={setSection}
+              />
+            )}
+            {section === 'search' && <QuestionSearch compact />}
+            {section === 'assets' && (
+              <AssetsPanel inventory={assets} onInventory={setAssets} />
+            )}
+            {section === 'billing' && <BillingPanel bill={bill} />}
+            {section === 'accounts' && <AccountsPanel />}
+          </div>
         </main>
       </div>
     </div>
@@ -179,11 +201,13 @@ function Overview({
   stats,
   assets,
   bill,
+  resources,
   onOpen,
 }: {
   stats: AdminStats | null
   assets: AssetInventory | null
   bill: AiBill | null
+  resources: SystemResources | null
   onOpen: (section: Section) => void
 }) {
   const { t } = useLocale()
@@ -223,13 +247,15 @@ function Overview({
   ]
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map((item) => (
+      <div className="ui-stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {cards.map((item, index) => (
           <button
             key={item.label}
             type="button"
             onClick={() => onOpen(item.section)}
-            className="text-left"
+            className="ui-interactive text-left"
+            data-motion-item
+            style={{ '--motion-index': index } as React.CSSProperties}
           >
             <Card className="h-full transition-colors hover:border-primary/40">
               <CardHeader className="pb-2">
@@ -272,6 +298,113 @@ function Overview({
           ))}
         </CardContent>
       </Card>
+      <SystemResourcesPanel resources={resources} />
     </div>
   )
+}
+
+function SystemResourcesPanel({
+  resources,
+}: {
+  resources: SystemResources | null
+}) {
+  const { locale, t } = useLocale()
+  if (!resources) return <Skeleton className="h-72 w-full rounded-3xl" />
+  const meters = [
+    { label: t('cpu'), percent: resources.cpu.percent, detail: `${resources.cpu.percent.toFixed(1)}%` },
+    {
+      label: t('memory'),
+      percent: resources.memory.percent,
+      detail: `${formatBytes(resources.memory.used_bytes)} / ${formatBytes(resources.memory.total_bytes)}`,
+    },
+    {
+      label: t('disk'),
+      percent: resources.disk.percent,
+      detail: `${formatBytes(resources.disk.used_bytes)} / ${formatBytes(resources.disk.total_bytes)}`,
+    },
+  ]
+  const categories = [
+    [t('codeStorage'), resources.storage.categories.code],
+    [t('databaseStorage'), resources.storage.categories.databases],
+    [t('paperStorage'), resources.storage.categories.papers],
+    [t('otherDataStorage'), resources.storage.categories.other_data],
+  ] as const
+
+  return (
+    <Card aria-label={t('systemResources')}>
+      <CardHeader className="flex-row items-center justify-between gap-3">
+        <div>
+          <CardTitle>{t('systemResources')}</CardTitle>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t('lastUpdated')} ·{' '}
+            {new Intl.DateTimeFormat(locale, { timeStyle: 'medium' }).format(
+              resources.sampled_at * 1000,
+            )}
+          </p>
+        </div>
+        <Badge variant="secondary" className="gap-2">
+          <i className="size-2 rounded-full bg-emerald-500" aria-hidden="true" />
+          {t('live')}
+        </Badge>
+      </CardHeader>
+      <CardContent className="grid gap-6 xl:grid-cols-[1.1fr_.9fr]">
+        <div className="grid gap-4 sm:grid-cols-3">
+          {meters.map((meter) => (
+            <div key={meter.label} className="rounded-2xl border bg-muted/20 p-4">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-sm font-medium">{meter.label}</span>
+                <span className="font-mono text-xl font-semibold tabular-nums">
+                  {meter.percent.toFixed(1)}%
+                </span>
+              </div>
+              <div
+                className="mt-4 h-2 overflow-hidden rounded-full bg-muted"
+                role="meter"
+                aria-label={meter.label}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={meter.percent}
+              >
+                <div
+                  className="h-full origin-left rounded-full bg-primary transition-transform duration-500 ease-out"
+                  style={{ transform: `scaleX(${Math.min(100, meter.percent) / 100})` }}
+                />
+              </div>
+              <p className="mt-3 font-mono text-[11px] tabular-nums text-muted-foreground">
+                {meter.detail}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-2xl border p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-sm font-medium">{t('projectStorage')}</span>
+            <span className="font-mono text-sm font-semibold tabular-nums">
+              {formatBytes(resources.storage.project_bytes)}
+            </span>
+          </div>
+          <dl className="space-y-2">
+            {categories.map(([label, value]) => (
+              <div key={label} className="flex items-center justify-between gap-4 text-sm">
+                <dt className="text-muted-foreground">{label}</dt>
+                <dd className="font-mono tabular-nums">{formatBytes(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let size = value / 1024
+  let index = 0
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024
+    index += 1
+  }
+  return `${size.toFixed(size >= 100 ? 0 : 1)} ${units[index]}`
 }

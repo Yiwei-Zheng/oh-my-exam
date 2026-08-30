@@ -11,6 +11,7 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Add01Icon,
+  ArrowRight01Icon,
   BookSearchIcon,
   Cancel01Icon,
   Search01Icon,
@@ -37,6 +38,112 @@ import type { Exam, ImageSearchResponse, Question, Topic } from '@/lib/types'
 
 type SearchMode = 'text' | 'image' | 'topic'
 const ACCEPTED_IMAGES = ['image/jpeg', 'image/png', 'image/webp']
+
+type TopicNode = Topic & { children: TopicNode[] }
+
+function buildTopicTree(topics: Topic[]): TopicNode[] {
+  const nodes = new Map<number, TopicNode>(
+    topics.map((topic) => [topic.id, { ...topic, children: [] }]),
+  )
+  const roots: TopicNode[] = []
+  nodes.forEach((node) => {
+    const parent = node.parent_id === null ? undefined : nodes.get(node.parent_id)
+    if (parent) parent.children.push(node)
+    else roots.push(node)
+  })
+  return roots
+}
+
+function filterTopicTree(nodes: TopicNode[], query: string): TopicNode[] {
+  if (!query.trim()) return nodes
+  const normalized = query.trim().toLocaleLowerCase()
+  return nodes.flatMap((node) => {
+    const children = filterTopicTree(node.children, query)
+    return node.title.toLocaleLowerCase().includes(normalized) || children.length
+      ? [{ ...node, children }]
+      : []
+  })
+}
+
+function collectTopicCodes(node: TopicNode): string[] {
+  return [node.code, ...node.children.flatMap(collectTopicCodes)]
+}
+
+function findTopic(nodes: TopicNode[], code: string): TopicNode | undefined {
+  for (const node of nodes) {
+    if (node.code === code) return node
+    const child = findTopic(node.children, code)
+    if (child) return child
+  }
+}
+
+function TopicTreeItem({
+  node,
+  depth,
+  expanded,
+  selected,
+  onToggle,
+  onSelect,
+}: {
+  node: TopicNode
+  depth: number
+  expanded: Set<number>
+  selected: string
+  onToggle: (id: number) => void
+  onSelect: (code: string) => void
+}) {
+  const isBranch = node.children.length > 0
+  const isExpanded = expanded.has(node.id)
+  return (
+    <div
+      role="treeitem"
+      aria-expanded={isBranch ? isExpanded : undefined}
+      aria-selected={selected === node.code}
+    >
+      <div
+        className={`flex min-h-11 items-center rounded-xl transition-colors ${selected === node.code ? 'bg-primary/10 text-primary' : 'hover:bg-muted/70'}`}
+        style={{ paddingLeft: `${4 + depth * 16}px` }}
+      >
+        <button
+          type="button"
+          className="grid size-11 shrink-0 place-items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={node.title}
+          onClick={() => (isBranch ? onToggle(node.id) : onSelect(node.code))}
+        >
+          <HugeiconsIcon
+            icon={ArrowRight01Icon}
+            className={`size-4 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''} ${isBranch ? '' : 'opacity-25'}`}
+          />
+        </button>
+        <button
+          type="button"
+          className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-xl pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          onClick={() => onSelect(node.code)}
+        >
+          <span className="truncate text-sm font-medium">{node.title}</span>
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {node.question_count}
+          </span>
+        </button>
+      </div>
+      {isBranch && isExpanded && (
+        <div role="group" className="ui-tree-enter">
+          {node.children.map((child) => (
+            <TopicTreeItem
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              expanded={expanded}
+              selected={selected}
+              onToggle={onToggle}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function readImage(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -79,6 +186,8 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
   const [query, setQuery] = useState('')
   const [examId, setExamId] = useState('all')
   const [topicCode, setTopicCode] = useState('all')
+  const [topicFilter, setTopicFilter] = useState('')
+  const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
   const [imageData, setImageData] = useState('')
   const [recognizedText, setRecognizedText] = useState('')
   const [results, setResults] = useState<Question[]>([])
@@ -135,12 +244,17 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
   }, [acceptImage, mode])
 
   const selectedExamId = selected?.exam_id || (examId === 'all' ? '' : examId)
-  const pdfUrl = useMemo(
+  const imageUrl = useMemo(
     () =>
       selected && selectedExamId
-        ? `/api/v1/exams/${encodeURIComponent(selectedExamId)}/questions/${selected.id}/question.pdf`
+        ? `/api/v1/exams/${encodeURIComponent(selectedExamId)}/questions/${selected.id}/question.jpg`
         : '',
     [selected, selectedExamId],
+  )
+  const topicTree = useMemo(() => buildTopicTree(topics), [topics])
+  const visibleTopicTree = useMemo(
+    () => filterTopicTree(topicTree, topicFilter),
+    [topicFilter, topicTree],
   )
 
   function canSearch() {
@@ -181,7 +295,10 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
         })
         if (examId !== 'all') params.set('exam_id', examId)
         if (mode === 'topic' && topicCode !== 'all') {
-          params.append('topic', topicCode)
+          const selectedTopic = findTopic(topicTree, topicCode)
+          for (const code of selectedTopic ? collectTopicCodes(selectedTopic) : [topicCode]) {
+            params.append('topic', code)
+          }
         }
         setResults(
           await apiRequest<Question[]>(`/api/v1/questions/search?${params}`),
@@ -220,7 +337,7 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
       className={
         compact
           ? 'space-y-4'
-          : 'mx-auto w-full max-w-[1480px] space-y-6 p-4 md:p-8'
+          : 'ui-page-enter mx-auto w-full max-w-[1480px] space-y-6 p-4 md:p-8'
       }
     >
       {!compact && (
@@ -354,23 +471,43 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
               </TabsContent>
               <TabsContent value="topic" className="m-0">
                 <div className="space-y-2">
-                  <Label>{t('knowledgePoint')}</Label>
-                  <Select
-                    value={topicCode}
-                    onValueChange={(value) => value && setTopicCode(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder={t('chooseTopic')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('allTopics')}</SelectItem>
-                      {topics.map((topic) => (
-                        <SelectItem key={topic.code} value={topic.code}>
-                          {topic.title} · {topic.question_count}
-                        </SelectItem>
+                  <Label htmlFor="topic-filter">{t('knowledgePoint')}</Label>
+                  <Input
+                    id="topic-filter"
+                    type="search"
+                    value={topicFilter}
+                    onChange={(event) => setTopicFilter(event.target.value)}
+                    placeholder={t('filterTopics')}
+                  />
+                  <div className="max-h-72 overflow-y-auto rounded-2xl border bg-muted/15 p-2">
+                    <button
+                      type="button"
+                      className={`min-h-11 w-full rounded-xl px-3 text-left text-sm font-medium transition-colors ${topicCode === 'all' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/70'}`}
+                      onClick={() => setTopicCode('all')}
+                    >
+                      {t('allTopics')}
+                    </button>
+                    <div role="tree" aria-label={t('topicTree')}>
+                      {visibleTopicTree.map((node) => (
+                        <TopicTreeItem
+                          key={node.id}
+                          node={node}
+                          depth={0}
+                          expanded={expandedTopics}
+                          selected={topicCode}
+                          onToggle={(id) =>
+                            setExpandedTopics((current) => {
+                              const next = new Set(current)
+                              if (next.has(id)) next.delete(id)
+                              else next.add(id)
+                              return next
+                            })
+                          }
+                          onSelect={setTopicCode}
+                        />
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </div>
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {t('chooseTopic')}
                   </p>
@@ -503,16 +640,18 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                   <Button
                     variant="outline"
                     render={
-                      <a href={pdfUrl} target="_blank" rel="noreferrer" />
+                      <a href={imageUrl} target="_blank" rel="noreferrer" />
                     }
                   >
                     {t('openPdf')}
                   </Button>
                 </div>
-                <iframe
-                  src={pdfUrl}
-                  title={`${selected.paper_key} question ${selected.question_number}`}
-                  className="h-[560px] w-full bg-muted"
+                {/* Protected dynamic images are served by the application API. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt={`${selected.paper_key} question ${selected.question_number}`}
+                  className="max-h-[680px] min-h-80 w-full bg-white object-contain p-3"
                 />
                 <div className="border-t p-4">
                   <h3 className="mb-3 font-semibold">{t('similar')}</h3>

@@ -9,6 +9,8 @@ directory layout.
   non-functional requirements.
 - [Architecture](architecture.md): repository boundaries, runtime components,
   dependency direction, and persistence ownership.
+- [UI design guidelines](ui-design-guidelines.md): persistent shadcn preset,
+  responsive layout, motion and accessibility rules for all AI UI work.
 - [Engineering principles](principles.md): rules that apply across modules.
 
 ## Modules

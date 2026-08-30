@@ -84,7 +84,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative grid min-h-svh overflow-hidden bg-muted/35 lg:grid-cols-[1.1fr_.9fr]">
+    <main className="ui-page-enter relative grid min-h-svh overflow-hidden bg-muted/35 lg:grid-cols-[1.1fr_.9fr]">
       <Button
         variant="outline"
         size="icon"
@@ -132,7 +132,7 @@ export default function LoginPage() {
         </p>
       </section>
       <section className="grid place-items-center p-5 md:p-10">
-        <Card className="w-full max-w-md shadow-xl shadow-primary/5">
+        <Card className="ui-section-enter w-full max-w-md shadow-xl shadow-primary/5">
           <CardHeader>
             <CardTitle className="text-2xl">
               {mode === 'login' ? t('loginTitle') : t('registerTitle')}

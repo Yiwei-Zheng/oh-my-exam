@@ -120,10 +120,14 @@ class GlobalCatalog:
                 root["children"].append(board_node)
             program_node = programs.setdefault((qualification, board, program), self._tree_node(
                 f"program:{qualification}:{board}:{program}", program.upper(), "program"
-            ))
+            ) | {"paper_count": 0, "question_count": 0})
             if program_node not in board_node["children"]:
                 board_node["children"].append(program_node)
             if row["paper_id"] is not None:
+                program_node["paper_count"] = int(program_node["paper_count"]) + 1
+                program_node["question_count"] = (
+                    int(program_node["question_count"]) + int(row["question_count"])
+                )
                 year = str(row["year"] or "Unknown year")
                 year_node = years.setdefault(
                     (qualification, board, program, year),
@@ -284,7 +288,8 @@ class GlobalCatalog:
             if not self._table_exists(connection, "syllabus_topics"):
                 return []
             sql = """
-                SELECT f.canonical_code AS code, st.title, st.description,
+                SELECT st.id, st.parent_topic_id, f.canonical_code AS code,
+                       st.title, st.description,
                        ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
                        COUNT(DISTINCT qf.question_id) AS question_count
                 FROM syllabus_topics st
@@ -305,6 +310,7 @@ class GlobalCatalog:
             rows = connection.execute(sql, parameters).fetchall()
         return [
             {
+                "id": row["id"], "parent_id": row["parent_topic_id"],
                 "code": row["code"], "title": row["title"], "description": row["description"],
                 "exam_id": f"{row['qualification']}:{row['exam_board']}:{row['course_code']}",
                 "question_count": row["question_count"],

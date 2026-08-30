@@ -10,27 +10,38 @@ class QuestionDocumentError(ValueError):
     pass
 
 
-def crop_question_pdf(source_path: Path, regions: Iterable[Mapping[str, object]]) -> bytes:
-    """Create a compact vector PDF containing one page per question crop region."""
+def crop_question_jpeg(
+    source_path: Path,
+    regions: Iterable[Mapping[str, object]],
+    *,
+    dpi: int = 180,
+    quality: int = 88,
+) -> bytes:
+    """Render question regions into one vertically joined JPEG."""
 
-    output = pymupdf.open()
-    try:
-        with pymupdf.open(source_path) as source:
-            for region in regions:
-                page_index = _required_int(region, "page_index")
-                if page_index < 0 or page_index >= source.page_count:
-                    raise QuestionDocumentError(f"crop page is outside source PDF: {page_index}")
-                source_page = source[page_index]
-                clip = _clip_rect(region).intersect(source_page.rect)
-                if clip.is_empty or clip.is_infinite:
-                    raise QuestionDocumentError(f"invalid crop rectangle on page {page_index}")
-                target = output.new_page(width=clip.width, height=clip.height)
-                target.show_pdf_page(target.rect, source, page_index, clip=clip)
-        if output.page_count == 0:
-            raise QuestionDocumentError("question has no crop regions")
-        return output.tobytes(garbage=4, deflate=True)
-    finally:
-        output.close()
+    rendered: list[pymupdf.Pixmap] = []
+    with pymupdf.open(source_path) as source:
+        for region in regions:
+            page_index = _required_int(region, "page_index")
+            if page_index < 0 or page_index >= source.page_count:
+                raise QuestionDocumentError(f"crop page is outside source PDF: {page_index}")
+            source_page = source[page_index]
+            clip = _clip_rect(region).intersect(source_page.rect)
+            if clip.is_empty or clip.is_infinite:
+                raise QuestionDocumentError(f"invalid crop rectangle on page {page_index}")
+            rendered.append(source_page.get_pixmap(dpi=dpi, clip=clip, alpha=False))
+    if not rendered:
+        raise QuestionDocumentError("question has no crop regions")
+
+    width = max(pixmap.width for pixmap in rendered)
+    height = sum(pixmap.height for pixmap in rendered)
+    joined = pymupdf.Pixmap(pymupdf.csRGB, (0, 0, width, height), False)
+    joined.clear_with(255)
+    top = 0
+    for pixmap in rendered:
+        joined.copy(pixmap, (0, top, pixmap.width, top + pixmap.height))
+        top += pixmap.height
+    return joined.tobytes("jpg", jpg_quality=quality)
 
 
 def _clip_rect(region: Mapping[str, object]) -> pymupdf.Rect:

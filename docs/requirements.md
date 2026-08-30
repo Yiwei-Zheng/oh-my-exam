@@ -37,8 +37,9 @@ architecture must allow new exam families without global rewrites.
 
 - The canonical hierarchy is qualification, provider or exam board, exam or
   subject, year, session, paper, question, and subquestion.
-- Knowledge point, syllabus section, question type, difficulty, and processing
-  state are filters and tags rather than competing tree roots.
+- Knowledge point and syllabus section filters use their own searchable tree;
+  question type, difficulty, and processing state remain tags and filters rather
+  than competing roots in the paper tree.
 - Tree nodes load lazily and large question lists use cursor pagination.
 - Search supports printed question text, identity fields, normalized tags, and
   syllabus knowledge points.
@@ -48,8 +49,8 @@ architecture must allow new exam families without global rewrites.
   the top five matches.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
-- A question can be opened as a dynamically clipped vector PDF.
-- An answer can be viewed as a clipped PDF, within its complete source PDF, and
+- A question can be opened as a dynamically rendered JPG crop.
+- An answer can be viewed as a dynamically rendered JPG crop, within its complete source PDF, and
   as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
   the question may still be published.
@@ -81,8 +82,8 @@ architecture must allow new exam families without global rewrites.
 - Original PDF documents are immutable, checksummed, versioned server objects.
 - The local object store lives under `backend/data/objects/`; the storage API
   remains replaceable by an S3-compatible implementation.
-- Permanent question and answer JPG derivatives are not part of the new data
-  model. Temporary thumbnails are caches with retention limits.
+- Question and answer JPG crops are rendered on demand and are not permanent
+  derivatives. Temporary image caches have retention limits.
 - Generated artifacts retain enough provenance to reproduce and audit a release.
 
 ## Web experience
@@ -93,7 +94,12 @@ architecture must allow new exam families without global rewrites.
   navigation. Phone uses drill-down routes.
 - Administrator paper assets use the canonical collapsible tree rather than a
   flattened paper list. Filtering preserves matching nodes and their ancestors.
-- The document rail switches between question PDF, answer PDF, structured text,
+- Exam-program paper and question totals appear as aligned columns inside the
+  paper tree; there is no duplicate exam-program inventory widget beside it.
+- The administrator overview samples host CPU, RAM and disk use every two
+  seconds while visible. Project storage separates code, databases, papers and
+  other runtime data.
+- The document rail switches between question JPG, answer JPG, structured text,
   and source paper while retaining question context.
 - Light, dark, and follow-system themes are supported.
 - Chinese and English use the same i18n system. All user-visible interface text
@@ -102,6 +108,8 @@ architecture must allow new exam families without global rewrites.
   and landscape, without page-level horizontal overflow.
 - Primary interactions are keyboard accessible, have visible focus, provide at
   least 44px touch targets, meet WCAG AA contrast, and respect reduced motion.
+- Loading, navigation, disclosure and press states use interruptible,
+  non-linear motion with immediate pointer feedback.
 
 ## Deployment
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
@@ -26,7 +27,8 @@ from .image_search import (
 )
 from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
-from .question_document import QuestionDocumentError, crop_question_pdf
+from .question_document import QuestionDocumentError, crop_question_jpeg
+from .system_monitor import SystemMonitor
 from .update_jobs import UpdateJobManager
 
 
@@ -81,6 +83,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     login_limiter = LoginRateLimiter(settings.login_rate_limit_storage_uri)
     updates = UpdateJobManager(app_database_path, settings.question_update_command)
     ai_usage = AiUsageStore(app_database_path)
+    system_monitor = SystemMonitor(
+        settings.project_root,
+        settings.paper_root,
+        (settings.database_path, app_database_path),
+    )
     app = FastAPI(title="Oh-My-Exam API", version="0.1.0")
 
     def current_user(request: Request) -> User:
@@ -211,21 +218,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
-    @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/{kind}.pdf")
-    def get_question_pdf(exam_id: str, question_id: int, kind: str) -> Response:
+    @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/{kind}.jpg")
+    def get_question_image(exam_id: str, question_id: int, kind: str) -> Response:
         try:
             document = catalog.get_question_document(exam_id, question_id, kind)
             source_path = papers.find_by_storage_key(document.storage_key)
-            content = crop_question_pdf(source_path, document.crop_regions)
+            content = crop_question_jpeg(source_path, document.crop_regions)
         except (CatalogNotFoundError, PaperNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except QuestionDocumentError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         return Response(
             content=content,
-            media_type="application/pdf",
+            media_type="image/jpeg",
             headers={
-                "Content-Disposition": f'inline; filename="{document.filename}"',
+                "Content-Disposition": f'inline; filename="{Path(document.filename).stem}.jpg"',
                 "Cache-Control": "private, max-age=3600",
             },
         )
@@ -295,6 +302,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return catalog.asset_inventory()
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/admin/system-resources")
+    def admin_system_resources(_: User = Depends(admin_user)) -> dict[str, object]:
+        return system_monitor.snapshot()
 
     @app.get("/api/v1/admin/ai-usage")
     def admin_ai_usage(

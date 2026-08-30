@@ -7,6 +7,27 @@ export interface AdminStats {
   activity: { date: string; count: number }[]
 }
 
+export interface SystemResources {
+  sampled_at: number
+  cpu: { percent: number }
+  memory: { percent: number; used_bytes: number; total_bytes: number }
+  disk: {
+    percent: number
+    used_bytes: number
+    total_bytes: number
+    free_bytes: number
+  }
+  storage: {
+    project_bytes: number
+    categories: {
+      code: number
+      databases: number
+      papers: number
+      other_data: number
+    }
+  }
+}
+
 export interface AssetInventory {
   exam_programs: number
   papers: number

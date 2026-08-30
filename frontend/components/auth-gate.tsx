@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { useAuth } from '@/components/auth-provider'
+import { useLocale } from '@/components/locale-provider'
 
 export function AuthGate({
   children,
@@ -14,6 +15,7 @@ export function AuthGate({
 }) {
   const router = useRouter()
   const { user, ready } = useAuth()
+  const { t } = useLocale()
 
   useEffect(() => {
     if (!ready) return
@@ -24,7 +26,7 @@ export function AuthGate({
   if (!ready || !user || (admin && user.role !== 'admin')) {
     return (
       <main className="grid min-h-svh place-items-center text-sm text-muted-foreground">
-        Loading…
+        {t('loading')}
       </main>
     )
   }

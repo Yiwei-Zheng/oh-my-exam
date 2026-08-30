@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted on 2026-08-29.
+Superseded in part by 0012 on 2026-08-30.
 
 ## Context
 
@@ -19,8 +19,8 @@ root and does not expose them to the browser. Content-addressed deduplication an
 an S3-compatible backend are future work.
 
 Question and answer previews are rendered from the original PDF and normalized
-page regions. Normal question display returns a clipped vector PDF. The browser
-embeds backend PDF responses for full-paper and question-level viewing.
+page regions. See 0012 for the current question-level JPG response format. The
+browser still embeds backend PDF responses for full-paper viewing.
 Temporary thumbnails may be generated below `backend/data/cache/` and removed
 by retention policy, but they are not catalog assets.
 

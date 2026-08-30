@@ -39,7 +39,7 @@ oh-my-exam/
 └── scripts/                  # repository-wide environment and start commands
 ```
 
-`tmp/` is never an application dependency. `backend/data/` is private runtime state and is not committed. Original PDFs are immutable inputs; normalized crop coordinates are data. Permanent cropped JPG files are not part of the architecture.
+`tmp/` is never an application dependency. `backend/data/` is private runtime state and is not committed. Original PDFs are immutable inputs; normalized crop coordinates are data. Question and answer JPGs are rendered on demand and are not stored as permanent derivatives.
 
 ## Catalog release
 
@@ -49,7 +49,12 @@ Answer corrections are append-only `answer_versions` rows with `raw_text` and `m
 
 ## Question browser and documents
 
-The browser uses the hierarchy qualification, exam board, program, year, session, paper and question. Paper nodes fetch question lists on demand. The right rail switches between dynamically clipped question PDF, clipped answer PDF and structured text. Full source PDFs remain available through authorized internal IDs. The browser never receives filesystem paths or upstream source URLs.
+The browser uses the hierarchy qualification, exam board, program, year, session, paper and question. Paper nodes fetch question lists on demand. Knowledge points expose a separate hierarchy backed by syllabus parent ids. The right rail switches between dynamically rendered question JPG, answer JPG and structured text. Full source PDFs remain available through authorized internal IDs. The browser never receives filesystem paths or upstream source URLs.
+
+The authenticated administrator resource endpoint samples host CPU, memory and
+disk through `psutil`. Project storage traversal is cached and classifies code,
+SQLite databases, immutable papers and other runtime data so two-second UI
+polling does not trigger a full filesystem walk on every request.
 
 Text and knowledge-point search query the normalized catalog directly. Image
 search sends a bounded browser-normalized data URL to FastAPI, where the OCR

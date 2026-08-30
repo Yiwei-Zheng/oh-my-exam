@@ -15,14 +15,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { apiRequest } from '@/lib/api'
@@ -89,7 +81,7 @@ function AssetTreeNode({
               })
             : isBranch && onToggle(node.id)
         }
-        className={`flex min-h-11 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selectedPaperId === node.paper_id ? 'bg-primary/10 text-primary' : ''}`}
+        className={`ui-interactive flex min-h-11 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selectedPaperId === node.paper_id ? 'bg-primary/10 text-primary' : ''}`}
         style={{ paddingLeft: `${8 + depth * 16}px` }}
       >
         <HugeiconsIcon
@@ -99,6 +91,12 @@ function AssetTreeNode({
         <span className="min-w-0 flex-1 truncate font-medium">
           {node.label}
         </span>
+        {node.kind === 'program' && (
+          <span className="grid w-28 shrink-0 grid-cols-2 gap-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+            <span className="text-right">{node.paper_count || 0}</span>
+            <span className="text-right">{node.question_count || 0}</span>
+          </span>
+        )}
         {node.count !== undefined && (
           <Badge variant="secondary" className="shrink-0 font-mono text-[10px]">
             {node.count}
@@ -106,7 +104,7 @@ function AssetTreeNode({
         )}
       </button>
       {isBranch && isExpanded && (
-        <div role="group">
+        <div role="group" className="ui-tree-enter">
           {node.children.map((child) => (
             <AssetTreeNode
               key={child.id}
@@ -226,11 +224,11 @@ export function AssetsPanel({
     onInventory(await apiRequest<AssetInventory>('/api/v1/admin/assets'))
   }
 
-  const questionPdf = selected
-    ? `/api/v1/exams/${encodeURIComponent(selected.exam_id || '')}/questions/${selected.id}/question.pdf`
+  const questionImage = selected
+    ? `/api/v1/exams/${encodeURIComponent(selected.exam_id || '')}/questions/${selected.id}/question.jpg`
     : ''
-  const answerPdf = selected
-    ? `/api/v1/exams/${encodeURIComponent(selected.exam_id || '')}/questions/${selected.id}/answer.pdf`
+  const answerImage = selected
+    ? `/api/v1/exams/${encodeURIComponent(selected.exam_id || '')}/questions/${selected.id}/answer.jpg`
     : ''
 
   return (
@@ -275,51 +273,11 @@ export function AssetsPanel({
           ))}
         </div>
       )}
-      {inventory && (
-        <Card>
-          <CardHeader>
-            <CardTitle>{t('examPrograms')}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('examPrograms')}</TableHead>
-                  <TableHead className="text-right">
-                    {t('totalPapers')}
-                  </TableHead>
-                  <TableHead className="text-right">
-                    {t('totalQuestions')}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {inventory.by_exam.map((exam) => (
-                  <TableRow key={exam.id}>
-                    <TableCell>
-                      <strong>{exam.course_code.toUpperCase()}</strong>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        {exam.display_name}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {exam.paper_count}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {exam.question_count}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
       <Card>
         <CardHeader>
           <CardTitle>{t('questionLibrary')}</CardTitle>
         </CardHeader>
-        <CardContent className="grid min-h-[680px] gap-4 p-4 xl:grid-cols-[280px_280px_minmax(0,1fr)]">
+        <CardContent className="grid min-h-[680px] gap-4 p-4 xl:grid-cols-[380px_minmax(0,1fr)]">
           <div className="min-w-0 rounded-xl border">
             <div className="relative border-b p-3">
               <HugeiconsIcon
@@ -334,9 +292,6 @@ export function AssetsPanel({
               />
             </div>
             <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
-              <span className="text-xs font-semibold text-muted-foreground">
-                {t('assetTree')}
-              </span>
               <div className="flex gap-1">
                 <Button
                   type="button"
@@ -356,6 +311,11 @@ export function AssetsPanel({
                 </Button>
               </div>
             </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_56px_56px] items-center border-b px-3 py-2 text-[11px] font-semibold text-muted-foreground">
+              <span>{t('assetTree')}</span>
+              <span className="text-right">{t('totalPapers')}</span>
+              <span className="text-right">{t('totalQuestions')}</span>
+            </div>
             <div
               role="tree"
               aria-label={t('assetTree')}
@@ -374,28 +334,29 @@ export function AssetsPanel({
               ))}
             </div>
           </div>
-          <div className="rounded-xl border">
-            <div className="border-b p-4 text-sm font-semibold">
-              {selectedPaper?.label || t('selectPaper')}
+          <div className="grid min-w-0 gap-4 2xl:grid-cols-[280px_minmax(0,1fr)]">
+            <div className="rounded-xl border">
+              <div className="border-b p-4 text-sm font-semibold">
+                {selectedPaper?.label || t('selectPaper')}
+              </div>
+              <div className="max-h-[620px] overflow-y-auto">
+                {questions.map((question) => (
+                  <button
+                    key={question.id}
+                    onClick={() => chooseQuestion(question)}
+                    className={`w-full border-b p-4 text-left hover:bg-muted ${selected?.id === question.id ? 'bg-primary/10' : ''}`}
+                  >
+                    <strong className="font-mono text-xs text-primary">
+                      Q{question.question_number}
+                    </strong>
+                    <span className="mt-2 line-clamp-3 block text-sm text-muted-foreground">
+                      {question.content || question.local_key}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="max-h-[620px] overflow-y-auto">
-              {questions.map((question) => (
-                <button
-                  key={question.id}
-                  onClick={() => chooseQuestion(question)}
-                  className={`w-full border-b p-4 text-left hover:bg-muted ${selected?.id === question.id ? 'bg-primary/10' : ''}`}
-                >
-                  <strong className="font-mono text-xs text-primary">
-                    Q{question.question_number}
-                  </strong>
-                  <span className="mt-2 line-clamp-3 block text-sm text-muted-foreground">
-                    {question.content || question.local_key}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="min-w-0 overflow-hidden rounded-xl border">
+            <div className="min-w-0 overflow-hidden rounded-xl border">
             {!selected ? (
               <div className="grid h-full place-items-center p-8 text-center text-muted-foreground">
                 {t('selectPaper')}
@@ -410,17 +371,19 @@ export function AssetsPanel({
                   </TabsList>
                 </div>
                 <TabsContent value="question" className="m-0">
-                  <iframe
-                    className="h-[620px] w-full"
-                    src={questionPdf}
-                    title={t('questionPdf')}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="max-h-[720px] min-h-[420px] w-full bg-white object-contain p-3"
+                    src={questionImage}
+                    alt={t('questionPdf')}
                   />
                 </TabsContent>
                 <TabsContent value="answer" className="m-0">
-                  <iframe
-                    className="h-[620px] w-full"
-                    src={answerPdf}
-                    title={t('answerPdf')}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="max-h-[720px] min-h-[420px] w-full bg-white object-contain p-3"
+                    src={answerImage}
+                    alt={t('answerPdf')}
                   />
                 </TabsContent>
                 <TabsContent value="text" className="space-y-4 p-4">
@@ -456,6 +419,7 @@ export function AssetsPanel({
                 </TabsContent>
               </Tabs>
             )}
+            </div>
           </div>
         </CardContent>
       </Card>

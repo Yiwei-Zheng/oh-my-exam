@@ -19,8 +19,9 @@ qualification
               -> subquestion
 ```
 
-Knowledge points and other classifications are tags and filters. The browser
-loads one level at a time and uses cursor pagination for question results.
+Knowledge points retain their syllabus parent ids and appear in a separate
+searchable filter tree. Other classifications remain tags and filters. The
+browser loads one level at a time and uses cursor pagination for question results.
 Exam programs are displayed by their uppercase code. When a paper session is
 identical to its year, the browser tree omits the redundant session level.
 
@@ -35,7 +36,7 @@ A source-paper record uses an internal id and a storage key relative to the
 protected raw-paper root. A region refers to a zero-based page and validated PDF
 rectangle. Questions and answers may use multiple ordered regions.
 
-Full-paper delivery and clipped question delivery are separate operations.
+Full-paper PDF delivery and on-demand question JPG rendering are separate operations.
 Neither operation exposes storage keys or source paths. Structured answer text
 stores raw extraction and Markdown versions independently from the PDF.
 

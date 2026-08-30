@@ -15,6 +15,7 @@ dependencies = [
   "PyJWT>=2.10,<3",
   "pymupdf>=1.24,<2",
   "pypdf>=4,<7",
+  "psutil>=6,<8",
   "uvicorn[standard]>=0.30,<1",
 ]
 
