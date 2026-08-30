@@ -6,6 +6,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 import pymupdf
 
+from oh_my_exam.catalog import GlobalCatalog
 from oh_my_exam.config import Settings
 from oh_my_exam.main import create_app
 from oh_my_exam.paper_store import FileSystemPaperStore, PaperNotFoundError
@@ -24,7 +25,7 @@ def _create_global_database(path: Path) -> None:
                 id INTEGER PRIMARY KEY, exam_board_id INTEGER, qualification_id INTEGER,
                 code TEXT, name TEXT
             );
-            INSERT INTO exam_programs VALUES (1, 1, 1, 'engaa', 'ENGAA');
+            INSERT INTO exam_programs VALUES (1, 1, 1, 'engaa', 'Engineering Admissions Assessment');
             CREATE TABLE papers (
                 id INTEGER PRIMARY KEY, exam_program_id INTEGER, stable_key TEXT,
                 source_key TEXT, year INTEGER, session TEXT
@@ -154,6 +155,22 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
 
     unsupported_kind = client.get("/api/v1/exams/admissions:uat:engaa/papers/1/upstream-url")
     assert unsupported_kind.status_code == 404
+
+
+def test_question_tree_uses_uppercase_exam_codes_and_collapses_duplicate_year(tmp_path: Path) -> None:
+    database = tmp_path / "databases" / "global.sqlite"
+    _create_global_database(database)
+    with sqlite3.connect(database) as connection:
+        connection.execute("UPDATE papers SET session = '2023'")
+        connection.commit()
+
+    tree = GlobalCatalog(database).question_tree()
+    program = tree[0]["children"][0]["children"][0]
+    year = program["children"][0]
+
+    assert program["label"] == "ENGAA"
+    assert year["label"] == "2023"
+    assert [child["kind"] for child in year["children"]] == ["paper"]
 
 
 def test_capabilities_and_placeholders_are_explicit(tmp_path: Path) -> None:

@@ -89,7 +89,7 @@ class GlobalCatalog:
             if board_node not in root["children"]:
                 root["children"].append(board_node)
             program_node = programs.setdefault((qualification, board, program), self._tree_node(
-                f"program:{qualification}:{board}:{program}", str(row["program_name"]), "program"
+                f"program:{qualification}:{board}:{program}", program.upper(), "program"
             ))
             if program_node not in board_node["children"]:
                 board_node["children"].append(program_node)
@@ -102,18 +102,21 @@ class GlobalCatalog:
                 if year_node not in program_node["children"]:
                     program_node["children"].append(year_node)
                 session = str(row["session"] or "Unspecified")
-                session_node = sessions.setdefault(
-                    (qualification, board, program, year, session),
-                    self._tree_node(
-                        f"session:{qualification}:{board}:{program}:{year}:{session}",
-                        session.upper(),
-                        "session",
-                    ),
-                )
-                if session_node not in year_node["children"]:
-                    year_node["children"].append(session_node)
+                paper_parent = year_node
+                if session.casefold() != year.casefold():
+                    session_node = sessions.setdefault(
+                        (qualification, board, program, year, session),
+                        self._tree_node(
+                            f"session:{qualification}:{board}:{program}:{year}:{session}",
+                            session.upper(),
+                            "session",
+                        ),
+                    )
+                    if session_node not in year_node["children"]:
+                        year_node["children"].append(session_node)
+                    paper_parent = session_node
                 label = f"{row['year']} · {row['source_key']}" if row["year"] else str(row["source_key"])
-                session_node["children"].append({
+                paper_parent["children"].append({
                     "id": f"paper:{row['paper_id']}", "label": label, "kind": "paper",
                     "count": int(row["question_count"]), "children": [],
                     "paper_id": int(row["paper_id"]),

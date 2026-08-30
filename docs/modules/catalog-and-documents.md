@@ -21,6 +21,8 @@ qualification
 
 Knowledge points and other classifications are tags and filters. The browser
 loads one level at a time and uses cursor pagination for question results.
+Exam programs are displayed by their uppercase code. When a paper session is
+identical to its year, the browser tree omits the redundant session level.
 
 Managed CIE knowledge-point tags use official syllabus section names. Search
 can span question text, stable identity and these tags. Similar-question lists

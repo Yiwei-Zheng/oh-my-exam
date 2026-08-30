@@ -9,7 +9,6 @@ import { useAuthStore } from '../../stores/auth'
 
 interface Exam {
   id: string
-  display_name: string
   course_code: string
   question_count: number
 }
@@ -179,7 +178,7 @@ function matchPercent(score = 0) {
                 :key="exam.id"
                 :value="exam.id"
               >
-                {{ exam.display_name }} · {{ exam.course_code }}
+                {{ exam.course_code.toUpperCase() }}
               </option>
             </select>
           </div>
