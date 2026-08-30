@@ -1,23 +1,44 @@
+# Local agent configuration
+/.agents/
+/AGENTS.md
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+/.venv/
+/tools/.venv*/
+/tools/exam_pipeline/.venv*/
+
+# Python build and test artifacts
 *.egg-info/
+*.py[cod]
 *.part
-*.pyc
-*.pyo
-.agents/
-.venv/
-.pytest_cache/
 __pycache__/
-AGENTS.md
-assets/
-data/
-dist/
-docs/decisions/
-docs/requirements.assets/
-docs/requirements.md
-docs/tasks/
-docs/todo
-node_modules/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 pytest-cache-files-*/
-temp/
-tmp/
-tools/.venv*/
-tools/exam_pipeline/.venv*/
+
+# Frontend dependencies and build artifacts
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Private runtime data and disposable workspace files
+/backend/data/
+/data/
+/resources/
+/temp/
+/tmp/
+
+# Editor and operating-system artifacts
+*.swp
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
