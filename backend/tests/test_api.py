@@ -379,3 +379,23 @@ def test_image_search_returns_ocr_text_and_matches_any_term(
     assert response.json()["extracted_text"] == "unrelated acceleration noise"
     assert response.json()["ocr_source"] == "test-ocr"
     assert response.json()["results"][0]["id"] == 7
+
+
+def test_image_search_rejects_more_than_top_five_matches(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        main_module,
+        "extract_image_text",
+        lambda _data_url: ImageText("acceleration", "test-ocr"),
+    )
+
+    response = _client(tmp_path).post(
+        "/api/v1/questions/image-search",
+        json={
+            "image_data_url": "data:image/png;base64," + "A" * 32,
+            "limit": 6,
+        },
+    )
+
+    assert response.status_code == 422

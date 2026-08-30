@@ -2,16 +2,17 @@
 
 ## Asset inventory
 
-The active catalog contains 30,168 questions across six programs. Extracted
-search text is available for 22,881 questions (75.8%). CIE Mathematics 9709 and
-Further Mathematics 9231 account for 27,233 questions. The normalized schema
+The active catalog contains 30,528 questions across seven programs. Extracted
+search text is available for 23,241 questions (76.1%). CIE Mathematics 9709 and
+Further Mathematics 9231 account for 27,233 questions, and TMUA contributes 360
+paired questions and answers. The normalized schema
 already contained syllabus, feature, embedding, and similarity tables, but all
 of them were empty before this task.
 
 Maintained syllabus PDFs exist for 9231, 9618, and 9702. The matching topic
-catalog covers the two subjects currently present in the question database:
-9709 and 9231. It records the official 2026-2027 Cambridge syllabus URLs and
-uses their section names as canonical tags.
+catalog covers 9709, 9231, and TMUA. It records the official 2026-2027 Cambridge
+syllabus URLs and the UAT-UK TMUA content specification, using their section
+names as canonical tags.
 
 ## Matching design
 
@@ -21,7 +22,9 @@ sections; extracted question text then selects detailed topics. Similarity is a
 sparse TF-IDF cosine score (75%) plus shared-topic Jaccard score (25%). Matches
 from the same paper are excluded to avoid recommending adjacent subparts.
 Historical Mathematics Paper 7 is mapped to the current Paper 6 Statistics 2
-content domain; zero-padded component identifiers are normalized.
+content domain; zero-padded component identifiers are normalized. TMUA Paper 1
+and Paper 2 receive their broad paper tags plus detailed content tags before
+similarities are ranked.
 
 Word2Vec is not used. The available corpus is small for training stable domain
 word vectors, and OCR-heavy mathematical notation produces noisy tokens. The
@@ -33,9 +36,9 @@ later be replaced or complemented through the existing embedding tables.
 - `GET /api/v1/questions/search?query=...&exam_id=...&topic=...`
 - `GET /api/v1/topics?exam_id=...`
 - `GET /api/v1/exams/{exam_id}/questions/{question_id}/similar`
+- `POST /api/v1/questions/image-search` returns at most the top five matches.
 
 The release pipeline rebuilds tags and similarities before activating a new
 catalog. Questions without extracted text retain broad component-level tags but
-may have no text-based recommendations. Admissions tests currently use text
-matching only and do not receive syllabus tags until maintained specifications
-are added.
+may have no text-based recommendations. Admissions tests without a maintained
+specification continue to use text matching only.

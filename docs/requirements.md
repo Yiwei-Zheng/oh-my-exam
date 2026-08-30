@@ -44,7 +44,8 @@ architecture must allow new exam families without global rewrites.
   syllabus knowledge points.
 - Image search accepts a camera photo, selected image, drag-and-drop image, or
   image pasted from the clipboard. The server extracts text with a replaceable
-  OCR adapter and ranks catalog questions by overlapping terms.
+  OCR adapter, ranks catalog questions by overlapping terms, and returns at most
+  the top five matches.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
 - A question can be opened as a dynamically clipped vector PDF.

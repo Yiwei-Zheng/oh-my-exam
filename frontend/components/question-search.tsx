@@ -168,7 +168,7 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
               image_data_url: imageData,
               exam_id: examId === 'all' ? null : examId,
               topic: [],
-              limit: 50,
+              limit: 5,
             }),
           },
         )

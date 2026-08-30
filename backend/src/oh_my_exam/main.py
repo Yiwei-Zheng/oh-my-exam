@@ -66,7 +66,7 @@ class ImageQuestionSearchRequest(BaseModel):
     image_data_url: str = Field(min_length=32, max_length=12_000_000)
     exam_id: str | None = None
     topic: list[str] = Field(default_factory=list, max_length=20)
-    limit: int = Field(default=50, ge=1, le=100)
+    limit: int = Field(default=5, ge=1, le=5)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
