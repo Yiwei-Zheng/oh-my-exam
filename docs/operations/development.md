@@ -29,16 +29,24 @@ Local development creates and reuses `backend/data/application.secret` when
 the protected systemd environment file.
 
 The launcher starts the API on port 8000 and Next.js on port 4173, streams both
-logs into one terminal, and stops both process trees on Ctrl+C. The same
-launcher works on every supported platform through Python:
+logs into one terminal, and stops both process trees on Ctrl+C. By default both
+servers listen on all interfaces. The launcher prints the detected LAN address
+and a terminal QR code that opens the frontend from another device on the same
+network. The same launcher works on every supported platform through Python:
 
 ```bash
 python start_server.py
 ```
 
 Next.js proxies `/api` to `http://127.0.0.1:8000`. Use `OME_API_PROXY_TARGET` to override it.
-Use `python start_server.py --check` for a non-starting prerequisite and
-port check, or add `--lan` to expose both development servers on the LAN.
+Use `python start_server.py --check` for a non-starting prerequisite and port
+check. Use `python start_server.py --local` when the servers must only be
+reachable from the current computer. The legacy `--lan` option remains accepted
+but is no longer necessary.
+
+LAN access can still be blocked by the host firewall or wireless client
+isolation. Allow Python and Node.js on private networks when the operating system
+prompts for firewall access.
 
 ## Validation
 

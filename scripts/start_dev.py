@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 from pathlib import Path
 import shutil
@@ -19,20 +20,33 @@ FRONTEND_ROOT = PROJECT_ROOT / "frontend"
 VENV_PYTHON = PROJECT_ROOT / ".venv" / (
     "Scripts/python.exe" if os.name == "nt" else "bin/python"
 )
+VENV_QR = PROJECT_ROOT / ".venv" / (
+    "Scripts/qr.exe" if os.name == "nt" else "bin/qr"
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Start the Oh My Exam API and frontend development server."
     )
-    parser.add_argument("--host", default="127.0.0.1")
+    host_group = parser.add_mutually_exclusive_group()
+    host_group.add_argument("--host", default="0.0.0.0")
+    host_group.add_argument(
+        "--local",
+        action="store_const",
+        dest="host",
+        const="127.0.0.1",
+        help="Listen on localhost only and do not show a LAN QR code.",
+    )
+    host_group.add_argument(
+        "--lan",
+        action="store_const",
+        dest="host",
+        const="0.0.0.0",
+        help="Listen on all interfaces (the default; retained for compatibility).",
+    )
     parser.add_argument("--api-port", type=int, default=8000)
     parser.add_argument("--frontend-port", type=int, default=4173)
-    parser.add_argument(
-        "--lan",
-        action="store_true",
-        help="Listen on all interfaces instead of localhost.",
-    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -51,7 +65,70 @@ def require_runtime() -> str:
         raise RuntimeError("npm was not found on PATH. Install Node.js 20.19 or later.")
     if not (FRONTEND_ROOT / "node_modules").is_dir():
         raise RuntimeError("Frontend dependencies not found. Run: cd frontend && npm install")
+    if not VENV_QR.is_file():
+        raise RuntimeError(
+            "QR code support not found. Run: python scripts/setup_env.py --group all"
+        )
     return npm
+
+
+def discover_lan_ip() -> str | None:
+    candidates: list[str] = []
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 80))
+            candidates.append(probe.getsockname()[0])
+    except OSError:
+        pass
+
+    try:
+        candidates.extend(socket.gethostbyname_ex(socket.gethostname())[2])
+    except OSError:
+        pass
+
+    for candidate in candidates:
+        try:
+            address = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if isinstance(address, ipaddress.IPv4Address) and not (
+            address.is_loopback
+            or address.is_link_local
+            or address.is_multicast
+            or address.is_unspecified
+        ):
+            return candidate
+    return None
+
+
+def frontend_access_url(host: str, port: int) -> str | None:
+    if host == "0.0.0.0":
+        host = discover_lan_ip() or ""
+    if not host:
+        return None
+    try:
+        address = ipaddress.ip_address(host)
+        if address.is_loopback:
+            return None
+        if isinstance(address, ipaddress.IPv6Address):
+            host = f"[{host}]"
+    except ValueError:
+        if host.lower() == "localhost":
+            return None
+    return f"http://{host}:{port}"
+
+
+def print_access_qr(url: str) -> None:
+    print("\nScan to open on this local network / 扫码从局域网访问:", flush=True)
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "utf-8"
+    subprocess.run(
+        [str(VENV_QR), "--ascii", url],
+        cwd=PROJECT_ROOT,
+        env=environment,
+        check=True,
+    )
+    print(f"LAN:      {url}")
 
 
 def require_available_port(port: int, label: str) -> None:
@@ -59,6 +136,23 @@ def require_available_port(port: int, label: str) -> None:
         probe.settimeout(0.3)
         if probe.connect_ex(("127.0.0.1", port)) == 0:
             raise RuntimeError(f"{label} port {port} is already in use.")
+
+
+def wait_for_port(
+    port: int,
+    processes: list[subprocess.Popen[bytes]],
+    timeout_seconds: float = 30,
+) -> bool:
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if any(process.poll() is not None for process in processes):
+            return False
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.2)
+            if probe.connect_ex(("127.0.0.1", port)) == 0:
+                return True
+        time.sleep(0.1)
+    return False
 
 
 def process_options() -> dict[str, object]:
@@ -110,7 +204,7 @@ def main() -> int:
         print("[OK] Frontend runtime and development ports are ready.")
         return 0
 
-    host = "0.0.0.0" if args.lan else args.host
+    host = args.host
     api_command = [
         str(VENV_PYTHON),
         str(PROJECT_ROOT / "scripts" / "start_api.py"),
@@ -134,8 +228,11 @@ def main() -> int:
         "OME_API_PROXY_TARGET", f"http://127.0.0.1:{args.api_port}"
     )
 
-    print(f"Frontend: http://127.0.0.1:{args.frontend_port}")
+    lan_url = frontend_access_url(host, args.frontend_port)
+    print(f"Local:    http://127.0.0.1:{args.frontend_port}")
     print(f"API:      http://127.0.0.1:{args.api_port}")
+    if lan_url is None and host != "127.0.0.1":
+        print("LAN:      unavailable (no active LAN IPv4 address was found)")
     print("Press Ctrl+C to stop both servers.\n")
 
     processes: list[subprocess.Popen[bytes]] = []
@@ -151,6 +248,11 @@ def main() -> int:
                 **process_options(),
             )
         )
+        if lan_url is not None:
+            if wait_for_port(args.frontend_port, processes):
+                print_access_qr(lan_url)
+            elif all(process.poll() is None for process in processes):
+                print("LAN QR code was skipped because the frontend did not become ready.")
         while True:
             for process in processes:
                 return_code = process.poll()
