@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted on 2026-08-30.
+Superseded by decision 0013 on 2026-08-30.
 
 ## Context
 

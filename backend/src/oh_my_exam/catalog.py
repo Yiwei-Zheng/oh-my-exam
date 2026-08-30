@@ -11,10 +11,9 @@ class CatalogNotFoundError(LookupError):
 
 
 @dataclass(frozen=True)
-class QuestionDocument:
+class QuestionImage:
     storage_key: str
     filename: str
-    crop_regions: tuple[dict[str, object], ...]
 
 
 class GlobalCatalog:
@@ -451,78 +450,40 @@ class GlobalCatalog:
             "status": "published",
         }
 
-    def get_question_document(self, exam_id: str, question_id: int, kind: str) -> QuestionDocument:
+    def get_question_image(self, exam_id: str, question_id: int, kind: str) -> QuestionImage:
         if kind not in {"question", "answer"}:
-            raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
+            raise CatalogNotFoundError(f"unsupported question image kind: {kind}")
         with closing(self._connect()) as connection:
             program_id = self._program_id(connection, exam_id)
-            question = connection.execute(
+            if not self._table_exists(connection, "question_images"):
+                raise CatalogNotFoundError("catalog has no pre-rendered question images")
+            image = connection.execute(
                 """
-                SELECT qu.id, qu.local_key
+                SELECT qi.storage_key, qi.original_filename
+                FROM question_images qi
+                JOIN questions qu ON qu.id = qi.question_id
+                JOIN papers p ON p.id = qu.paper_id
+                WHERE qu.id = ? AND p.exam_program_id = ? AND qi.image_kind = ?
+                LIMIT 1
+                """,
+                (question_id, program_id, kind),
+            ).fetchone()
+            question_exists = connection.execute(
+                """
+                SELECT 1
                 FROM questions qu
                 JOIN papers p ON p.id = qu.paper_id
                 WHERE qu.id = ? AND p.exam_program_id = ?
                 """,
                 (question_id, program_id),
             ).fetchone()
-            if question is None:
-                raise CatalogNotFoundError(f"question not found: {question_id}")
-            if kind == "question":
-                document = connection.execute(
-                    """
-                    SELECT pd.storage_key, pd.original_filename
-                    FROM question_regions qr
-                    JOIN paper_documents pd ON pd.id = qr.document_id
-                    WHERE qr.question_id = ?
-                    ORDER BY qr.region_order
-                    LIMIT 1
-                    """,
-                    (question_id,),
-                ).fetchone()
-                regions = connection.execute(
-                    """
-                    SELECT region_order, page_index, x0, y0, x1, y1, render_dpi,
-                           post_left, post_top, post_right, post_bottom
-                    FROM question_regions
-                    WHERE question_id = ?
-                    ORDER BY region_order
-                    """,
-                    (question_id,),
-                ).fetchall()
-            else:
-                document = connection.execute(
-                    """
-                    SELECT pd.storage_key, pd.original_filename, a.id AS answer_id
-                    FROM answers a
-                    JOIN paper_documents pd ON pd.id = a.source_document_id
-                    WHERE a.question_id = ?
-                    ORDER BY CASE a.answer_kind
-                        WHEN 'worked_solution' THEN 0
-                        WHEN 'mark_scheme' THEN 1
-                        WHEN 'answer_key' THEN 2
-                        ELSE 3
-                    END, a.id
-                    LIMIT 1
-                    """,
-                    (question_id,),
-                ).fetchone()
-                regions = [] if document is None else connection.execute(
-                    """
-                    SELECT region_order, page_index, x0, y0, x1, y1, render_dpi,
-                           post_left, post_top, post_right, post_bottom
-                    FROM answer_regions
-                    WHERE answer_id = ?
-                    ORDER BY region_order
-                    """,
-                    (document["answer_id"],),
-                ).fetchall()
-        if document is None or not regions:
-            raise CatalogNotFoundError(f"question document not found: {question_id}/{kind}")
-        source_name = Path(str(document["original_filename"])).stem
-        return QuestionDocument(
-            storage_key=str(document["storage_key"]),
-            filename=f"{source_name}_{question['local_key']}.pdf",
-            crop_regions=tuple(dict(region) for region in regions),
+        if question_exists is None:
+            raise CatalogNotFoundError(f"question not found: {question_id}")
+        if image is None:
+            raise CatalogNotFoundError(f"pre-rendered question image not found: {question_id}/{kind}")
+        return QuestionImage(
+            storage_key=str(image["storage_key"]),
+            filename=str(image["original_filename"]),
         )
 
     def get_paper_storage_key(self, exam_id: str, paper_id: int, kind: str) -> str:

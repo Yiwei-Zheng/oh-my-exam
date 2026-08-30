@@ -39,4 +39,4 @@ tree browsing, question JPG and pipeline activation checks pass.
 
 ## Backup and restore
 
-Back up the whole private `backend/data` tree while the API is stopped, or use SQLite's online backup API for live databases and independently snapshot immutable PDFs. Restore databases and PDFs as one consistent set. Dynamically rendered JPG crops are not backup inputs.
+Back up the whole private `backend/data` tree while the API is stopped, or use SQLite's online backup API for live databases and independently snapshot immutable PDFs and `processed_questions` JPGs. Restore databases, PDFs, and pre-rendered images as one consistent set.

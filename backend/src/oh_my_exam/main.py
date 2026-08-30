@@ -27,7 +27,7 @@ from .image_search import (
 )
 from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
-from .question_document import QuestionDocumentError, crop_question_jpeg
+from .question_image_store import FileSystemQuestionImageStore, QuestionImageNotFoundError
 from .system_monitor import SystemMonitor
 from .update_jobs import UpdateJobManager
 
@@ -75,6 +75,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     catalog = GlobalCatalog(settings.database_path)
     papers = FileSystemPaperStore(settings.paper_root)
+    question_images = FileSystemQuestionImageStore(
+        settings.question_image_root or settings.paper_root.parent / "processed_questions"
+    )
     app_database_path = settings.app_database_path or (
         settings.project_root / "backend" / "data" / "application.sqlite3"
     )
@@ -219,21 +222,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/{kind}.jpg")
-    def get_question_image(exam_id: str, question_id: int, kind: str) -> Response:
+    def get_question_image(exam_id: str, question_id: int, kind: str) -> FileResponse:
         try:
-            document = catalog.get_question_document(exam_id, question_id, kind)
-            source_path = papers.find_by_storage_key(document.storage_key)
-            content = crop_question_jpeg(source_path, document.crop_regions)
-        except (CatalogNotFoundError, PaperNotFoundError) as exc:
+            image = catalog.get_question_image(exam_id, question_id, kind)
+            image_path = question_images.find_by_storage_key(image.storage_key)
+        except (CatalogNotFoundError, QuestionImageNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        except QuestionDocumentError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
-        return Response(
-            content=content,
+        return FileResponse(
+            image_path,
             media_type="image/jpeg",
+            filename=image.filename,
+            content_disposition_type="inline",
             headers={
-                "Content-Disposition": f'inline; filename="{Path(document.filename).stem}.jpg"',
-                "Cache-Control": "private, max-age=3600",
+                "Cache-Control": "private, max-age=86400, immutable",
             },
         )
 

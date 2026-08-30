@@ -38,7 +38,7 @@ def extract_content_from_fitz_clips(
     if ocr.content:
         return ocr
     if pdf_text:
-        return ContentExtraction(pdf_text, "pdf_text_unreliable", ocr.warning or "PDF text looked unreliable and OCR produced no text")
+        return ContentExtraction("", "pdf_text_rejected", ocr.warning or "PDF text looked unreliable and OCR produced no text")
     return ContentExtraction("", "ocr_unavailable", ocr.warning or "PDF text extraction produced no text and OCR is unavailable")
 
 
@@ -58,25 +58,25 @@ def extract_content_from_text_or_image(text: str, image_path: Path | None = None
         return ContentExtraction(normalized, "pdf_text")
     if image_path is None:
         if normalized:
-            return ContentExtraction(normalized, "pdf_text_unreliable", "PDF text looked unreliable and no image was available for OCR")
+            return ContentExtraction("", "pdf_text_rejected", "PDF text looked unreliable and no image was available for OCR")
         return ContentExtraction("", "ocr_unavailable", "PDF text extraction produced no text and no image was available for OCR")
     try:
         from PIL import Image
     except ImportError:
         if normalized:
-            return ContentExtraction(normalized, "pdf_text_unreliable", "Pillow is not installed, so OCR image loading is unavailable")
+            return ContentExtraction("", "pdf_text_rejected", "Pillow is not installed, so OCR image loading is unavailable")
         return ContentExtraction("", "ocr_unavailable", "Pillow is not installed, so OCR image loading is unavailable")
     try:
         with Image.open(image_path) as image:
             ocr = _ocr_image(image.convert("L"))
     except OSError as exc:
         if normalized:
-            return ContentExtraction(normalized, "pdf_text_unreliable", f"OCR image could not be opened: {exc}")
+            return ContentExtraction("", "pdf_text_rejected", f"OCR image could not be opened: {exc}")
         return ContentExtraction("", "ocr_unavailable", f"OCR image could not be opened: {exc}")
     if ocr.content:
         return ocr
     if normalized:
-        return ContentExtraction(normalized, "pdf_text_unreliable", ocr.warning or "PDF text looked unreliable and OCR produced no text")
+        return ContentExtraction("", "pdf_text_rejected", ocr.warning or "PDF text looked unreliable and OCR produced no text")
     return ContentExtraction("", "ocr_unavailable", ocr.warning or "PDF text extraction produced no text and OCR is unavailable")
 
 
@@ -105,9 +105,11 @@ def _looks_unreliable(text: str) -> bool:
     suspicious = 0
     for character in meaningful:
         codepoint = ord(character)
-        if codepoint < 32 or 0xE000 <= codepoint <= 0xF8FF:
-            suspicious += 1
-        elif character in {"□", "�"}:
+        if codepoint < 32 or 0x7F <= codepoint <= 0x9F or 0xE000 <= codepoint <= 0xF8FF:
+            return True
+        elif _is_unexpected_script(codepoint):
+            return True
+        elif character in {"□", "�", "¦", "¸", "¶"}:
             suspicious += 1
     if len(meaningful) >= 3 and suspicious / len(meaningful) > 0.12:
         return True
@@ -116,6 +118,16 @@ def _looks_unreliable(text: str) -> bool:
     if len(meaningful) >= 8 and ascii_letters_or_digits == 0 and printable / len(meaningful) < 0.75:
         return True
     return False
+
+
+def _is_unexpected_script(codepoint: int) -> bool:
+    return (
+        0x0400 <= codepoint <= 0x052F  # Cyrillic
+        or 0x0590 <= codepoint <= 0x08FF  # Hebrew and Arabic
+        or 0x0B80 <= codepoint <= 0x0BFF  # Tamil
+        or 0x1000 <= codepoint <= 0x109F  # Myanmar
+        or 0x1200 <= codepoint <= 0x137F  # Ethiopic
+    )
 
 
 def _ocr_image(image: "PILImage.Image | None") -> ContentExtraction:

@@ -14,7 +14,7 @@ deploy/     Linux systemd and Caddy examples
 scripts/    repository-wide setup and start commands
 ```
 
-Runtime data belongs under `backend/data/`. Original PDFs remain authoritative. Question and answer previews are clipped dynamically from PDFs; permanent JPG crops are not produced by the new application.
+Runtime data belongs under `backend/data/`. Original PDFs remain authoritative. Every preprocessing adapter produces final question and answer JPGs under `processed_questions`; the Web API serves those cataloged images without request-time PDF cropping.
 
 ## Development
 

@@ -62,6 +62,17 @@ def _create_global_database(path: Path) -> None:
                 post_left INTEGER, post_top INTEGER, post_right INTEGER, post_bottom INTEGER
             );
             INSERT INTO question_regions VALUES (7, 1, 0, 1, 0, 0, 200, 50, 180, 0, NULL, NULL, NULL, NULL);
+            CREATE TABLE question_images (
+                question_id INTEGER, image_kind TEXT, storage_key TEXT, original_filename TEXT
+            );
+            INSERT INTO question_images VALUES (
+                7, 'question', 'uat/admissions/engaa/2023/engaa_2023_s1_qp_q07.jpg',
+                'engaa_2023_s1_qp_q07.jpg'
+            );
+            INSERT INTO question_images VALUES (
+                7, 'answer', 'uat/admissions/engaa/2023/engaa_2023_s1_ms_q07.jpg',
+                'engaa_2023_s1_ms_q07.jpg'
+            );
             CREATE TABLE answers (
                 id INTEGER PRIMARY KEY, question_id INTEGER, source_document_id INTEGER,
                 answer_kind TEXT
@@ -119,6 +130,11 @@ def _client(tmp_path: Path, *, with_admin: bool = False) -> TestClient:
     paper_dir.mkdir(parents=True)
     _write_pdf(paper_dir / "engaa_2023_s1_qp.pdf", "Question page", "Find the acceleration")
     _write_pdf(paper_dir / "engaa_2023_s1_ms.pdf", "Answer page", "Acceleration is 2")
+    image_root = tmp_path / "processed_questions"
+    image_dir = image_root / "uat" / "admissions" / "engaa" / "2023"
+    image_dir.mkdir(parents=True)
+    Image.new("RGB", (500, 125), "white").save(image_dir / "engaa_2023_s1_qp_q07.jpg")
+    Image.new("RGB", (420, 100), "white").save(image_dir / "engaa_2023_s1_ms_q07.jpg")
     settings = Settings(
         tmp_path,
         database_path,
@@ -126,6 +142,7 @@ def _client(tmp_path: Path, *, with_admin: bool = False) -> TestClient:
         app_database_path=tmp_path / "application.sqlite3",
         bootstrap_admin_email="admin@example.com" if with_admin else "",
         bootstrap_admin_password="a-long-test-password" if with_admin else "",
+        question_image_root=image_root,
     )
     return TestClient(create_app(settings))
 

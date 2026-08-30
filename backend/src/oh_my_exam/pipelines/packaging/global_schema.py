@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def migrate_global_catalog(conn: sqlite3.Connection) -> None:
@@ -109,6 +109,16 @@ def migrate_global_catalog(conn: sqlite3.Connection) -> None:
             post_bottom INTEGER,
             PRIMARY KEY (question_id, document_id, region_order),
             CHECK (x1 > x0 AND y1 > y0)
+        );
+
+        CREATE TABLE IF NOT EXISTS question_images (
+            question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+            image_kind TEXT NOT NULL CHECK (image_kind IN ('question', 'answer')),
+            storage_key TEXT NOT NULL UNIQUE,
+            original_filename TEXT NOT NULL,
+            mime_type TEXT NOT NULL DEFAULT 'image/jpeg',
+            size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+            PRIMARY KEY (question_id, image_kind)
         );
 
         CREATE TABLE IF NOT EXISTS answers (
@@ -240,6 +250,7 @@ def migrate_global_catalog(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_questions_paper ON questions(paper_id, sort_order);
         CREATE INDEX IF NOT EXISTS idx_question_texts_search ON question_texts(text_kind, language);
         CREATE INDEX IF NOT EXISTS idx_question_regions_document ON question_regions(document_id, question_id);
+        CREATE INDEX IF NOT EXISTS idx_question_images_question ON question_images(question_id, image_kind);
         CREATE INDEX IF NOT EXISTS idx_answers_question ON answers(question_id, answer_kind);
         CREATE INDEX IF NOT EXISTS idx_question_features_feature ON question_features(feature_id, question_id);
         CREATE INDEX IF NOT EXISTS idx_similarities_source ON question_similarities(source_question_id, algorithm_id, rank);

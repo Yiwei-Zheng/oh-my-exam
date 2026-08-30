@@ -1,6 +1,7 @@
 from pathlib import Path
 import sqlite3
 from types import SimpleNamespace
+from contextlib import closing
 
 from oh_my_exam.pipelines import release
 
@@ -14,9 +15,13 @@ def test_build_and_activate_release_replaces_active_catalog(monkeypatch, tmp_pat
     active.write_bytes(b"old catalog")
 
     def fake_migrate(options):
-        with sqlite3.connect(options.output_path) as connection:
+        with closing(sqlite3.connect(options.output_path)) as connection:
             connection.execute("CREATE TABLE questions (id INTEGER PRIMARY KEY)")
             connection.execute("INSERT INTO questions DEFAULT VALUES")
+            connection.execute("CREATE TABLE answers (id INTEGER PRIMARY KEY, question_id INTEGER)")
+            connection.execute("CREATE TABLE question_images (image_kind TEXT)")
+            connection.execute("INSERT INTO question_images VALUES ('question')")
+            connection.commit()
         return SimpleNamespace(questions=1)
 
     monkeypatch.setattr(release, "migrate_portable_catalogs", fake_migrate)

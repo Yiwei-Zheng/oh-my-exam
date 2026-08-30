@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded in part by 0012 on 2026-08-30.
+Preview rendering superseded by 0013 on 2026-08-30. Immutable PDF storage remains accepted.
 
 ## Context
 

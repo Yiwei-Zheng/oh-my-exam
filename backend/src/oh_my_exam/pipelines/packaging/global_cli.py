@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Sequence
 
-from oh_my_exam.paths import DATABASE_ROOT, RAW_PAPER_ROOT
+from oh_my_exam.paths import DATABASE_ROOT, PROCESSED_QUESTION_ROOT, RAW_PAPER_ROOT
 from oh_my_exam.pipelines.packaging.global_migration import GlobalMigrationOptions, migrate_portable_catalogs
 from oh_my_exam.pipelines.packaging.answer_extraction import extract_answer_markdown
 
@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--database-root", type=Path, default=DATABASE_ROOT)
     parser.add_argument("--paper-root", type=Path, default=RAW_PAPER_ROOT)
+    parser.add_argument("--image-root", type=Path, default=PROCESSED_QUESTION_ROOT)
     parser.add_argument(
         "--output",
         type=Path,
@@ -44,6 +45,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             output_path=args.output,
             overwrite=args.overwrite,
             strip_legacy_urls=args.strip_legacy_urls,
+            image_root=args.image_root,
         )
     )
     for line in summary.as_lines():

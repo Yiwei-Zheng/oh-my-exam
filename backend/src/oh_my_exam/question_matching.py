@@ -32,6 +32,7 @@ class TopicSpec:
     components: frozenset[str]
     terms: tuple[str, ...]
     broad: bool = False
+    parent_code: str | None = None
 
     @property
     def canonical_code(self) -> str:
@@ -66,6 +67,7 @@ def load_topic_specs(path: Path) -> list[TopicSpec]:
                 components=frozenset(str(item) for item in topic.get("components", [])),
                 terms=tuple(str(item).casefold() for item in topic.get("terms", [])),
                 broad=bool(topic.get("broad", False)),
+                parent_code=str(topic["parent"]) if topic.get("parent") else None,
             ))
     return specs
 
@@ -181,27 +183,44 @@ def _write_topics(
             """,
             (program["id"], f"Managed syllabus topics:{course_code}:2026-2027", source_path.as_posix()),
         ).lastrowid
-        for spec in specs:
-            feature_id = connection.execute(
-                "INSERT INTO features (kind, canonical_code) VALUES ('concept', ?)",
-                (spec.canonical_code,),
-            ).lastrowid
-            connection.execute(
-                "INSERT INTO feature_labels (feature_id, language, name, description) VALUES (?, 'en', ?, ?)",
-                (feature_id, spec.title, spec.description),
-            )
-            topic_id = connection.execute(
-                """
-                INSERT INTO syllabus_topics (syllabus_id, code, title, description)
-                VALUES (?, ?, ?, ?)
-                """,
-                (syllabus_id, spec.code, spec.title, spec.description),
-            ).lastrowid
-            connection.execute(
-                "INSERT INTO syllabus_topic_features (syllabus_topic_id, feature_id) VALUES (?, ?)",
-                (topic_id, feature_id),
-            )
-            feature_ids[spec.canonical_code] = int(feature_id)
+        topic_ids: dict[str, int] = {}
+        program_feature_ids: dict[str, int] = {}
+        pending = list(specs)
+        while pending:
+            ready = [spec for spec in pending if spec.parent_code is None or spec.parent_code in topic_ids]
+            if not ready:
+                unresolved = ", ".join(f"{spec.code}->{spec.parent_code}" for spec in pending)
+                raise ValueError(f"topic hierarchy has missing parents or a cycle: {unresolved}")
+            for spec in ready:
+                parent_feature_id = (
+                    program_feature_ids[spec.parent_code]
+                    if spec.parent_code is not None
+                    else None
+                )
+                parent_topic_id = topic_ids.get(spec.parent_code) if spec.parent_code else None
+                feature_id = connection.execute(
+                    "INSERT INTO features (kind, canonical_code, parent_feature_id) VALUES ('concept', ?, ?)",
+                    (spec.canonical_code, parent_feature_id),
+                ).lastrowid
+                connection.execute(
+                    "INSERT INTO feature_labels (feature_id, language, name, description) VALUES (?, 'en', ?, ?)",
+                    (feature_id, spec.title, spec.description),
+                )
+                topic_id = connection.execute(
+                    """
+                    INSERT INTO syllabus_topics (syllabus_id, parent_topic_id, code, title, description)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (syllabus_id, parent_topic_id, spec.code, spec.title, spec.description),
+                ).lastrowid
+                connection.execute(
+                    "INSERT INTO syllabus_topic_features (syllabus_topic_id, feature_id) VALUES (?, ?)",
+                    (topic_id, feature_id),
+                )
+                feature_ids[spec.canonical_code] = int(feature_id)
+                program_feature_ids[spec.code] = int(feature_id)
+                topic_ids[spec.code] = int(topic_id)
+                pending.remove(spec)
     return feature_ids
 
 

@@ -5,7 +5,7 @@ import sqlite3
 
 import pymupdf
 
-from oh_my_exam.pipelines.packaging.answer_extraction import _normalize_markdown_text, extract_answer_markdown
+from oh_my_exam.pipelines.packaging.answer_extraction import _looks_garbled, _normalize_markdown_text, extract_answer_markdown
 from oh_my_exam.pipelines.packaging.global_migration import GlobalMigrationOptions, migrate_portable_catalogs
 
 
@@ -19,10 +19,39 @@ def test_migrates_portable_database_without_urls_or_hashes(tmp_path: Path) -> No
     _write_pdf(paper_dir / "tmua_2023_s1_qp.pdf", "Question")
     _write_pdf(paper_dir / "tmua_2023_s1_ms.pdf", "Answer: x = 2")
     _write_portable_database(source_path)
+    image_root = tmp_path / "processed_questions"
+    image_dir = image_root / "uat" / "admissions" / "tmua" / "2023"
+    image_dir.mkdir(parents=True)
+    question_image = image_dir / "tmua_2023_s1_qp_q01.jpg"
+    answer_image = image_dir / "tmua_2023_s1_ms_q01.jpg"
+    question_image.write_bytes(b"question jpeg")
+    answer_image.write_bytes(b"answer jpeg")
+    with sqlite3.connect(source_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE question_images (
+                question_id INTEGER, source_type INTEGER, storage_key TEXT,
+                original_filename TEXT, size_bytes INTEGER
+            );
+            """
+        )
+        conn.executemany(
+            "INSERT INTO question_images VALUES (7, ?, ?, ?, ?)",
+            [
+                (0, "uat/admissions/tmua/2023/tmua_2023_s1_qp_q01.jpg", question_image.name, question_image.stat().st_size),
+                (1, "uat/admissions/tmua/2023/tmua_2023_s1_ms_q01.jpg", answer_image.name, answer_image.stat().st_size),
+            ],
+        )
 
     output_path = database_root / "global_exam_catalog.sqlite"
     summary = migrate_portable_catalogs(
-        GlobalMigrationOptions(database_root, paper_root, output_path, strip_legacy_urls=True)
+        GlobalMigrationOptions(
+            database_root,
+            paper_root,
+            output_path,
+            strip_legacy_urls=True,
+            image_root=image_root,
+        )
     )
 
     assert summary.source_databases == 1
@@ -37,7 +66,7 @@ def test_migrates_portable_database_without_urls_or_hashes(tmp_path: Path) -> No
             row[0]
             for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
-        assert {"paper_documents", "answers", "features", "question_embeddings"} <= table_names
+        assert {"paper_documents", "question_images", "answers", "features", "question_embeddings"} <= table_names
         all_columns = {
             row[1]
             for table in table_names
@@ -55,6 +84,12 @@ def test_migrates_portable_database_without_urls_or_hashes(tmp_path: Path) -> No
         ).fetchall() == [
             ("answer_key", "uat/admissions/tmua/2023/tmua_2023_s1_ms.pdf"),
             ("question_paper", "uat/admissions/tmua/2023/tmua_2023_s1_qp.pdf"),
+        ]
+        assert conn.execute(
+            "SELECT image_kind, storage_key FROM question_images ORDER BY image_kind"
+        ).fetchall() == [
+            ("answer", "uat/admissions/tmua/2023/tmua_2023_s1_ms_q01.jpg"),
+            ("question", "uat/admissions/tmua/2023/tmua_2023_s1_qp_q01.jpg"),
         ]
         assert conn.execute(
             "SELECT answer_kind, authority, status FROM answers"
@@ -91,6 +126,12 @@ def test_answer_markdown_removes_known_page_boilerplate() -> None:
     assert _normalize_markdown_text("physicsandmathstutor.com\n") == ""
     assert _normalize_markdown_text("Step II Hints and Answers June 2005\nx = 2\n") == "x = 2"
     assert _normalize_markdown_text("June 2005\nReport on the Components taken in June\nx = 2") == "x = 2"
+
+
+def test_answer_extraction_detects_further_math_symbol_font_mojibake() -> None:
+    assert _looks_garbled("I□ = ⅓mr² and \x98 is an invalid mapped glyph")
+    assert _looks_garbled("Use the value င in the next line")
+    assert not _looks_garbled("M1: ∫ x² dx = ⅓x³ + c")
 
 
 def _write_portable_database(path: Path, include_regions: bool = True) -> None:

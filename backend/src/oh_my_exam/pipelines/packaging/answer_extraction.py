@@ -124,6 +124,8 @@ def _extract_regions(document: pymupdf.Document, regions: list[sqlite3.Row]) -> 
         if clip.is_empty or clip.is_infinite:
             raise ValueError(f"invalid answer crop rectangle on page {page_index}")
         text = _normalize_markdown_text(page.get_text("text", clip=clip, sort=True))
+        if _looks_garbled(text):
+            return ""
         if text:
             parts.append(text)
     return "\n\n".join(parts)
@@ -161,3 +163,25 @@ def _normalize_markdown_text(value: str) -> str:
         elif compact and compact[-1] != "":
             compact.append("")
     return "\n".join(compact).strip()
+
+
+def _looks_garbled(value: str) -> bool:
+    meaningful = [character for character in value if not character.isspace()]
+    if not meaningful:
+        return False
+    suspicious = 0
+    for character in meaningful:
+        codepoint = ord(character)
+        if (
+            0x7F <= codepoint <= 0x9F
+            or 0xE000 <= codepoint <= 0xF8FF
+            or 0x0400 <= codepoint <= 0x052F
+            or 0x0590 <= codepoint <= 0x08FF
+            or 0x0B80 <= codepoint <= 0x0BFF
+            or 0x1000 <= codepoint <= 0x109F
+            or 0x1200 <= codepoint <= 0x137F
+        ):
+            return True
+        if character in {"□", "�", "¦", "¸", "¶"}:
+            suspicious += 1
+    return suspicious > 0 and suspicious / len(meaningful) >= 0.005

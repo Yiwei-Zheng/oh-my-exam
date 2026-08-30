@@ -63,6 +63,7 @@ def test_packer_writes_compact_search_and_crop_sqlite(tmp_path: Path) -> None:
     assert summary.questions_written == 1
     assert summary.crop_regions_written == 3
     assert summary.question_texts_written == 1
+    assert summary.question_images_written == 2
     assert db_path.exists()
 
     with closing(sqlite3.connect(db_path)) as conn:
@@ -97,6 +98,12 @@ def test_packer_writes_compact_search_and_crop_sqlite(tmp_path: Path) -> None:
             "ms_metadata_path",
             "ms_image_path",
         }.isdisjoint(question_columns)
+        assert conn.execute(
+            "SELECT source_type, storage_key FROM question_images ORDER BY source_type"
+        ).fetchall() == [
+            (0, "cie/a_level/9231/2022/w22/11/qp/9231_w22_qp_11_q01_b.jpg"),
+            (1, "cie/a_level/9231/2022/w22/11/ms/9231_w22_ms_11_q01_b.jpg"),
+        ]
         question = conn.execute(
             """
             SELECT p.qp_stem, p.ms_stem, q.local_question_key, q.question_number
@@ -138,6 +145,7 @@ def test_packer_writes_compact_search_and_crop_sqlite(tmp_path: Path) -> None:
     assert second.questions_written == 1
     assert second.crop_regions_written == 3
     assert second.question_texts_written == 1
+    assert second.question_images_written == 2
 
 
 def test_packer_reports_only_and_duplicate_sources(tmp_path: Path) -> None:
@@ -319,6 +327,7 @@ def _write_uat_sidecar(path: Path, *, document_type: str) -> None:
         payload.update({"content": "Question text", "content_source": "pdf_text"})
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.with_suffix(".jpg").write_bytes(b"fake image")
 
 
 def _region(

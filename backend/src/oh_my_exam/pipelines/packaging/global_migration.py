@@ -16,6 +16,7 @@ class GlobalMigrationOptions:
     output_path: Path
     overwrite: bool = False
     strip_legacy_urls: bool = False
+    image_root: Path | None = None
 
 
 @dataclass
@@ -28,6 +29,7 @@ class GlobalMigrationSummary:
     questions: int = 0
     question_texts: int = 0
     question_regions: int = 0
+    question_images: int = 0
     answers: int = 0
     answer_regions: int = 0
 
@@ -38,6 +40,11 @@ class GlobalMigrationSummary:
 def migrate_portable_catalogs(options: GlobalMigrationOptions) -> GlobalMigrationSummary:
     database_root = options.database_root.resolve()
     paper_root = options.paper_root.resolve()
+    image_root = (
+        options.image_root.resolve()
+        if options.image_root is not None
+        else paper_root.parent / "processed_questions"
+    )
     output_path = options.output_path.resolve()
     if not database_root.is_dir():
         raise ValueError(f"database root does not exist: {database_root}")
@@ -66,7 +73,14 @@ def migrate_portable_catalogs(options: GlobalMigrationOptions) -> GlobalMigratio
             target.execute("PRAGMA foreign_keys = ON")
             migrate_global_catalog(target)
             for source_path in source_paths:
-                _migrate_source(target, source_path, paper_root, paper_index, summary)
+                _migrate_source(
+                    target,
+                    source_path,
+                    paper_root,
+                    image_root,
+                    paper_index,
+                    summary,
+                )
             target.commit()
             violations = target.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
@@ -107,6 +121,7 @@ def _migrate_source(
     target: sqlite3.Connection,
     source_path: Path,
     paper_root: Path,
+    image_root: Path,
     paper_index: dict[str, Path],
     summary: GlobalMigrationSummary,
 ) -> None:
@@ -178,6 +193,39 @@ def _migrate_source(
                 target.execute(
                     "INSERT INTO question_texts (question_id, text_kind, language, content) VALUES (?, 'search', 'en', ?)",
                     (question_map[int(row["question_id"])], content),
+                )
+
+        if _table_exists(source, "question_images"):
+            for row in source.execute(
+                """
+                SELECT question_id, source_type, storage_key, original_filename, size_bytes
+                FROM question_images
+                ORDER BY question_id, source_type
+                """
+            ):
+                source_question_id = int(row["question_id"])
+                storage_key = str(row["storage_key"])
+                image_path = _resolve_image_path(image_root, storage_key)
+                actual_size = image_path.stat().st_size
+                expected_size = int(row["size_bytes"])
+                if actual_size != expected_size:
+                    raise ValueError(
+                        f"question image size changed: {storage_key} "
+                        f"(catalog={expected_size}, actual={actual_size})"
+                    )
+                target.execute(
+                    """
+                    INSERT INTO question_images (
+                        question_id, image_kind, storage_key, original_filename, size_bytes
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        question_map[source_question_id],
+                        "question" if int(row["source_type"]) == 0 else "answer",
+                        storage_key,
+                        str(row["original_filename"]),
+                        actual_size,
+                    ),
                 )
 
         answer_map: dict[int, int] = {}
@@ -257,6 +305,23 @@ def _build_paper_index(paper_root: Path) -> dict[str, Path]:
         preview = ", ".join(sorted(duplicates)[:5])
         raise ValueError(f"duplicate PDF stems under paper root: {preview}")
     return index
+
+
+def _resolve_image_path(image_root: Path, storage_key: str) -> Path:
+    relative = Path(storage_key)
+    if not storage_key or relative.is_absolute() or ".." in relative.parts:
+        raise ValueError(f"invalid question image storage key: {storage_key}")
+    path = (image_root / relative).resolve()
+    if not path.is_relative_to(image_root) or not path.is_file():
+        raise ValueError(f"question image does not exist: {storage_key}")
+    return path
+
+
+def _table_exists(connection: sqlite3.Connection, table: str) -> bool:
+    return connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+        (table,),
+    ).fetchone() is not None
 
 
 def _upsert_program(
@@ -401,6 +466,7 @@ def _fill_summary_counts(conn: sqlite3.Connection, summary: GlobalMigrationSumma
         ("questions", "questions"),
         ("question_texts", "question_texts"),
         ("question_regions", "question_regions"),
+        ("question_images", "question_images"),
         ("answers", "answers"),
         ("answer_regions", "answer_regions"),
     ):

@@ -30,12 +30,14 @@ def write_records(db_path: Path, options: PackOptions, records: list[MetadataRec
             paper_id = _upsert_paper(conn, record)
             question_id = _upsert_question(conn, paper_id, record)
             _insert_search_text(conn, question_id, record)
+            _replace_question_image(conn, question_id, record, options.metadata_root)
             _replace_crop_regions(conn, question_id, record)
         conn.commit()
         summary.papers_written = _count(conn, "papers")
         summary.questions_written = _count(conn, "questions")
         summary.crop_regions_written = _count(conn, "crop_regions")
         summary.question_texts_written = _count(conn, "question_texts")
+        summary.question_images_written = _count(conn, "question_images")
     return summary
 
 
@@ -109,6 +111,39 @@ def _insert_search_text(conn: sqlite3.Connection, question_id: int, record: Meta
             content = excluded.content
         """,
         (question_id, str(content)),
+    )
+
+
+def _replace_question_image(
+    conn: sqlite3.Connection,
+    question_id: int,
+    record: MetadataRecord,
+    metadata_root: Path,
+) -> None:
+    source_type = _source_type_code(record.source_type)
+    conn.execute(
+        "DELETE FROM question_images WHERE question_id = ? AND source_type = ?",
+        (question_id, source_type),
+    )
+    if record.image_path is None:
+        raise ValueError(f"pre-rendered question image is missing for {record.metadata_path}")
+    root = metadata_root.resolve()
+    image_path = record.image_path.resolve()
+    if not image_path.is_relative_to(root) or not image_path.is_file():
+        raise ValueError(f"question image is outside metadata root or missing: {record.image_path}")
+    conn.execute(
+        """
+        INSERT INTO question_images (
+            question_id, source_type, storage_key, original_filename, size_bytes
+        ) VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            question_id,
+            source_type,
+            image_path.relative_to(root).as_posix(),
+            image_path.name,
+            image_path.stat().st_size,
+        ),
     )
 
 

@@ -30,6 +30,7 @@ def build_and_activate_release(data_root: Path = DATA_ROOT) -> Path:
         database_root=database_root,
         paper_root=paper_root,
         output_path=candidate,
+        image_root=data_root / "processed_questions",
     ))
     _progress("cataloging", 68, f"已写入 {summary.questions} 道题")
     answers = extract_answer_markdown(candidate, paper_root, overwrite=True)
@@ -43,8 +44,27 @@ def build_and_activate_release(data_root: Path = DATA_ROOT) -> Path:
     with closing(sqlite3.connect(candidate)) as connection:
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         question_count = int(connection.execute("SELECT COUNT(*) FROM questions").fetchone()[0])
-        if integrity != "ok" or question_count == 0:
-            raise RuntimeError(f"candidate validation failed: integrity={integrity}, questions={question_count}")
+        question_image_count = int(connection.execute(
+            "SELECT COUNT(*) FROM question_images WHERE image_kind = 'question'"
+        ).fetchone()[0])
+        answered_question_count = int(connection.execute(
+            "SELECT COUNT(DISTINCT question_id) FROM answers"
+        ).fetchone()[0])
+        answer_image_count = int(connection.execute(
+            "SELECT COUNT(*) FROM question_images WHERE image_kind = 'answer'"
+        ).fetchone()[0])
+        if (
+            integrity != "ok"
+            or question_count == 0
+            or question_image_count != question_count
+            or answer_image_count != answered_question_count
+        ):
+            raise RuntimeError(
+                "candidate validation failed: "
+                f"integrity={integrity}, questions={question_count}, "
+                f"question_images={question_image_count}, answered_questions={answered_question_count}, "
+                f"answer_images={answer_image_count}"
+            )
     os.replace(candidate, active)
     _progress("cataloging", 99, "新题库版本已自动上线")
     return active

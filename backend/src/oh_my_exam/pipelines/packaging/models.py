@@ -80,6 +80,7 @@ class PackSummary:
     questions_written: int = 0
     crop_regions_written: int = 0
     question_texts_written: int = 0
+    question_images_written: int = 0
     database_path: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -97,5 +98,6 @@ class PackSummary:
             f"questions_written={self.questions_written}",
             f"crop_regions_written={self.crop_regions_written}",
             f"question_texts_written={self.question_texts_written}",
+            f"question_images_written={self.question_images_written}",
             f"database_path={path}",
         ]

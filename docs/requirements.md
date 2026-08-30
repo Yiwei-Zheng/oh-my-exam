@@ -49,8 +49,8 @@ architecture must allow new exam families without global rewrites.
   the top five matches.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
-- A question can be opened as a dynamically rendered JPG crop.
-- An answer can be viewed as a dynamically rendered JPG crop, within its complete source PDF, and
+- A question can be opened as a pre-rendered JPG produced by its preprocessing pipeline.
+- An answer can be viewed as a pre-rendered JPG, within its complete source PDF, and
   as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
   the question may still be published.
@@ -82,8 +82,9 @@ architecture must allow new exam families without global rewrites.
 - Original PDF documents are immutable, checksummed, versioned server objects.
 - The local object store lives under `backend/data/objects/`; the storage API
   remains replaceable by an S3-compatible implementation.
-- Question and answer JPG crops are rendered on demand and are not permanent
-  derivatives. Temporary image caches have retention limits.
+- Every preprocessing adapter writes question and answer JPGs before packaging.
+  Published catalogs contain only questions whose required pre-rendered images
+  exist and match their recorded artifact metadata; request-time PDF cropping is prohibited.
 - Generated artifacts retain enough provenance to reproduce and audit a release.
 
 ## Web experience

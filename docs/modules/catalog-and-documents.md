@@ -36,7 +36,7 @@ A source-paper record uses an internal id and a storage key relative to the
 protected raw-paper root. A region refers to a zero-based page and validated PDF
 rectangle. Questions and answers may use multiple ordered regions.
 
-Full-paper PDF delivery and on-demand question JPG rendering are separate operations.
+Full-paper PDF delivery and pre-rendered question JPG delivery are separate operations.
 Neither operation exposes storage keys or source paths. Structured answer text
 stores raw extraction and Markdown versions independently from the PDF.
 

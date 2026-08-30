@@ -21,7 +21,7 @@ phone stacks every task vertically without horizontal workspace scrolling.
 
 The document rail contains question JPG, answer JPG, structured text, and source
 paper views. Full papers use authorized PDF responses; question-level crops use
-authorized on-demand JPG responses. Large trees and lists load lazily.
+authorized pre-rendered JPG responses. Large trees and lists load lazily.
 
 ## Visual system
 

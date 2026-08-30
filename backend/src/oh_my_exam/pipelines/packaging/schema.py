@@ -10,6 +10,7 @@ def migrate(conn: sqlite3.Connection) -> None:
 
         DROP TABLE IF EXISTS question_fts;
         DROP TABLE IF EXISTS question_texts;
+        DROP TABLE IF EXISTS question_images;
         DROP TABLE IF EXISTS crop_regions;
         DROP TABLE IF EXISTS questions;
         DROP TABLE IF EXISTS papers;
@@ -67,8 +68,19 @@ def migrate(conn: sqlite3.Connection) -> None:
             content TEXT NOT NULL
         );
 
+        CREATE TABLE question_images (
+            question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+            source_type INTEGER NOT NULL CHECK (source_type IN (0, 1)),
+            storage_key TEXT NOT NULL,
+            original_filename TEXT NOT NULL,
+            size_bytes INTEGER NOT NULL CHECK (size_bytes >= 0),
+            PRIMARY KEY (question_id, source_type),
+            UNIQUE (storage_key)
+        );
+
         CREATE INDEX idx_questions_local_key ON questions(local_question_key);
         CREATE INDEX idx_crop_regions_question ON crop_regions(question_id, source_type, region_order);
+        CREATE INDEX idx_question_images_question ON question_images(question_id, source_type);
         """
     )
     conn.commit()

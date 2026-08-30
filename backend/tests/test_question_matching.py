@@ -29,7 +29,7 @@ def test_builds_syllabus_tags_search_and_similar_questions(tmp_path: Path) -> No
                 {"code": "mechanics", "title": "Mechanics", "components": ["4"], "broad": True},
                 {
                     "code": "kinematics", "title": "Kinematics", "components": ["4"],
-                    "terms": ["acceleration", "velocity", "displacement"],
+                    "terms": ["acceleration", "velocity", "displacement"], "parent": "mechanics",
                 },
             ],
         }],
@@ -54,6 +54,8 @@ def test_builds_syllabus_tags_search_and_similar_questions(tmp_path: Path) -> No
     assert "Kinematics" in similar[0]["shared_topics"]
     topic_counts = {item["title"]: item["question_count"] for item in catalog.list_topics("a_level:cie:9709")}
     assert topic_counts == {"Kinematics": 2, "Mechanics": 3}
+    topic_nodes = {item["title"]: item for item in catalog.list_topics("a_level:cie:9709")}
+    assert topic_nodes["Kinematics"]["parent_id"] == topic_nodes["Mechanics"]["id"]
 
     client = TestClient(create_app(Settings(
         tmp_path,
