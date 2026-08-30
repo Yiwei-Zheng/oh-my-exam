@@ -1,9 +1,30 @@
 from __future__ import annotations
 
 from contextlib import closing
+from collections import Counter
 from dataclasses import dataclass
+import math
 from pathlib import Path
+import re
 import sqlite3
+
+
+_SEARCH_TERM = re.compile(r"[a-z0-9]+")
+
+
+def _term_counts(content: str) -> Counter[str]:
+    return Counter(_SEARCH_TERM.findall(content.casefold()))
+
+
+def _cosine_similarity(source: Counter[str], target: Counter[str]) -> float:
+    if not source or not target:
+        return 0.0
+    dot_product = sum(count * target.get(term, 0) for term, count in source.items())
+    if not dot_product:
+        return 0.0
+    source_norm = math.sqrt(sum(count * count for count in source.values()))
+    target_norm = math.sqrt(sum(count * count for count in target.values()))
+    return dot_product / (source_norm * target_norm)
 
 
 class CatalogNotFoundError(LookupError):
@@ -214,6 +235,7 @@ class GlobalCatalog:
         topic_codes: tuple[str, ...] = (),
         limit: int = 50,
         match_all_terms: bool = True,
+        similarity_text: str | None = None,
     ) -> list[dict[str, object]]:
         """Search identity, extracted text, and managed syllabus topics."""
         normalized_query = query.strip().casefold()
@@ -262,24 +284,34 @@ class GlobalCatalog:
                 placeholders = ", ".join("?" for _ in topic_codes)
                 sql += f" AND f.canonical_code IN ({placeholders})"
                 parameters.extend(topic_codes)
-            sql += " GROUP BY qu.id ORDER BY p.year DESC, p.source_key, qu.sort_order LIMIT ?"
-            parameters.append(max(limit * 5, limit))
+            sql += " GROUP BY qu.id ORDER BY p.year DESC, p.source_key, qu.sort_order"
+            if similarity_text is None:
+                sql += " LIMIT ?"
+                parameters.append(max(limit * 5, limit))
             rows = connection.execute(sql, parameters).fetchall()
 
         results: list[dict[str, object]] = []
+        similarity_terms = _term_counts(similarity_text or "")
         for row in rows:
             content = str(row["content"] or "")
             haystack = f"{row['stable_key']} {content}".casefold()
-            lexical_hits = sum(haystack.count(token) for token in tokens)
-            phrase_bonus = 2 if normalized_query and normalized_query in haystack else 0
+            if similarity_text is not None:
+                score: float | int = _cosine_similarity(
+                    similarity_terms,
+                    _term_counts(content),
+                )
+            else:
+                lexical_hits = sum(haystack.count(token) for token in tokens)
+                phrase_bonus = 2 if normalized_query and normalized_query in haystack else 0
+                score = lexical_hits + phrase_bonus
             summary = self._question_summary(row)
             summary.update({
                 "exam_id": f"{row['qualification']}:{row['exam_board']}:{row['course_code']}",
                 "topics": [item for item in str(row["topics"] or "").split(",") if item],
-                "score": lexical_hits + phrase_bonus,
+                "score": score,
             })
             results.append(summary)
-        results.sort(key=lambda item: (-int(item["score"]), str(item["stable_key"])))
+        results.sort(key=lambda item: (-float(item["score"]), str(item["stable_key"])))
         return results[:limit]
 
     def list_topics(self, exam_id: str | None = None) -> list[dict[str, object]]:

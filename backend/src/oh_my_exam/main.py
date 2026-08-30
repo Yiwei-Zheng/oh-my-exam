@@ -176,6 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     topic_codes=tuple(payload.topic),
                     limit=payload.limit,
                     match_all_terms=False,
+                    similarity_text=extracted.text,
                 )
                 if search_text
                 else []

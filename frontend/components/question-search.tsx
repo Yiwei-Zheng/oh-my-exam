@@ -183,7 +183,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
   const [topicFilter, setTopicFilter] = useState('')
   const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
   const [imageData, setImageData] = useState('')
-  const [recognizedText, setRecognizedText] = useState('')
   const [results, setResults] = useState<Question[]>([])
   const [selected, setSelected] = useState<Question | null>(null)
   const [similar, setSimilar] = useState<Question[]>([])
@@ -196,7 +195,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
       setError('')
       try {
         setImageData(await readImage(file))
-        setRecognizedText('')
       } catch {
         setImageData('')
         setError(t('invalidImage'))
@@ -265,7 +263,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
     setError('')
     setSelected(null)
     setSimilar([])
-    setRecognizedText('')
     try {
       if (mode === 'image') {
         const response = await apiRequest<ImageSearchResponse>(
@@ -280,7 +277,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
             }),
           },
         )
-        setRecognizedText(response.extracted_text)
         setResults(response.results)
       } else {
         const params = new URLSearchParams({
@@ -449,7 +445,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                           variant="ghost"
                           onClick={() => {
                             setImageData('')
-                            setRecognizedText('')
                           }}
                         >
                           <HugeiconsIcon
@@ -532,16 +527,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                   {error}
                 </p>
               )}
-              {recognizedText && (
-                <div className="mt-4 rounded-xl border bg-muted/35 p-4">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-primary">
-                    {t('recognizedText')}
-                  </p>
-                  <p className="line-clamp-3 text-sm text-muted-foreground">
-                    {recognizedText}
-                  </p>
-                </div>
-              )}
             </form>
           </Tabs>
         </CardContent>
@@ -581,9 +566,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                 >
                   <span className="font-mono text-xs font-semibold text-primary">
                     {item.paper_key} · Q{item.question_number}
-                  </span>
-                  <span className="mt-2 line-clamp-3 block text-sm leading-6 text-muted-foreground">
-                    {item.content || item.local_key}
                   </span>
                   {item.topics?.length ? (
                     <span className="mt-3 flex flex-wrap gap-1">
@@ -651,9 +633,15 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                         <span className="font-mono text-xs text-primary">
                           {item.paper_key} · Q{item.question_number}
                         </span>
-                        <span className="mt-1 line-clamp-2 block text-muted-foreground">
-                          {item.content}
-                        </span>
+                        {item.shared_topics?.length ? (
+                          <span className="mt-2 flex flex-wrap gap-1">
+                            {item.shared_topics.map((topic) => (
+                              <Badge key={topic} variant="secondary">
+                                {topic}
+                              </Badge>
+                            ))}
+                          </span>
+                        ) : null}
                       </button>
                     ))}
                   </div>

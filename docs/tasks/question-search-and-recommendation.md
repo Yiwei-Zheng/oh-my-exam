@@ -42,3 +42,10 @@ The release pipeline rebuilds tags and similarities before activating a new
 catalog. Questions without extracted text retain broad component-level tags but
 may have no text-based recommendations. Admissions tests without a maintained
 specification continue to use text matching only.
+
+Photo search ranks every token-matching candidate by cosine similarity against
+the complete OCR output before applying the result limit. This prevents older
+TMUA questions from being discarded by the catalog's default recency ordering.
+The search interface does not display OCR or stored question text in match
+lists; it shows identity and topic tags, then loads the pre-rendered question
+image when the user selects a match.

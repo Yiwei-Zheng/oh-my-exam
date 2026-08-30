@@ -115,6 +115,54 @@ def test_classifies_non_cie_exam_programs_from_catalog_identity(tmp_path: Path) 
         }
 
 
+def test_ocr_similarity_ranks_an_older_tmua_question_before_recent_candidates(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "catalog.sqlite"
+    target_text = (
+        "It is given that the expansion of (ax + b)^3 is 8x^3 - px^2 + 18x, "
+        "where a, b and p are real constants. What is the value of p?"
+    )
+    with sqlite3.connect(database) as connection:
+        migrate_global_catalog(connection)
+        connection.executescript(
+            """
+            INSERT INTO exam_boards VALUES (1, 'uat', 'UAT-UK');
+            INSERT INTO qualifications VALUES (1, 'admissions', 'Admissions');
+            INSERT INTO exam_programs VALUES (1, 1, 1, 'tmua', 'TMUA');
+            INSERT INTO papers VALUES (1, 1, 'old', 'tmua_2016_p1_qp', 2016, '2016', 'p1', NULL);
+            INSERT INTO questions VALUES (1, 1, 'target', 'q01', '1', 1, 'unknown', NULL);
+            """
+        )
+        connection.execute(
+            "INSERT INTO question_texts VALUES (1, 1, 'search', 'en', ?)",
+            (target_text,),
+        )
+        for index in range(2, 32):
+            connection.execute(
+                "INSERT INTO papers VALUES (?, 1, ?, ?, 2023, '2023', 'p1', NULL)",
+                (index, f"recent-{index}", f"tmua_2023_p1_qp_{index}"),
+            )
+            connection.execute(
+                "INSERT INTO questions VALUES (?, ?, ?, 'q01', '1', 1, 'unknown', NULL)",
+                (index, index, f"distractor-{index}"),
+            )
+            connection.execute(
+                "INSERT INTO question_texts VALUES (?, ?, 'search', 'en', ?)",
+                (index, index, f"Given a different diagram, find the value shown in case {index}."),
+            )
+
+    results = GlobalCatalog(database).search_questions(
+        "given value",
+        exam_id="admissions:uat:tmua",
+        limit=5,
+        match_all_terms=False,
+        similarity_text=target_text,
+    )
+
+    assert results[0]["id"] == 1
+
+
 def _write_catalog(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         migrate_global_catalog(connection)
