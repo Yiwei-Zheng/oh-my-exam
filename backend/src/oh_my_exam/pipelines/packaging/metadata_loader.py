@@ -17,10 +17,12 @@ MODERN_FILE_RE = re.compile(
     r"^(?P<course_code>[A-Za-z0-9]+)_(?P<session>[mswMSW]\d{2})_(?P<source_type>qp|ms|QP|MS)_(?P<component>.+)_(?P<local_question_key>q.+)$"
 )
 UAT_STEM_RE = re.compile(
-    r"^(?P<course_code>[A-Za-z0-9]+)_(?P<year>\d{4})_(?P<component>s\d+)_(?P<source_type>qp|ms|QP|MS)$"
+    r"^(?P<course_code>[A-Za-z0-9]+)_(?P<period>\d{4}|early_specimen)_"
+    r"(?P<component>[sp]\d+)_(?P<source_type>qp|ms|QP|MS)$"
 )
 UAT_FILE_RE = re.compile(
-    r"^(?P<course_code>[A-Za-z0-9]+)_(?P<year>\d{4})_(?P<component>s\d+)_(?P<source_type>qp|ms|QP|MS)_(?P<local_question_key>q.+)$"
+    r"^(?P<course_code>[A-Za-z0-9]+)_(?P<period>\d{4}|early_specimen)_"
+    r"(?P<component>[sp]\d+)_(?P<source_type>qp|ms|QP|MS)_(?P<local_question_key>q.+)$"
 )
 QP_MANIFEST_KEYS = {
     "question_number",
@@ -65,7 +67,7 @@ UAT_MS_MANIFEST_KEYS = {
     "cutter",
     "crop_regions",
 }
-UAT_OPTIONAL_MANIFEST_KEYS = {"content_warning"}
+UAT_OPTIONAL_MANIFEST_KEYS = {"content_warning", "answer_choice"}
 UAT_CROP_REGION_KEYS = CROP_REGION_KEYS | {"source_pdf"}
 
 
@@ -161,8 +163,8 @@ def build_record(
     question_key = f"{paper_key}_{local_question_key}"
     paper_code = component[0] if component else ""
     variant = component[1:] if len(component) > 1 else ""
-    session = parsed.get("session", parsed.get("year", "")).lower()
-    year = int(parsed["year"]) if "year" in parsed else 2000 + int(session[1:3])
+    session = parsed.get("session", parsed.get("period", "")).lower()
+    year = int(parsed["period"]) if parsed.get("period", "").isdigit() else (2000 + int(session[1:3]) if "session" in parsed else 0)
     image_path = _find_image_for_sidecar(path)
 
     return MetadataRecord(
@@ -231,7 +233,7 @@ def _parse_identity(path: Path, metadata: dict[str, Any]) -> dict[str, str] | No
     period_matches = (
         parsed["session"].lower() == stem_match.group("session").lower()
         if schema == "cie"
-        else parsed["year"] == stem_match.group("year")
+        else parsed["period"] == stem_match.group("period")
     )
     if (
         parsed["course_code"] != stem_match.group("course_code")
@@ -245,7 +247,7 @@ def _parse_identity(path: Path, metadata: dict[str, Any]) -> dict[str, str] | No
     if schema == "cie":
         parsed["session"] = stem_match.group("session").lower()
     else:
-        parsed["year"] = stem_match.group("year")
+        parsed["period"] = stem_match.group("period")
     parsed["source_type"] = document_type.upper()
     parsed["component"] = component
     parsed["course_code"] = stem_match.group("course_code")
@@ -311,7 +313,7 @@ def _validate_metadata_schema(path: Path, metadata: dict[str, Any]) -> list[str]
         allowed = UAT_QP_MANIFEST_KEYS | UAT_OPTIONAL_MANIFEST_KEYS
     elif is_uat:
         required = UAT_MS_MANIFEST_KEYS
-        allowed = UAT_MS_MANIFEST_KEYS
+        allowed = UAT_MS_MANIFEST_KEYS | UAT_OPTIONAL_MANIFEST_KEYS
     elif document_type == "qp":
         required = QP_MANIFEST_KEYS
         allowed = QP_MANIFEST_KEYS
@@ -336,6 +338,10 @@ def _validate_metadata_schema(path: Path, metadata: dict[str, Any]) -> list[str]
         errors.extend(_expect_str(path, metadata, "source_url"))
     if document_type == "qp":
         errors.extend(_expect_str(path, metadata, "content"))
+    if "answer_choice" in metadata:
+        errors.extend(_expect_str(path, metadata, "answer_choice"))
+        if isinstance(metadata.get("answer_choice"), str) and not re.fullmatch(r"[A-H]", metadata["answer_choice"]):
+            errors.append(f"{path}: answer_choice must be one of A-H")
 
     crop_regions = metadata.get("crop_regions")
     if not isinstance(crop_regions, list):

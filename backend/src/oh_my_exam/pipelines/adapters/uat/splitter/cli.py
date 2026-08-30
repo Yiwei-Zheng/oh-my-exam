@@ -11,15 +11,15 @@ from oh_my_exam.pipelines.adapters.uat.splitter.pipeline import split_downloaded
 
 
 MESSAGES = {
-    "zh": {"description": "ENGAA/NSAA 官网卷切题工具。", "done": "切题统计: {counts}"},
-    "en": {"description": "Split official ENGAA/NSAA papers and answer keys.", "done": "split counts: {counts}"},
+    "zh": {"description": "ENGAA/NSAA/TMUA 官网卷切题工具。", "done": "切题统计: {counts}"},
+    "en": {"description": "Split official ENGAA/NSAA/TMUA papers and answers.", "done": "split counts: {counts}"},
 }
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="uat-admissions-splitter", description=MESSAGES["zh"]["description"])
     parser.add_argument("--lang", choices=["zh", "en"], default="zh")
-    parser.add_argument("--exam", action="append", choices=["engaa", "nsaa"], dest="exams")
+    parser.add_argument("--exam", action="append", choices=["engaa", "nsaa", "tmua"], dest="exams")
     parser.add_argument("--start-year", type=int)
     parser.add_argument("--end-year", type=int)
     parser.add_argument("--raw-root", type=Path, default=BACKEND_ROOT / "data/raw_papers")

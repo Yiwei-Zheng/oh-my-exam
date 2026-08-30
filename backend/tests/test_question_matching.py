@@ -70,6 +70,49 @@ def test_builds_syllabus_tags_search_and_similar_questions(tmp_path: Path) -> No
     ).json()[0]["id"] == 2
 
 
+def test_classifies_non_cie_exam_programs_from_catalog_identity(tmp_path: Path) -> None:
+    database = tmp_path / "catalog.sqlite"
+    topics = tmp_path / "topics.json"
+    topics.write_text(json.dumps({
+        "courses": [{
+            "qualification": "admissions",
+            "exam_board": "uat",
+            "course_code": "tmua",
+            "topics": [
+                {"code": "paper_2", "title": "Mathematical Reasoning", "components": ["2"], "broad": True},
+                {"code": "logic", "title": "Logic and proof", "components": ["2"], "terms": ["counterexample"]},
+            ],
+        }],
+    }), encoding="utf-8")
+    with sqlite3.connect(database) as connection:
+        migrate_global_catalog(connection)
+        connection.executescript(
+            """
+            INSERT INTO exam_boards VALUES (1, 'uat', 'UAT-UK');
+            INSERT INTO qualifications VALUES (1, 'admissions', 'Admissions');
+            INSERT INTO exam_programs VALUES (1, 1, 1, 'tmua', 'TMUA');
+            INSERT INTO papers VALUES (1, 1, 'p2', 'tmua_2023_p2_qp', 2023, '2023', 'p2', NULL);
+            INSERT INTO questions VALUES (1, 1, 'q1', 'q01', '1', 1, 'unknown', NULL);
+            INSERT INTO question_texts VALUES (1, 1, 'search', 'en', 'Which function is a counterexample to the statement?');
+            """
+        )
+
+    summary = rebuild_question_matching(database, topics)
+
+    assert summary.tagged_questions == 1
+    with sqlite3.connect(database) as connection:
+        assert {
+            row[0]
+            for row in connection.execute(
+                """SELECT f.canonical_code FROM question_features qf
+                   JOIN features f ON f.id = qf.feature_id"""
+            )
+        } == {
+            "syllabus:uat:admissions:tmua:paper_2",
+            "syllabus:uat:admissions:tmua:logic",
+        }
+
+
 def _write_catalog(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         migrate_global_catalog(connection)

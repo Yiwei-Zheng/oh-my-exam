@@ -23,6 +23,8 @@ _STOP_WORDS = {
 
 @dataclass(frozen=True)
 class TopicSpec:
+    qualification: str
+    exam_board: str
     course_code: str
     code: str
     title: str
@@ -33,7 +35,11 @@ class TopicSpec:
 
     @property
     def canonical_code(self) -> str:
-        return f"syllabus:cie:a_level:{self.course_code}:{self.code}"
+        return f"syllabus:{self.exam_board}:{self.qualification}:{self.course_code}:{self.code}"
+
+    @property
+    def program_key(self) -> tuple[str, str, str]:
+        return self.qualification, self.exam_board, self.course_code
 
 
 @dataclass
@@ -51,6 +57,8 @@ def load_topic_specs(path: Path) -> list[TopicSpec]:
     for course in payload["courses"]:
         for topic in course["topics"]:
             specs.append(TopicSpec(
+                qualification=str(course.get("qualification", "a_level")),
+                exam_board=str(course.get("exam_board", "cie")),
                 course_code=str(course["course_code"]),
                 code=str(topic["code"]),
                 title=str(topic["title"]),
@@ -70,15 +78,15 @@ def rebuild_question_matching(
 ) -> MatchingSummary:
     """Rebuild managed syllabus tags and explainable, sparse text similarities."""
     specs = load_topic_specs(topic_catalog_path)
-    by_course: dict[str, list[TopicSpec]] = defaultdict(list)
+    by_program: dict[tuple[str, str, str], list[TopicSpec]] = defaultdict(list)
     for spec in specs:
-        by_course[spec.course_code].append(spec)
+        by_program[spec.program_key].append(spec)
 
     with closing(sqlite3.connect(database_path)) as connection:
         connection.row_factory = sqlite3.Row
         migrate_global_catalog(connection)
-        _clear_managed_rows(connection)
-        feature_ids = _write_topics(connection, by_course, topic_catalog_path)
+        _clear_managed_rows(connection, specs)
+        feature_ids = _write_topics(connection, by_program, topic_catalog_path)
         rows = connection.execute(
             """
             SELECT q.id, q.paper_id, qt.content, p.component, ep.code AS course_code,
@@ -93,7 +101,7 @@ def rebuild_question_matching(
             ORDER BY q.id
             """
         ).fetchall()
-        tags = _classify_questions(rows, by_course, feature_ids)
+        tags = _classify_questions(rows, by_program, feature_ids)
         connection.executemany(
             """
             INSERT INTO question_features (question_id, feature_id, role, weight)
@@ -117,7 +125,7 @@ def rebuild_question_matching(
         )
         connection.commit()
         return MatchingSummary(
-            syllabuses=len(by_course),
+            syllabuses=len(by_program),
             topics=len(specs),
             tagged_questions=len(tags),
             question_tags=sum(len(values) for values in tags.values()),
@@ -125,11 +133,18 @@ def rebuild_question_matching(
         )
 
 
-def _clear_managed_rows(connection: sqlite3.Connection) -> None:
-    managed = "canonical_code LIKE 'syllabus:cie:a_level:%'"
-    connection.execute(
-        f"DELETE FROM question_features WHERE feature_id IN (SELECT id FROM features WHERE {managed})"
-    )
+def _clear_managed_rows(connection: sqlite3.Connection, specs: list[TopicSpec]) -> None:
+    managed_prefixes = sorted({
+        f"syllabus:{spec.exam_board}:{spec.qualification}:{spec.course_code}:%"
+        for spec in specs
+    })
+    managed_where = " OR ".join("canonical_code LIKE ?" for _ in managed_prefixes)
+    if managed_prefixes:
+        connection.execute(
+            f"DELETE FROM question_features WHERE feature_id IN "
+            f"(SELECT id FROM features WHERE {managed_where})",
+            managed_prefixes,
+        )
     connection.execute(
         "DELETE FROM question_similarities WHERE algorithm_id IN "
         "(SELECT id FROM similarity_algorithms WHERE name = ?)",
@@ -137,24 +152,25 @@ def _clear_managed_rows(connection: sqlite3.Connection) -> None:
     )
     connection.execute("DELETE FROM similarity_algorithms WHERE name = ?", (ALGORITHM_NAME,))
     connection.execute("DELETE FROM syllabuses WHERE name LIKE 'Managed syllabus topics:%'")
-    connection.execute(f"DELETE FROM features WHERE {managed}")
+    if managed_prefixes:
+        connection.execute(f"DELETE FROM features WHERE {managed_where}", managed_prefixes)
 
 
 def _write_topics(
     connection: sqlite3.Connection,
-    by_course: dict[str, list[TopicSpec]],
+    by_program: dict[tuple[str, str, str], list[TopicSpec]],
     source_path: Path,
 ) -> dict[str, int]:
     feature_ids: dict[str, int] = {}
-    for course_code, specs in by_course.items():
+    for (qualification, exam_board, course_code), specs in by_program.items():
         program = connection.execute(
             """
             SELECT ep.id FROM exam_programs ep
             JOIN qualifications ql ON ql.id = ep.qualification_id
             JOIN exam_boards eb ON eb.id = ep.exam_board_id
-            WHERE ql.code = 'a_level' AND eb.code = 'cie' AND ep.code = ?
+            WHERE ql.code = ? AND eb.code = ? AND ep.code = ?
             """,
-            (course_code,),
+            (qualification, exam_board, course_code),
         ).fetchone()
         if program is None:
             continue
@@ -191,17 +207,16 @@ def _write_topics(
 
 def _classify_questions(
     rows: list[sqlite3.Row],
-    by_course: dict[str, list[TopicSpec]],
+    by_program: dict[tuple[str, str, str], list[TopicSpec]],
     feature_ids: dict[str, int],
 ) -> dict[int, list[tuple[int, float, bool]]]:
     tags: dict[int, list[tuple[int, float, bool]]] = {}
     for row in rows:
-        if row["qualification"] != "a_level" or row["exam_board"] != "cie":
-            continue
         content = str(row["content"] or "").casefold()
         component = _component_family(row["component"])
         matches: list[tuple[int, float, bool]] = []
-        for spec in by_course.get(str(row["course_code"]), []):
+        program_key = (str(row["qualification"]), str(row["exam_board"]), str(row["course_code"]))
+        for spec in by_program.get(program_key, []):
             if spec.components and component not in spec.components:
                 continue
             hits = sum(1 for term in spec.terms if _contains_term(content, term))

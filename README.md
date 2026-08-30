@@ -43,6 +43,7 @@ ome-cie-alevel-downloader
 ome-cie-alevel-splitter
 ome-uat-admissions-downloader
 ome-uat-admissions-splitter
+ome-process-tmua
 ome-pat-admissions-downloader
 ome-pat-admissions-splitter
 ome-step-admissions-downloader
@@ -52,6 +53,15 @@ ome-build-catalog
 ```
 
 Run `COMMAND --help` for adapter-specific options. Defaults resolve to `backend/data`, `backend/config` and `backend/resources`, independent of the current working directory.
+
+TMUA has a reproducible end-to-end command. It discovers and downloads the official archive, splits question papers and worked answers, verifies each answer against the official key, packages the portable subject database, rebuilds classifications and similar-question recommendations, then atomically activates the global catalog:
+
+```powershell
+Set-Location backend
+..\.venv\Scripts\python scripts\process_tmua.py
+```
+
+Use `--skip-download` to rebuild from the immutable PDFs already under `backend/data/raw_papers`, or `--skip-activate` to stop after producing the portable TMUA database. The command is idempotent and may be rerun after new official papers are downloaded.
 
 ## Verification
 

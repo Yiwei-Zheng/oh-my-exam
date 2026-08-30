@@ -141,8 +141,9 @@ def _migrate_source(
                 )
             ms_path = paper_index.get(ms_stem.casefold()) if ms_stem else None
             if ms_path is not None:
+                answer_role = _answer_role(exam_board, course_code, ms_path.stem)
                 document_map[(source_paper_id, 1)] = _insert_document(
-                    target, paper_id, _answer_role(exam_board, course_code), ms_path, paper_root
+                    target, paper_id, answer_role, ms_path, paper_root
                 )
 
         question_map: dict[int, int] = {}
@@ -213,7 +214,7 @@ def _migrate_source(
                 continue
             answer_id = answer_map.get(source_question_id)
             if answer_id is None:
-                answer_kind = _answer_kind(exam_board, course_code)
+                answer_kind = _answer_kind(exam_board, course_code, document_id, target)
                 cursor = target.execute(
                     """
                     INSERT INTO answers (question_id, source_document_id, answer_kind, authority, status)
@@ -246,6 +247,12 @@ def _build_paper_index(paper_root: Path) -> dict[str, Path]:
             duplicates.add(key)
         else:
             index[key] = path.resolve()
+        if key.startswith("tmua_") and key.endswith("_worked_answers"):
+            alias = f"{key[:-len('_worked_answers')]}_ms"
+            if alias in index and index[alias] != path.resolve():
+                duplicates.add(alias)
+            else:
+                index[alias] = path.resolve()
     if duplicates:
         preview = ", ".join(sorted(duplicates)[:5])
         raise ValueError(f"duplicate PDF stems under paper root: {preview}")
@@ -333,24 +340,36 @@ def _parse_paper_key(source_key: str, course_code: str) -> tuple[int | None, str
         variant = component[-1] if len(component) > 1 else None
         return year, f"{session_code.lower()}{short_year}", component, variant
     admissions_match = re.fullmatch(
-        rf"{re.escape(course_code)}_(\d{{4}})_([^_]+)_qp", source_key, re.IGNORECASE
+        rf"{re.escape(course_code)}_(\d{{4}}|early_specimen)_([^_]+)_qp", source_key, re.IGNORECASE
     )
     if admissions_match:
-        year, component = admissions_match.groups()
-        return int(year), str(year), component, None
+        period, component = admissions_match.groups()
+        year = int(period) if period.isdigit() else None
+        return year, period, component, None
     return None, None, None, None
 
 
-def _answer_role(exam_board: str, course_code: str) -> str:
+def _answer_role(exam_board: str, course_code: str, source_stem: str = "") -> str:
     if exam_board == "cie":
         return "mark_scheme"
+    if source_stem.endswith("_worked_answers"):
+        return "worked_answer"
     if course_code in {"engaa", "nsaa", "tmua"}:
         return "answer_key"
     return "worked_answer"
 
 
-def _answer_kind(exam_board: str, course_code: str) -> str:
+def _answer_kind(
+    exam_board: str,
+    course_code: str,
+    document_id: int | None = None,
+    connection: sqlite3.Connection | None = None,
+) -> str:
     role = _answer_role(exam_board, course_code)
+    if document_id is not None and connection is not None:
+        row = connection.execute("SELECT role FROM paper_documents WHERE id = ?", (document_id,)).fetchone()
+        if row is not None:
+            role = str(row[0])
     return {"mark_scheme": "mark_scheme", "answer_key": "answer_key", "worked_answer": "worked_solution"}[role]
 
 

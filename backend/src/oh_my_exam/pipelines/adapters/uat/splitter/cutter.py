@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import hashlib
+from functools import lru_cache
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -30,7 +32,13 @@ class Anchor:
     rect: fitz.Rect
 
 
-def split_asset(asset: PaperAsset, processed_root: Path, options: SplitOptions | None = None) -> list[dict[str, object]]:
+def split_asset(
+    asset: PaperAsset,
+    processed_root: Path,
+    options: SplitOptions | None = None,
+    *,
+    answer_choices: dict[int, str] | None = None,
+) -> list[dict[str, object]]:
     options = options or SplitOptions()
     output_dir = processed_root / asset.output_relative_dir
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -38,8 +46,14 @@ def split_asset(asset: PaperAsset, processed_root: Path, options: SplitOptions |
     with fitz.open(asset.pdf_path) as document:
         if asset.document_type == "qp":
             plans = _question_plans(document, options)
+        elif asset.source_document_type == "worked_answers":
+            plans = _worked_answer_plans(document, options)
         else:
             plans = _answer_key_plans(document)
+        if asset.exam == "tmua" and [number for number, _ in plans] != list(range(1, 21)):
+            raise RuntimeError(f"TMUA {asset.document_type} did not yield exactly questions 1-20")
+        if answer_choices is not None and set(answer_choices) != {number for number, _ in plans}:
+            raise RuntimeError("official answer key does not cover the same questions as the worked answers")
         results: list[dict[str, object]] = []
         for number, clips in plans:
             rendered = _render_clips(document, clips, options)
@@ -47,7 +61,16 @@ def split_asset(asset: PaperAsset, processed_root: Path, options: SplitOptions |
             image_path = output_dir / f"{asset.stem}_{key}.jpg"
             json_path = output_dir / f"{asset.stem}_{key}.json"
             rendered.save(image_path, format="JPEG", quality=options.quality, optimize=True)
-            manifest = _manifest(asset, number, document, clips, source_sha256, options, rendered)
+            manifest = _manifest(
+                asset,
+                number,
+                document,
+                clips,
+                source_sha256,
+                options,
+                rendered,
+                answer_choice=answer_choices.get(number) if answer_choices else None,
+            )
             json_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
             results.append({"question_number": str(number), "image_path": image_path, "manifest_path": json_path})
     return results
@@ -88,12 +111,23 @@ def _find_question_anchors(document: fitz.Document) -> list[Anchor]:
             text = word[4]
             if re.fullmatch(r"\d{1,3}", text) and 40.0 <= word[0] <= 80.0 and 35.0 <= word[1] <= 760.0:
                 candidates.append(Anchor(int(text), page_index, fitz.Rect(word[:4])))
+    try:
+        return _sequential_anchors(candidates)
+    except RuntimeError:
+        ocr_candidates = _find_question_anchors_with_ocr(document)
+        return _sequential_anchors([*candidates, *ocr_candidates], repair_page_gaps=True)
+
+
+def _sequential_anchors(candidates: list[Anchor], *, repair_page_gaps: bool = False) -> list[Anchor]:
     if not candidates:
         raise RuntimeError("no question numbers found in the official left number column")
     first = next((candidate for candidate in candidates if candidate.number == 1), None)
     if first is None:
         raise RuntimeError("question sequence does not start at 1")
-    candidates = [candidate for candidate in candidates if abs(candidate.rect.x0 - first.rect.x0) <= 3.0]
+    candidates = [candidate for candidate in candidates if abs(candidate.rect.x0 - first.rect.x0) <= 6.0]
+    candidates.sort(key=lambda item: (item.page_index, item.rect.y0, item.number))
+    if repair_page_gaps:
+        candidates = _repair_page_gaps(candidates)
     expected = 1
     anchors: list[Anchor] = []
     for candidate in candidates:
@@ -102,10 +136,120 @@ def _find_question_anchors(document: fitz.Document) -> list[Anchor]:
             expected += 1
     if not anchors or anchors[0].number != 1:
         raise RuntimeError("question sequence does not start at 1")
-    later_numbers = [item.number for item in candidates if item.number > expected]
-    if later_numbers:
-        raise RuntimeError(f"question number sequence is incomplete after {len(anchors)}")
     return anchors
+
+
+def _repair_page_gaps(candidates: list[Anchor]) -> list[Anchor]:
+    repaired = list(candidates)
+    ordered = sorted(candidates, key=lambda item: (item.page_index, item.rect.y0))
+    for previous, following in zip(ordered, ordered[1:]):
+        number_gap = following.number - previous.number
+        page_gap = following.page_index - previous.page_index
+        if number_gap <= 1 or number_gap != page_gap:
+            continue
+        for offset in range(1, number_gap):
+            if any(item.number == previous.number + offset for item in repaired):
+                continue
+            repaired.append(Anchor(
+                previous.number + offset,
+                previous.page_index + offset,
+                fitz.Rect(previous.rect.x0, 54.0, previous.rect.x1, 66.0),
+            ))
+    return sorted(repaired, key=lambda item: (item.page_index, item.rect.y0, item.number))
+
+
+def _find_question_anchors_with_ocr(document: fitz.Document) -> list[Anchor]:
+    try:
+        import numpy as np
+    except ImportError as exc:
+        raise RuntimeError("legacy question-number detection requires the optional OCR dependencies") from exc
+    engine = _rapidocr_engine()
+    scale = 1.5
+    candidates: list[Anchor] = []
+    for page_index, page in enumerate(document):
+        pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), colorspace=fitz.csRGB, alpha=False)
+        image = np.frombuffer(pixmap.samples, dtype=np.uint8).reshape(pixmap.height, pixmap.width, 3)
+        result = engine(image)
+        if result.boxes is None:
+            continue
+        for box, text in zip(result.boxes, result.txts):
+            match = re.match(r"^(\d{1,2})(?:\.|\s|$)", str(text).strip())
+            if match is None:
+                continue
+            x0 = min(float(point[0]) for point in box) / scale
+            y0 = min(float(point[1]) for point in box) / scale
+            x1 = max(float(point[0]) for point in box) / scale
+            y1 = max(float(point[1]) for point in box) / scale
+            if 40.0 <= x0 <= 82.0 and 35.0 <= y0 <= 760.0:
+                candidates.append(Anchor(int(match.group(1)), page_index, fitz.Rect(x0, y0, x1, y1)))
+    return candidates
+
+
+@lru_cache(maxsize=1)
+def _rapidocr_engine():
+    try:
+        from rapidocr import RapidOCR
+    except ImportError as exc:
+        raise RuntimeError("legacy PDF support requires the optional rapidocr package") from exc
+    return RapidOCR(params={"Global.use_cls": False})
+
+
+def _worked_answer_plans(
+    document: fitz.Document,
+    options: SplitOptions,
+) -> list[tuple[int, list[tuple[int, fitz.Rect]]]]:
+    starts: list[tuple[int, int]] = []
+    for page_index, page in enumerate(document):
+        text = _normalize_text(page.get_text("text", sort=True))
+        matches = re.findall(r"(?i)\bquestion\s+(\d{1,2})\b", text)
+        if len(matches) == 1:
+            starts.append((int(matches[0]), page_index))
+    if [number for number, _ in starts] != list(range(1, 21)):
+        raise RuntimeError("worked answers do not contain one ordered section for questions 1-20")
+    plans: list[tuple[int, list[tuple[int, fitz.Rect]]]] = []
+    for index, (number, first_page) in enumerate(starts):
+        next_page = starts[index + 1][1] if index + 1 < len(starts) else document.page_count
+        clips: list[tuple[int, fitz.Rect]] = []
+        for page_index in range(first_page, next_page):
+            page = document[page_index]
+            page_text = _normalize_text(page.get_text("text", sort=True))
+            if number == 20 and page_index > first_page and (
+                not page_text
+                or re.search(r"(?i)\b(acknowledgements?|blank page)\b", page_text)
+            ):
+                break
+            bottom = _content_bottom(page, 42.0, options.bottom_padding)
+            clips.append((page_index, fitz.Rect(42.0, 42.0, page.rect.width - 42.0, bottom)))
+        if not clips:
+            raise RuntimeError(f"worked answer {number} produced no crop regions")
+        plans.append((number, clips))
+    return plans
+
+
+def load_tmua_answer_keys(path: Path) -> dict[str, dict[int, str]]:
+    if not path.is_file():
+        raise RuntimeError(f"TMUA answer key is missing: {path}")
+    rows: list[tuple[int, str, int | None, str | None]] = []
+    with fitz.open(path) as document:
+        text = "\n".join(page.get_text("text", sort=True) for page in document)
+    for line in text.splitlines():
+        match = re.fullmatch(r"\s*(\d{1,2})\s+([A-H])(?:\s+(\d{1,2})\s+([A-H]))?\s*", line)
+        if match:
+            rows.append((int(match.group(1)), match.group(2), int(match.group(3)) if match.group(3) else None, match.group(4)))
+    paper_1: dict[int, str] = {}
+    paper_2: dict[int, str] = {}
+    for number, choice, second_number, second_choice in rows:
+        if second_number is not None and second_choice is not None:
+            paper_1[number] = choice
+            paper_2[second_number] = second_choice
+        elif len(paper_1) < 20:
+            paper_1[number] = choice
+        else:
+            paper_2[number] = choice
+    expected = set(range(1, 21))
+    if set(paper_1) != expected or set(paper_2) != expected:
+        raise RuntimeError(f"TMUA answer key did not yield 20 answers for both papers: {path}")
+    return {"p1": paper_1, "p2": paper_2}
 
 
 def _answer_key_plans(document: fitz.Document) -> list[tuple[int, list[tuple[int, fitz.Rect]]]]:
@@ -180,6 +324,8 @@ def _manifest(
     source_sha256: str,
     options: SplitOptions,
     rendered: Image.Image,
+    *,
+    answer_choice: str | None = None,
 ) -> dict[str, object]:
     regions = []
     for order, (page_index, rect) in enumerate(clips):
@@ -225,6 +371,8 @@ def _manifest(
         manifest["content_source"] = source
         if warning:
             manifest["content_warning"] = warning
+    elif answer_choice is not None:
+        manifest["answer_choice"] = answer_choice
     return manifest
 
 
@@ -237,19 +385,36 @@ def _text_is_unreliable(text: str) -> bool:
     meaningful = [character for character in text if not character.isspace()]
     if not meaningful or "\ufffd" in text:
         return True
-    suspicious = sum(1 for character in meaningful if character in {"□", "�"} or 0xE000 <= ord(character) <= 0xF8FF)
+    suspicious = sum(
+        1
+        for character in meaningful
+        if character in {"□", "�"}
+        or 0x80 <= ord(character) <= 0x9F
+        or 0xE000 <= ord(character) <= 0xF8FF
+        or unicodedata.category(character) == "Cc"
+    )
     return len(meaningful) >= 3 and suspicious / len(meaningful) > 0.12
 
 
 def _ocr(image: Image.Image) -> tuple[str, str]:
     try:
+        import numpy as np
+
+        result = _rapidocr_engine()(np.asarray(image.convert("RGB")))
+        if result.txts:
+            return _normalize_text("\n".join(str(value) for value in result.txts)), ""
+    except (ImportError, RuntimeError) as rapid_exc:
+        rapid_warning = str(rapid_exc)
+    except Exception as rapid_exc:
+        rapid_warning = f"RapidOCR failed: {rapid_exc}"
+    try:
         import pytesseract
     except ImportError:
-        return "", "OCR fallback requires the optional pytesseract package"
+        return "", rapid_warning or "OCR fallback requires an optional OCR package"
     try:
         return _normalize_text(pytesseract.image_to_string(image, lang="eng")), ""
     except Exception as exc:
-        return "", f"OCR fallback failed: {exc}"
+        return "", f"{rapid_warning}; Tesseract OCR failed: {exc}" if rapid_warning else f"OCR fallback failed: {exc}"
 
 
 def _sha256(path: Path) -> str:

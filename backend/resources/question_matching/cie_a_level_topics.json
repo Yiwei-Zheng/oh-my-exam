@@ -1,8 +1,9 @@
 {
-  "source": "Cambridge International 2026-2027 syllabuses for Mathematics 9709 and Further Mathematics 9231",
+  "source": "Official CIE A-Level syllabuses and UAT-UK TMUA content specification",
   "source_urls": {
     "9709": "https://www.cambridgeinternational.org/Images/697427-2026-2027-syllabus.pdf",
-    "9231": "https://www.cambridgeinternational.org/Images/697357-2026-2027-syllabus.pdf"
+    "9231": "https://www.cambridgeinternational.org/Images/697357-2026-2027-syllabus.pdf",
+    "tmua": "https://uat-wp.s3.eu-west-2.amazonaws.com/wp-content/uploads/2024/05/03165619/TMUA_Content_Specification.pdf"
   },
   "courses": [
     {
@@ -68,6 +69,27 @@
         {"code": "chi_squared", "title": "Chi-squared tests", "components": ["4"], "terms": ["chi-squared", "goodness of fit", "contingency table"]},
         {"code": "non_parametric", "title": "Non-parametric tests", "components": ["4"], "terms": ["wilcoxon", "non-parametric", "rank sum", "signed-rank"]},
         {"code": "probability_generating_functions", "title": "Probability generating functions", "components": ["4"], "terms": ["probability generating function", "generating function"]}
+      ]
+    },
+    {
+      "qualification": "admissions",
+      "exam_board": "uat",
+      "course_code": "tmua",
+      "topics": [
+        {"code": "paper_1", "title": "Applications of Mathematical Knowledge", "components": ["1"], "broad": true},
+        {"code": "paper_2", "title": "Mathematical Reasoning", "components": ["2"], "broad": true},
+        {"code": "algebra_functions", "title": "Algebra and functions", "terms": ["quadratic", "polynomial", "factor theorem", "remainder theorem", "inequality", "function", "surds", "simultaneous equations"]},
+        {"code": "sequences_series", "title": "Sequences and series", "terms": ["sequence", "series", "recurrence", "arithmetic progression", "geometric progression", "binomial expansion"]},
+        {"code": "coordinate_geometry", "title": "Coordinate geometry", "terms": ["straight line", "gradient", "coordinate", "perpendicular", "circle", "tangent", "chord"]},
+        {"code": "trigonometry", "title": "Trigonometry", "terms": ["trigonometric", "sine", "cosine", "tangent", "radian", "sin ", "cos ", "tan "]},
+        {"code": "exponentials_logarithms", "title": "Exponentials and logarithms", "terms": ["exponential", "logarithm", "log ", "indices", "index laws"]},
+        {"code": "differentiation", "title": "Differentiation", "terms": ["differentiate", "derivative", "stationary point", "rate of change", "normal to the curve", "dy/dx"]},
+        {"code": "integration", "title": "Integration", "terms": ["integral", "integrate", "area under", "trapezium rule", "differential equation"]},
+        {"code": "graphs", "title": "Graphs of functions", "terms": ["graph", "transformation", "intersect", "turning point", "roots", "sketch"]},
+        {"code": "number_ratio_units", "title": "Number, ratio and units", "terms": ["ratio", "proportion", "percentage", "units", "prime", "factor", "standard form", "bounds"]},
+        {"code": "geometry", "title": "Geometry and measure", "terms": ["triangle", "quadrilateral", "polygon", "congruent", "similar", "pythagoras", "area", "volume", "angle"]},
+        {"code": "probability_statistics", "title": "Probability and statistics", "terms": ["probability", "mean", "median", "frequency", "sample", "data", "outcome"]},
+        {"code": "logic_proof", "title": "Logic and proof", "components": ["2"], "terms": ["necessary", "sufficient", "if and only if", "contrapositive", "counterexample", "proof", "statement", "implies"]}
       ]
     }
   ]

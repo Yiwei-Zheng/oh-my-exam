@@ -23,6 +23,7 @@ ome-cie-alevel-downloader = "oh_my_exam.pipelines.adapters.cie_alevel.downloader
 ome-cie-alevel-splitter = "oh_my_exam.pipelines.adapters.cie_alevel.splitter.cli:main"
 ome-uat-admissions-downloader = "oh_my_exam.pipelines.adapters.uat.downloader.cli:main"
 ome-uat-admissions-splitter = "oh_my_exam.pipelines.adapters.uat.splitter.cli:main"
+ome-process-tmua = "oh_my_exam.pipelines.adapters.uat.tmua_pipeline:main"
 ome-pat-admissions-downloader = "oh_my_exam.pipelines.adapters.pat.downloader.cli:main"
 ome-pat-admissions-splitter = "oh_my_exam.pipelines.adapters.pat.splitter.cli:main"
 ome-step-admissions-downloader = "oh_my_exam.pipelines.adapters.step.downloader.cli:main"
