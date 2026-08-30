@@ -11,6 +11,8 @@ export interface CurrentUser {
 
 export interface Exam {
   id: string
+  qualification: string
+  exam_board: string
   course_code: string
   display_name: string
   paper_count: number

@@ -19,18 +19,12 @@ import {
 } from '@hugeicons/core-free-icons'
 
 import { useLocale } from '@/components/locale-provider'
+import { ExamTreeSelect } from '@/components/exam-tree-select'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ApiError, apiRequest } from '@/lib/api'
@@ -516,23 +510,13 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
               <div className="mt-4 grid gap-4 border-t pt-4 md:grid-cols-[minmax(0,1fr)_240px_auto] md:items-end">
                 <div className="space-y-2 md:col-start-2">
                   <Label>{t('examPrograms')}</Label>
-                  <Select
+                  <ExamTreeSelect
+                    exams={exams}
                     value={examId}
-                    onValueChange={(value) => value && setExamId(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t('allExams')}</SelectItem>
-                      {exams.map((exam) => (
-                        <SelectItem key={exam.id} value={exam.id}>
-                          {exam.course_code.toUpperCase()} ·{' '}
-                          {exam.question_count}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    allLabel={t('allExams')}
+                    treeLabel={t('examPrograms')}
+                    onValueChange={setExamId}
+                  />
                 </div>
                 <Button
                   type="submit"
