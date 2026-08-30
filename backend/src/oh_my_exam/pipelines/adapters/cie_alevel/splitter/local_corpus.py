@@ -33,7 +33,10 @@ def discover_installed_paper_sets(raw_root: Path) -> list[InstalledPaperSet]:
     pairs: dict[tuple[str, str, str, int, str, str], dict[str, PaperAsset]] = {}
     componentless_mark_schemes: dict[tuple[str, str, str, int, str], PaperAsset] = {}
     subject_names: dict[tuple[str, str, str], str] = {}
-    for metadata_path in sorted(raw_root.rglob("*.json")):
+    metadata_root = raw_root / "cie" / "a_level"
+    if not metadata_root.exists():
+        return []
+    for metadata_path in sorted(metadata_root.rglob("*.json")):
         try:
             raw = json.loads(metadata_path.read_text(encoding="utf-8"))
             subject_name = english_subject_name(
