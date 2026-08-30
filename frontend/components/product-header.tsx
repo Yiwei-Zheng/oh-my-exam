@@ -29,7 +29,7 @@ export function ProductHeader() {
         className="mr-auto flex items-center gap-2 font-semibold tracking-tight"
       >
         <Image
-          src="/brand/favicon-mark.png"
+          src="/app-icon.png"
           alt=""
           width={28}
           height={28}

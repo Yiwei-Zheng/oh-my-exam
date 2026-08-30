@@ -12,20 +12,11 @@ export const metadata: Metadata = {
   title: 'Oh My Exam',
   description: 'Question intelligence workspace',
   icons: {
-    icon: [
-      {
-        url: '/brand/favicon-light.png',
-        type: 'image/png',
-        sizes: '32x32',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/brand/favicon-dark.png',
-        type: 'image/png',
-        sizes: '32x32',
-        media: '(prefers-color-scheme: dark)',
-      },
-    ],
+    icon: {
+      url: '/app-icon.png',
+      type: 'image/png',
+      sizes: '1254x1254',
+    },
     shortcut: '/favicon.ico',
     apple: {
       url: '/apple-touch-icon.png',
