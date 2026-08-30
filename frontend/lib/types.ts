@@ -38,6 +38,20 @@ export interface Question {
   answer_structured?: AnswerStructured | null
 }
 
+export interface Topic {
+  code: string
+  title: string
+  description: string
+  exam_id: string
+  question_count: number
+}
+
+export interface ImageSearchResponse {
+  extracted_text: string
+  ocr_source: string
+  results: Question[]
+}
+
 export interface TreeNode {
   id: string
   label: string

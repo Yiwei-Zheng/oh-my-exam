@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { RefreshIcon, Search01Icon } from '@hugeicons/core-free-icons'
+import {
+  ArrowRight01Icon,
+  RefreshIcon,
+  Search01Icon,
+} from '@hugeicons/core-free-icons'
 
 import type { AssetInventory } from '@/components/admin/types'
 import { useLocale } from '@/components/locale-provider'
@@ -28,24 +32,95 @@ interface PaperChoice {
   id: number
   examId: string
   label: string
-  path: string
 }
 
-function paperChoices(
-  nodes: TreeNode[],
-  parents: string[] = [],
-): PaperChoice[] {
+function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+  if (!query.trim()) return nodes
+  const normalized = query.trim().toLocaleLowerCase()
+  return nodes.flatMap((node) => {
+    const children = filterTree(node.children || [], query)
+    return node.label.toLocaleLowerCase().includes(normalized) ||
+      children.length
+      ? [{ ...node, children }]
+      : []
+  })
+}
+
+function expandableIds(nodes: TreeNode[], depth = Infinity): string[] {
   return nodes.flatMap((node) =>
-    node.kind === 'paper' && node.paper_id && node.exam_id
-      ? [
-          {
-            id: node.paper_id,
-            examId: node.exam_id,
-            label: node.label,
-            path: [...parents, node.label].join(' / '),
-          },
-        ]
-      : paperChoices(node.children || [], [...parents, node.label]),
+    node.children?.length
+      ? [node.id, ...(depth > 0 ? expandableIds(node.children, depth - 1) : [])]
+      : [],
+  )
+}
+
+function AssetTreeNode({
+  node,
+  depth,
+  expanded,
+  selectedPaperId,
+  onToggle,
+  onPaper,
+}: {
+  node: TreeNode
+  depth: number
+  expanded: Set<string>
+  selectedPaperId?: number
+  onToggle: (id: string) => void
+  onPaper: (paper: PaperChoice) => void
+}) {
+  const isBranch = Boolean(node.children?.length)
+  const isExpanded = expanded.has(node.id)
+  const isPaper = node.kind === 'paper' && node.paper_id && node.exam_id
+  return (
+    <div
+      role="treeitem"
+      aria-expanded={isBranch ? isExpanded : undefined}
+      aria-selected={isPaper ? selectedPaperId === node.paper_id : false}
+    >
+      <button
+        type="button"
+        onClick={() =>
+          isPaper
+            ? onPaper({
+                id: node.paper_id!,
+                examId: node.exam_id!,
+                label: node.label,
+              })
+            : isBranch && onToggle(node.id)
+        }
+        className={`flex min-h-11 w-full items-center gap-2 rounded-lg pr-2 text-left text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selectedPaperId === node.paper_id ? 'bg-primary/10 text-primary' : ''}`}
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
+      >
+        <HugeiconsIcon
+          icon={ArrowRight01Icon}
+          className={`size-4 shrink-0 transition-transform ${isBranch && isExpanded ? 'rotate-90' : ''} ${isBranch ? '' : 'opacity-25'}`}
+        />
+        <span className="min-w-0 flex-1 truncate font-medium">
+          {node.label}
+        </span>
+        {node.count !== undefined && (
+          <Badge variant="secondary" className="shrink-0 font-mono text-[10px]">
+            {node.count}
+          </Badge>
+        )}
+      </button>
+      {isBranch && isExpanded && (
+        <div role="group">
+          {node.children.map((child) => (
+            <AssetTreeNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              expanded={expanded}
+              selectedPaperId={selectedPaperId}
+              onToggle={onToggle}
+              onPaper={onPaper}
+            />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -58,6 +133,7 @@ export function AssetsPanel({
 }) {
   const { t } = useLocale()
   const [tree, setTree] = useState<TreeNode[]>([])
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState('')
   const [selectedPaper, setSelectedPaper] = useState<PaperChoice | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -76,18 +152,26 @@ export function AssetsPanel({
       ),
     ]).then(([nodes, update]) => {
       setTree(nodes)
+      setExpanded(new Set(expandableIds(nodes, 1)))
       setUpdateConfigured(update.configured)
       setUpdateRunning(update.job?.status === 'running')
     })
   }, [])
 
-  const papers = useMemo(
-    () =>
-      paperChoices(tree).filter((paper) =>
-        paper.path.toLowerCase().includes(filter.toLowerCase()),
-      ),
-    [filter, tree],
+  const visibleTree = useMemo(() => filterTree(tree, filter), [filter, tree])
+  const visibleExpanded = useMemo(
+    () => (filter.trim() ? new Set(expandableIds(visibleTree)) : expanded),
+    [expanded, filter, visibleTree],
   )
+
+  function toggleNode(id: string) {
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function choosePaper(paper: PaperChoice) {
     setSelectedPaper(paper)
@@ -249,18 +333,44 @@ export function AssetsPanel({
                 placeholder={t('filterLibrary')}
               />
             </div>
-            <div className="max-h-[620px] overflow-y-auto p-2">
-              {papers.map((paper) => (
-                <button
-                  key={paper.id}
-                  onClick={() => choosePaper(paper)}
-                  className={`w-full rounded-lg p-3 text-left text-sm hover:bg-muted ${selectedPaper?.id === paper.id ? 'bg-primary/10 text-primary' : ''}`}
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+              <span className="text-xs font-semibold text-muted-foreground">
+                {t('assetTree')}
+              </span>
+              <div className="flex gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExpanded(new Set(expandableIds(tree)))}
                 >
-                  <span className="line-clamp-2">{paper.path}</span>
-                  <Badge variant="secondary" className="mt-2">
-                    {paper.label}
-                  </Badge>
-                </button>
+                  {t('expandAll')}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setExpanded(new Set())}
+                >
+                  {t('collapseAll')}
+                </Button>
+              </div>
+            </div>
+            <div
+              role="tree"
+              aria-label={t('assetTree')}
+              className="max-h-[620px] overflow-y-auto p-2"
+            >
+              {visibleTree.map((node) => (
+                <AssetTreeNode
+                  key={node.id}
+                  node={node}
+                  depth={0}
+                  expanded={visibleExpanded}
+                  selectedPaperId={selectedPaper?.id}
+                  onToggle={toggleNode}
+                  onPaper={choosePaper}
+                />
               ))}
             </div>
           </div>

@@ -210,6 +210,7 @@ class GlobalCatalog:
         exam_id: str | None = None,
         topic_codes: tuple[str, ...] = (),
         limit: int = 50,
+        match_all_terms: bool = True,
     ) -> list[dict[str, object]]:
         """Search identity, extracted text, and managed syllabus topics."""
         normalized_query = query.strip().casefold()
@@ -252,7 +253,8 @@ class GlobalCatalog:
                 for token in tokens:
                     clauses.append("(lower(COALESCE(qt.content, '')) LIKE ? OR lower(qu.stable_key) LIKE ?)")
                     parameters.extend((f"%{token}%", f"%{token}%"))
-                sql += " AND " + " AND ".join(clauses)
+                operator = " AND " if match_all_terms else " OR "
+                sql += " AND (" + operator.join(clauses) + ")"
             if topic_codes and has_features:
                 placeholders = ", ".join("?" for _ in topic_codes)
                 sql += f" AND f.canonical_code IN ({placeholders})"

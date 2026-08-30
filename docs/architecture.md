@@ -51,6 +51,12 @@ Answer corrections are append-only `answer_versions` rows with `raw_text` and `m
 
 The browser uses the hierarchy qualification, exam board, program, year, session, paper and question. Paper nodes fetch question lists on demand. The right rail switches between dynamically clipped question PDF, clipped answer PDF and structured text. Full source PDFs remain available through authorized internal IDs. The browser never receives filesystem paths or upstream source URLs.
 
+Text and knowledge-point search query the normalized catalog directly. Image
+search sends a bounded browser-normalized data URL to FastAPI, where the OCR
+adapter extracts text before catalog matching. OCR is an optional backend
+capability and returns an explicit unavailable state when no engine is installed;
+the frontend does not perform business matching or call model providers directly.
+
 ## Dependency rules
 
 - Frontend code calls HTTP APIs only.

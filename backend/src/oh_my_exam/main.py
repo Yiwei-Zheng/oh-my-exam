@@ -18,6 +18,12 @@ from .identity import (
     SESSION_COOKIE,
     User,
 )
+from .image_search import (
+    ImageSearchError,
+    OcrUnavailableError,
+    extract_image_text,
+    image_search_query,
+)
 from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_document import QuestionDocumentError, crop_question_pdf
@@ -54,6 +60,13 @@ class CreateInvitationRequest(BaseModel):
 class AnswerRevisionRequest(BaseModel):
     raw_text: str
     markdown: str
+
+
+class ImageQuestionSearchRequest(BaseModel):
+    image_data_url: str = Field(min_length=32, max_length=12_000_000)
+    exam_id: str | None = None
+    topic: list[str] = Field(default_factory=list, max_length=20)
+    limit: int = Field(default=50, ge=1, le=100)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -138,6 +151,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return catalog.list_topics(exam_id)
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.post("/api/v1/questions/image-search")
+    def search_questions_by_image(
+        payload: ImageQuestionSearchRequest,
+    ) -> dict[str, object]:
+        try:
+            extracted = extract_image_text(payload.image_data_url)
+            search_text = image_search_query(extracted.text)
+            results = (
+                catalog.search_questions(
+                    search_text,
+                    exam_id=payload.exam_id,
+                    topic_codes=tuple(payload.topic),
+                    limit=payload.limit,
+                    match_all_terms=False,
+                )
+                if search_text
+                else []
+            )
+        except ImageSearchError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OcrUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return {
+            "extracted_text": extracted.text,
+            "ocr_source": extracted.source,
+            "results": results,
+        }
 
     @app.get("/api/v1/exams/{exam_id}/questions")
     def list_questions(

@@ -9,7 +9,7 @@ sudo useradd --system --home /srv/oh-my-exam --shell /usr/sbin/nologin oh-my-exa
 sudo mkdir -p /srv/oh-my-exam /etc/oh-my-exam
 sudo chown -R oh-my-exam:oh-my-exam /srv/oh-my-exam
 python3 -m venv /srv/oh-my-exam/.venv
-/srv/oh-my-exam/.venv/bin/pip install -e '/srv/oh-my-exam/backend[test]'
+/srv/oh-my-exam/.venv/bin/pip install -e '/srv/oh-my-exam/backend[test,ocr]'
 cd /srv/oh-my-exam/frontend && npm ci && npm run build
 ```
 

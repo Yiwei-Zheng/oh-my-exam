@@ -40,7 +40,11 @@ architecture must allow new exam families without global rewrites.
 - Knowledge point, syllabus section, question type, difficulty, and processing
   state are filters and tags rather than competing tree roots.
 - Tree nodes load lazily and large question lists use cursor pagination.
-- Search supports printed question text, identity fields, and normalized tags.
+- Search supports printed question text, identity fields, normalized tags, and
+  syllabus knowledge points.
+- Image search accepts a camera photo, selected image, drag-and-drop image, or
+  image pasted from the clipboard. The server extracts text with a replaceable
+  OCR adapter and ranks catalog questions by overlapping terms.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
 - A question can be opened as a dynamically clipped vector PDF.
@@ -86,6 +90,8 @@ architecture must allow new exam families without global rewrites.
   document-workspace information density instead of a generic KPI dashboard.
 - Desktop uses adaptive navigation, tree, and preview columns. Tablet collapses
   navigation. Phone uses drill-down routes.
+- Administrator paper assets use the canonical collapsible tree rather than a
+  flattened paper list. Filtering preserves matching nodes and their ancestors.
 - The document rail switches between question PDF, answer PDF, structured text,
   and source paper while retaining question context.
 - Light, dark, and follow-system themes are supported.

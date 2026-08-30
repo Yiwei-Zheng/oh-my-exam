@@ -6,8 +6,10 @@ import sqlite3
 from fastapi.testclient import TestClient
 import pymupdf
 
+import oh_my_exam.main as main_module
 from oh_my_exam.catalog import GlobalCatalog
 from oh_my_exam.config import Settings
+from oh_my_exam.image_search import ImageText
 from oh_my_exam.main import create_app
 from oh_my_exam.paper_store import FileSystemPaperStore, PaperNotFoundError
 
@@ -358,3 +360,22 @@ def test_api_does_not_serve_frontend_or_repository_files(tmp_path: Path) -> None
     assert client.get("/assets/app.js").status_code == 404
     assert client.get("/api/v1/unknown").status_code == 404
     assert client.get("/%2e%2e/pyproject.toml").status_code == 404
+
+
+def test_image_search_returns_ocr_text_and_matches_any_term(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        main_module,
+        "extract_image_text",
+        lambda _data_url: ImageText("unrelated acceleration noise", "test-ocr"),
+    )
+    response = _client(tmp_path).post(
+        "/api/v1/questions/image-search",
+        json={"image_data_url": "data:image/png;base64," + "A" * 32},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["extracted_text"] == "unrelated acceleration noise"
+    assert response.json()["ocr_source"] == "test-ocr"
+    assert response.json()["results"][0]["id"] == 7
