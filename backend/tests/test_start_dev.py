@@ -30,6 +30,15 @@ def test_frontend_access_url_brackets_ipv6_address() -> None:
     assert start_dev.frontend_access_url("fd00::1", 4173) == "http://[fd00::1]:4173"
 
 
+def test_allowed_dev_origins_preserves_config_and_adds_lan_host() -> None:
+    assert start_dev.allowed_dev_origins(
+        "dev.example.test, 192.168.10.4", "http://192.168.10.4:4173"
+    ) == "dev.example.test,192.168.10.4"
+    assert start_dev.allowed_dev_origins(
+        "dev.example.test", "http://192.168.10.5:4173"
+    ) == "dev.example.test,192.168.10.5"
+
+
 def test_wait_for_port_reports_ready_listener() -> None:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))

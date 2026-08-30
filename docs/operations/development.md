@@ -32,7 +32,10 @@ The launcher starts the API on port 8000 and Next.js on port 4173, streams both
 logs into one terminal, and stops both process trees on Ctrl+C. By default both
 servers listen on all interfaces. The launcher prints the detected LAN address
 and a terminal QR code that opens the frontend from another device on the same
-network. The same launcher works on every supported platform through Python:
+network. It also passes that exact host to Next.js as an allowed development
+origin so HMR and development font resources remain available without allowing
+unrelated origins. The same launcher works on every supported platform through
+Python:
 
 ```bash
 python start_server.py

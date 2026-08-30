@@ -13,6 +13,7 @@ import socket
 import subprocess
 import sys
 import time
+from urllib.parse import urlsplit
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -116,6 +117,16 @@ def frontend_access_url(host: str, port: int) -> str | None:
         if host.lower() == "localhost":
             return None
     return f"http://{host}:{port}"
+
+
+def allowed_dev_origins(existing: str, lan_url: str | None) -> str:
+    configured_origins = [
+        origin.strip() for origin in existing.split(",") if origin.strip()
+    ]
+    lan_host = urlsplit(lan_url).hostname if lan_url else None
+    if lan_host and lan_host not in configured_origins:
+        configured_origins.append(lan_host)
+    return ",".join(configured_origins)
 
 
 def print_access_qr(url: str) -> None:
@@ -229,6 +240,9 @@ def main() -> int:
     )
 
     lan_url = frontend_access_url(host, args.frontend_port)
+    environment["OME_ALLOWED_DEV_ORIGINS"] = allowed_dev_origins(
+        environment.get("OME_ALLOWED_DEV_ORIGINS", ""), lan_url
+    )
     print(f"Local:    http://127.0.0.1:{args.frontend_port}")
     print(f"API:      http://127.0.0.1:{args.api_port}")
     if lan_url is None and host != "127.0.0.1":
