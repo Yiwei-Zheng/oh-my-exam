@@ -30,7 +30,7 @@ from oh_my_exam.pipelines.adapters.cie_alevel.downloader.pipeline import filter_
 
 def test_build_frank_cie_url() -> None:
     asset = PaperAsset("cie", "a_level", "9701", "Chemistry", "w24", "qp", "31")
-    assert build_frank_cie_url(asset) == "https://cie.fraft.cn/obj/Common/Fetch/redir/9701_w24_qp_31.pdf"
+    assert build_frank_cie_url(asset) == "https://cie.fraft.org/obj/Common/Fetch/redir/9701_w24_qp_31.pdf"
 
 
 def test_componentless_frank_asset_stem_and_url() -> None:

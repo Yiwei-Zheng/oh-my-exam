@@ -95,7 +95,7 @@ def test_subject_cutters_record_crop_regions_from_pdf_source(tmp_path: Path) -> 
     assert len(regions) == 2
     assert regions[0]["order"] == 0
     assert regions[1]["join_gap_before_px"] == 12
-    assert regions[0]["source_pdf"] == "https://cie.fraft.cn/obj/Common/Fetch/redir/9231_w23_qp_11.pdf"
+    assert regions[0]["source_pdf"] == "https://cie.fraft.org/obj/Common/Fetch/redir/9231_w23_qp_11.pdf"
     assert regions[0]["source_pdf_sha256"]
     assert regions[0]["coordinate_space"] == "pymupdf_page_points"
     assert regions[0]["rect"] == {"x0": 10.0, "y0": 20.0, "x1": 180.0, "y1": 220.0}
@@ -248,7 +248,7 @@ def test_backfill_processed_question_content_updates_existing_sidecar(tmp_path: 
                 "cutter": "test",
                 "crop_regions": [
                     {
-                        "source_pdf": "https://cie.fraft.cn/obj/Common/Fetch/redir/9709_w24_qp_12.pdf",
+                        "source_pdf": "https://cie.fraft.org/obj/Common/Fetch/redir/9709_w24_qp_12.pdf",
                         "page_index": 0,
                         "coordinate_space": "pymupdf_page_points",
                         "rect": {"x0": 0, "y0": 0, "x1": 300, "y1": 160},
@@ -323,7 +323,7 @@ def test_fallback_crop_region_records_replay_transforms(tmp_path: Path) -> None:
         post_render_crop_px={"coordinate_space": "rendered_clip_pixels", "unit": "px", "left": 2, "top": 3, "right": 400, "bottom": 500},
     )
 
-    assert region["source_pdf"] == "https://cie.fraft.cn/obj/Common/Fetch/redir/9999_w23_qp_11.pdf"
+    assert region["source_pdf"] == "https://cie.fraft.org/obj/Common/Fetch/redir/9999_w23_qp_11.pdf"
     assert region["rect"] == {"x0": 0.0, "y0": 480.0, "x1": 600.0, "y1": 720.0}
     assert CROP_REGION_KEYS | {"post_render_crop_px"} <= set(region)
 

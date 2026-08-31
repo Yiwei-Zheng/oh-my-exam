@@ -18,7 +18,7 @@ from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.models import PaperAsset
 
 
-FRANK_BASE_URL = "https://cie.fraft.cn"
+FRANK_BASE_URL = "https://cie.fraft.org"
 DEFAULT_AVAILABILITY_INDEX = BACKEND_ROOT / "resources/exam_boards/cie/frank_available_assets.json"
 DEFAULT_SUBJECT_AVAILABILITY_DIR = BACKEND_ROOT / "resources/exam_boards/cie/available_assets"
 FRANK_SEASONS = {"Mar": "m", "Jun": "s", "Nov": "w"}

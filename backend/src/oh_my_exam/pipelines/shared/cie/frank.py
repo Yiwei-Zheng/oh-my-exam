@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-FRANK_CIE_REDIR_BASE = "https://cie.fraft.cn/obj/Common/Fetch/redir"
+FRANK_CIE_REDIR_BASE = "https://cie.fraft.org/obj/Common/Fetch/redir"
 
 
 def build_frank_cie_url_from_stem(stem: str) -> str:
