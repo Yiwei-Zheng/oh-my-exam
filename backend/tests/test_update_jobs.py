@@ -202,7 +202,10 @@ def test_update_subprocess_uses_utf8_and_reports_eta(monkeypatch, tmp_path: Path
     captured: dict[str, object] = {}
 
     class Process:
-        stdout = [json.dumps({"stage": "downloading", "progress": 25, "message": "正在下载试卷"}, ensure_ascii=False)]
+        stdout = [
+            "MuPDF warning: invalid embedded color profile",
+            json.dumps({"stage": "downloading", "progress": 25, "message": "正在下载试卷"}, ensure_ascii=False),
+        ]
 
         @staticmethod
         def wait() -> int:
@@ -226,3 +229,34 @@ def test_update_subprocess_uses_utf8_and_reports_eta(monkeypatch, tmp_path: Path
     assert 95 <= running["elapsed_seconds"] <= 105
     assert 285 <= running["eta_seconds"] <= 315
     assert manager.get(job_id)["message"] == "正在下载试卷"
+
+
+def test_failed_subprocess_reports_last_diagnostic(monkeypatch, tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ("update",))
+    with manager._connect() as connection:
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO users (id) VALUES (1)")
+        cursor = connection.execute(
+            """
+            INSERT INTO question_update_jobs
+                (requested_by, status, stage, action, progress, message)
+            VALUES (1, 'running', 'splitting', 'split', 40, 'starting')
+            """
+        )
+        job_id = int(cursor.lastrowid)
+
+    class Process:
+        stdout = ["fatal splitter detail"]
+
+        @staticmethod
+        def wait() -> int:
+            return 2
+
+    monkeypatch.setattr("oh_my_exam.update_jobs.subprocess.Popen", lambda *_args, **_kwargs: Process())
+
+    manager._run(job_id, ["cie:9709"], 4, "split", "update")
+
+    failed = manager.get(job_id)
+    assert failed["status"] == "failed"
+    assert failed["stage"] == "failed"
+    assert failed["message"] == "题库更新进程退出，代码 2: fatal splitter detail"

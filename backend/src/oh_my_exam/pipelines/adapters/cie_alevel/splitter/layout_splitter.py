@@ -65,7 +65,6 @@ def split_paper_set_to_images(
     options: SplitOptions | None = None,
 ) -> dict[str, object]:
     options = options or SplitOptions()
-    completed_keys = _completed_split_keys(report_path) if not overwrite else set()
     output_dir = (
         processed_root
         / paper_set.exam_board
@@ -123,6 +122,7 @@ def split_installed_paper_sets(
     progress_state = {"completed": 0, "started_at": time.monotonic()}
     workers = max(1, int(workers))
     options = options or SplitOptions()
+    completed_keys = _completed_split_keys(report_path) if not overwrite else set()
 
     def run_one(index: int, paper_set: InstalledPaperSet) -> dict[str, object]:
         if should_stop and should_stop():

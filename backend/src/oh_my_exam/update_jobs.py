@@ -300,11 +300,20 @@ class UpdateJobManager:
                 self._set_process_paused(process.pid, True)
             assert process.stdout is not None
             last_message = ""
+            diagnostics: list[str] = []
             for line in process.stdout:
-                last_message = self._consume_progress(job_id, line.strip()) or last_message
+                clean_line = line.strip()
+                try:
+                    json.loads(clean_line)
+                except (json.JSONDecodeError, TypeError):
+                    if clean_line:
+                        diagnostics.append(clean_line[:500])
+                    continue
+                last_message = self._consume_progress(job_id, clean_line) or last_message
             code = process.wait()
             if code:
-                raise RuntimeError(f"题库更新进程退出，代码 {code}")
+                detail = diagnostics[-1] if diagnostics else "没有返回错误详情"
+                raise RuntimeError(f"题库更新进程退出，代码 {code}: {detail}")
             self._update(job_id, status="completed", stage="completed", progress=100, message=last_message or "题库已更新")
         except Exception as exc:
             self._update(job_id, status="failed", stage="failed", message=str(exc)[:500])
@@ -401,8 +410,7 @@ class UpdateJobManager:
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
-            self._update(job_id, message=line[:500])
-            return line[:500]
+            return None
         if not isinstance(payload, dict):
             return None
         allowed_stages = {"checking", "downloading", "splitting", "cataloging", "classifying"}

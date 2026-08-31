@@ -5,7 +5,9 @@ import sys
 
 import pytest
 
+from oh_my_exam.pipelines.adapters.cie_alevel.splitter import layout_splitter
 from oh_my_exam.pipelines.adapters.cie_alevel.splitter.layout_splitter import PageSlicePlan, SplitOptions, _fallback_crop_region, _record_split_result
+from oh_my_exam.pipelines.adapters.cie_alevel.splitter.local_corpus import InstalledPaperSet
 from oh_my_exam.pipelines.adapters.cie_alevel.splitter.content_backfill import backfill_processed_question_content
 from oh_my_exam.pipelines.adapters.cie_alevel.splitter.cutters.registry import get_subject_cutter
 from oh_my_exam.pipelines.adapters.cie_alevel.splitter.content_extraction import ContentExtraction
@@ -560,3 +562,42 @@ def test_progress_uses_completed_count_not_original_paper_index(tmp_path: Path) 
     assert [event["index"] for event in events] == [1, 2]
     assert [event["paper_index"] for event in events] == [421, 108]
     assert events[-1]["eta_seconds"] >= 0
+
+
+def test_incremental_split_skips_completed_paper_set(monkeypatch, tmp_path: Path) -> None:
+    asset = PaperAsset("cie", "a_level", "9709", "Mathematics", "w24", "qp", "11")
+    paper_set = InstalledPaperSet(
+        "cie", "a_level", "9709", "Mathematics", 2024, "w24", "11", asset, None
+    )
+    report_path = tmp_path / "report.jsonl"
+    report_path.write_text(
+        json.dumps({"key": paper_set.key, "status": "split"}) + "\n",
+        encoding="utf-8",
+    )
+    output_dir = (
+        tmp_path
+        / "processed"
+        / "cie"
+        / "a_level"
+        / "9709"
+        / "2024"
+        / "w24"
+        / "11"
+        / "qp"
+    )
+    output_dir.mkdir(parents=True)
+    (output_dir / "9709_w24_qp_11_q01.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(layout_splitter, "discover_installed_paper_sets", lambda _root: [paper_set])
+    monkeypatch.setattr(
+        layout_splitter,
+        "split_paper_set_to_images",
+        lambda *_args, **_kwargs: pytest.fail("completed paper set was split again"),
+    )
+
+    counts = layout_splitter.split_installed_paper_sets(
+        tmp_path / "raw",
+        tmp_path / "processed",
+        report_path,
+    )
+
+    assert counts == {"split": 0, "failed": 0, "skipped": 1}

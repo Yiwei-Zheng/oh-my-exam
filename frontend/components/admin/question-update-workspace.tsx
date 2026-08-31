@@ -1,15 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
+  Alert02Icon,
   Database01Icon,
   PauseIcon,
   PlayIcon,
   RefreshIcon,
-  Search01Icon,
 } from '@hugeicons/core-free-icons'
 
 import { useLocale } from '@/components/locale-provider'
@@ -18,8 +18,17 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { apiRequest } from '@/lib/api'
+import { ApiError, apiRequest } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
 interface WorkflowSubject {
@@ -58,6 +67,13 @@ interface UpdateJob {
   paused: boolean
   elapsed_seconds: number
   eta_seconds: number | null
+}
+
+interface FailureNotice {
+  context: string
+  reason: string
+  suggestion: string
+  detail: string
 }
 
 type PipelineAction =
@@ -104,6 +120,25 @@ const copy = {
     resume: '继续',
     pauseFailed: '未能暂停当前任务，请稍后重试。',
     resumeFailed: '未能继续当前任务，请稍后重试。',
+    errorTitle: '操作未完成',
+    errorContext: '失败步骤',
+    errorReason: '原因',
+    errorSuggestion: '建议',
+    errorDetail: '技术详情',
+    dismiss: '知道了',
+    fullWorkflow: '完整流水线',
+    pageLoad: '加载更新页面',
+    pageRecovery: '刷新页面；若仍失败，请确认后端服务正在运行。',
+    genericFailure: '系统没有返回可识别的错误原因。',
+    recovery: {
+      probe: '检查来源网络后重新运行嗅探。',
+      download: '检查网络和磁盘空间，然后重试下载。',
+      split:
+        '确认原始 PDF 已下载完整，然后重试切题；仍失败时可查看技术详情定位文件。',
+      inventory: '先完成切题，再重新运行盘点入库。',
+      search: '先完成盘点入库，再重新建立搜索索引。',
+      all: '从弹窗标出的失败步骤单独重试，成功后再继续后续步骤。',
+    },
     stageDescriptions: {
       checking: '检查来源和本地资源状态',
       downloading: '发现、下载并校验原始 PDF',
@@ -174,6 +209,27 @@ const copy = {
     resume: 'Resume',
     pauseFailed: 'The current task could not be paused. Try again shortly.',
     resumeFailed: 'The current task could not be resumed. Try again shortly.',
+    errorTitle: 'Operation not completed',
+    errorContext: 'Failed step',
+    errorReason: 'Reason',
+    errorSuggestion: 'Suggested action',
+    errorDetail: 'Technical details',
+    dismiss: 'Got it',
+    fullWorkflow: 'Complete workflow',
+    pageLoad: 'Load update page',
+    pageRecovery:
+      'Refresh the page. If it still fails, confirm that the backend service is running.',
+    genericFailure: 'The system did not return a recognizable error reason.',
+    recovery: {
+      probe: 'Check source connectivity, then run the probe again.',
+      download:
+        'Check the network and available disk space, then retry the download.',
+      split:
+        'Confirm the source PDFs are complete, then retry splitting. Use the technical details to locate a file if it fails again.',
+      inventory: 'Complete splitting first, then rebuild the inventory.',
+      search: 'Complete inventory first, then rebuild the search index.',
+      all: 'Retry the failed step shown here, then continue with the remaining stages.',
+    },
     stageDescriptions: {
       checking: 'Checking sources and local resource state',
       downloading: 'Discovering, downloading, and validating source PDFs',
@@ -241,6 +297,118 @@ export function QuestionUpdateWorkspace() {
   const [concurrency, setConcurrency] = useState(4)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [failure, setFailure] = useState<FailureNotice | null>(null)
+  const reportedFailures = useRef(new Set<string>())
+
+  const errorDetail = useCallback(
+    (caught: unknown) => {
+      if (caught instanceof ApiError) return caught.detail
+      if (caught instanceof Error) return caught.message
+      return c.genericFailure
+    },
+    [c.genericFailure],
+  )
+
+  const explainFailure = useCallback(
+    (detail: string) => {
+      const normalized = detail.toLowerCase()
+      if (normalized.includes('completed_keys')) {
+        return locale === 'zh-CN'
+          ? '切题程序的增量状态没有正确初始化。'
+          : 'The splitter did not initialize its incremental state correctly.'
+      }
+      if (normalized.includes('cmsopenprofilefrommem')) {
+        return locale === 'zh-CN'
+          ? '某份 PDF 包含损坏或不兼容的内嵌色彩配置。'
+          : 'A PDF contains a damaged or incompatible embedded color profile.'
+      }
+      if (
+        normalized.includes('socket hang up') ||
+        normalized.includes('econnreset') ||
+        normalized.includes('failed to fetch')
+      ) {
+        return locale === 'zh-CN'
+          ? '浏览器、后端或上游资源之间的连接被中途断开。'
+          : 'The connection between the browser, backend, or upstream source was interrupted.'
+      }
+      if (
+        normalized.includes('服务重启') ||
+        normalized.includes('interrupted')
+      ) {
+        return locale === 'zh-CN'
+          ? '后端服务在任务执行期间重启，当前任务因此中断。'
+          : 'The backend restarted while the task was running, interrupting it.'
+      }
+      if (normalized.includes('进程退出') || normalized.includes('exit code')) {
+        return locale === 'zh-CN'
+          ? '后台处理进程意外结束，具体输出见技术详情。'
+          : 'The background worker exited unexpectedly. See the technical details.'
+      }
+      if (
+        normalized.includes('failed for') ||
+        normalized.includes('projects failed')
+      ) {
+        return locale === 'zh-CN'
+          ? '一个或多个所选资源处理失败。'
+          : 'One or more selected resources could not be processed.'
+      }
+      return detail || c.genericFailure
+    },
+    [c.genericFailure, locale],
+  )
+
+  const actionLabel = useCallback(
+    (action: PipelineAction | null) => {
+      if (action === null) return c.pageLoad
+      if (action === 'all') return c.fullWorkflow
+      return c.stages[actionIndex[action]]
+    },
+    [c.fullWorkflow, c.pageLoad, c.stages],
+  )
+
+  const showFailure = useCallback(
+    (summary: string, detail: string, action: PipelineAction | null) => {
+      setError(summary)
+      setFailure({
+        context: actionLabel(action),
+        reason: explainFailure(detail),
+        suggestion: action === null ? c.pageRecovery : c.recovery[action],
+        detail: detail || c.genericFailure,
+      })
+    },
+    [actionLabel, c.genericFailure, c.pageRecovery, c.recovery, explainFailure],
+  )
+
+  const acceptJob = useCallback(
+    (next: UpdateJob | null) => {
+      setJob(next)
+      if (!next) return
+      if (next.action === 'probe' && next.result) {
+        setProbe(next.result)
+        if (next.result.errors.length) {
+          const key = `partial:${next.id}`
+          if (!reportedFailures.current.has(key)) {
+            reportedFailures.current.add(key)
+            showFailure(
+              c.partialProbeFailed,
+              next.result.errors
+                .map((item) => `${item.subject_id}: ${item.message}`)
+                .join('\n'),
+              'probe',
+            )
+          }
+        }
+      }
+      if (next.status === 'failed') {
+        const key = `job:${next.id}`
+        if (!reportedFailures.current.has(key)) {
+          reportedFailures.current.add(key)
+          showFailure(c.failed, next.message, next.action)
+        }
+      }
+    },
+    [c.failed, c.partialProbeFailed, showFailure],
+  )
 
   useEffect(() => {
     apiRequest<{
@@ -259,18 +427,31 @@ export function QuestionUpdateWorkspace() {
         )
         acceptJob(result.job)
       })
-      .catch(() => setError(c.probeFailed))
-  }, [c.probeFailed])
+      .catch((caught) => showFailure(c.probeFailed, errorDetail(caught), null))
+  }, [acceptJob, c.probeFailed, errorDetail, showFailure])
 
   useEffect(() => {
     if (job?.status !== 'running') return
     const timer = window.setInterval(() => {
       apiRequest<{ job: UpdateJob | null }>('/api/v1/admin/question-update')
         .then((result) => acceptJob(result.job))
-        .catch(() => undefined)
+        .catch((caught) => {
+          const key = `poll:${job.id}`
+          if (reportedFailures.current.has(key)) return
+          reportedFailures.current.add(key)
+          showFailure(c.startFailed, errorDetail(caught), job.action)
+        })
     }, 1200)
     return () => window.clearInterval(timer)
-  }, [job?.status])
+  }, [
+    acceptJob,
+    c.startFailed,
+    errorDetail,
+    job?.action,
+    job?.id,
+    job?.status,
+    showFailure,
+  ])
 
   const activeStage = useMemo(() => {
     if (job?.status === 'completed') return actionIndex[job.action] ?? 4
@@ -283,11 +464,6 @@ export function QuestionUpdateWorkspace() {
     if (probe) return 0
     return -1
   }, [job, probe])
-
-  function acceptJob(next: UpdateJob | null) {
-    setJob(next)
-    if (next?.action === 'probe' && next.result) setProbe(next.result)
-  }
 
   function toggleSubject(id: string) {
     if (busy || job?.status === 'running') return
@@ -314,7 +490,7 @@ export function QuestionUpdateWorkspace() {
 
   async function sniff(mode: UpdateMode = 'update') {
     if (!selected.length) {
-      setError(c.empty)
+      showFailure(c.empty, c.empty, 'probe')
       return
     }
     setBusy(true)
@@ -329,8 +505,8 @@ export function QuestionUpdateWorkspace() {
         },
       )
       acceptJob(result.job)
-    } catch {
-      setError(c.probeFailed)
+    } catch (caught) {
+      showFailure(c.probeFailed, errorDetail(caught), 'probe')
     } finally {
       setBusy(false)
     }
@@ -341,7 +517,7 @@ export function QuestionUpdateWorkspace() {
     mode: UpdateMode = 'update',
   ) {
     if (!selected.length) {
-      setError(c.empty)
+      showFailure(c.empty, c.empty, stage)
       return
     }
     setBusy(true)
@@ -360,8 +536,8 @@ export function QuestionUpdateWorkspace() {
         },
       )
       acceptJob(result.job)
-    } catch {
-      setError(c.startFailed)
+    } catch (caught) {
+      showFailure(c.startFailed, errorDetail(caught), stage)
     } finally {
       setBusy(false)
     }
@@ -383,8 +559,12 @@ export function QuestionUpdateWorkspace() {
         { method: 'POST' },
       )
       acceptJob(result.job)
-    } catch {
-      setError(nextPaused ? c.pauseFailed : c.resumeFailed)
+    } catch (caught) {
+      showFailure(
+        nextPaused ? c.pauseFailed : c.resumeFailed,
+        errorDetail(caught),
+        job.action,
+      )
     } finally {
       setBusy(false)
     }
@@ -560,15 +740,6 @@ export function QuestionUpdateWorkspace() {
                 onToggleSubject={toggleSubject}
                 disabled={busy || job?.status === 'running'}
               />
-              <Button
-                variant="outline"
-                className="mt-5 h-11 w-full"
-                onClick={() => void sniff('update')}
-                disabled={busy || !configured || job?.status === 'running'}
-              >
-                <HugeiconsIcon icon={Search01Icon} data-icon="inline-start" />
-                {busy && !probe ? c.sniffing : c.sniff}
-              </Button>
             </CardContent>
           </Card>
 
@@ -675,6 +846,58 @@ export function QuestionUpdateWorkspace() {
           </Card>
         </section>
       </main>
+      <Dialog
+        open={failure !== null}
+        onOpenChange={(open) => {
+          if (!open) setFailure(null)
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="max-w-[calc(100%-2rem)] gap-5 sm:max-w-lg"
+        >
+          {failure && (
+            <>
+              <DialogHeader>
+                <div className="mb-2 grid size-11 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+                  <HugeiconsIcon icon={Alert02Icon} className="size-5" />
+                </div>
+                <DialogTitle className="text-lg">{c.errorTitle}</DialogTitle>
+                <DialogDescription>
+                  {c.errorContext}: {failure.context}
+                </DialogDescription>
+              </DialogHeader>
+              <div role="alert" className="space-y-4">
+                <div className="rounded-2xl bg-muted/55 p-4">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {c.errorReason}
+                  </p>
+                  <p className="mt-1 text-sm leading-6">{failure.reason}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {c.errorSuggestion}
+                  </p>
+                  <p className="mt-1 text-sm leading-6">{failure.suggestion}</p>
+                </div>
+                <details className="rounded-2xl border px-4 py-3">
+                  <summary className="cursor-pointer text-sm font-medium">
+                    {c.errorDetail}
+                  </summary>
+                  <pre className="mt-3 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground">
+                    {failure.detail}
+                  </pre>
+                </details>
+              </div>
+              <DialogFooter>
+                <DialogClose render={<Button className="h-11" />}>
+                  {c.dismiss}
+                </DialogClose>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
