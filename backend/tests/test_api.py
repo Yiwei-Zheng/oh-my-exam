@@ -171,6 +171,8 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
 
     for path in (
         "/api/v1/exams",
+        "/api/v1/assets",
+        "/api/v1/question-tree",
         "/api/v1/questions/search",
         "/api/v1/exams/admissions:uat:engaa/questions/7/question.jpg",
         "/api/v1/exams/admissions:uat:engaa/papers/1/question",
@@ -486,6 +488,45 @@ def test_image_search_returns_ocr_text_and_matches_any_term(
     assert response.json()["extracted_text"] == "unrelated acceleration noise"
     assert response.json()["ocr_source"] == "test-ocr"
     assert response.json()["results"][0]["id"] == 7
+
+
+def test_students_and_teachers_can_browse_question_assets(tmp_path: Path) -> None:
+    client = _client(tmp_path, with_admin=True)
+    _login_admin(client)
+    for role in ("student", "teacher"):
+        response = client.post(
+            "/api/v1/admin/users",
+            json={
+                "email": f"{role}@example.com",
+                "password": f"{role}-long-test-password",
+                "role": role,
+            },
+        )
+        assert response.status_code == 201
+    assert client.post("/api/v1/auth/logout").status_code == 204
+
+    for role in ("student", "teacher"):
+        login = client.post(
+            "/api/v1/auth/login",
+            json={
+                "email": f"{role}@example.com",
+                "password": f"{role}-long-test-password",
+            },
+        )
+        assert login.status_code == 200
+        assert login.json()["user"]["role"] == role
+
+        assets = client.get("/api/v1/assets")
+        assert assets.status_code == 200
+        assert assets.json()["questions"] == 1
+        tree = client.get("/api/v1/question-tree")
+        assert tree.status_code == 200
+        questions = client.get("/api/v1/papers/1/questions")
+        assert questions.status_code == 200
+        assert questions.json()[0]["question_number"] == "7"
+
+        assert client.get("/api/v1/admin/statistics").status_code == 403
+        assert client.post("/api/v1/auth/logout").status_code == 204
 
 
 def test_image_search_rejects_more_than_top_five_matches(

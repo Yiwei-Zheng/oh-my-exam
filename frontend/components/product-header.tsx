@@ -5,7 +5,13 @@ import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Logout01Icon, Moon02Icon, Sun03Icon } from '@hugeicons/core-free-icons'
+import {
+  BookSearchIcon,
+  Database01Icon,
+  Logout01Icon,
+  Moon02Icon,
+  Sun03Icon,
+} from '@hugeicons/core-free-icons'
 
 import { useAuth } from '@/components/auth-provider'
 import { useLocale } from '@/components/locale-provider'
@@ -37,7 +43,7 @@ export function ProductHeader() {
           className="size-7"
           priority
         />
-        <span>Oh My Exam</span>
+        <span className="hidden sm:inline">Oh My Exam</span>
       </Link>
       {user?.role === 'admin' && (
         <>
@@ -54,8 +60,13 @@ export function ProductHeader() {
           </Button>
         </>
       )}
+      <Button variant="ghost" size="sm" render={<Link href="/library" />}>
+        <HugeiconsIcon icon={Database01Icon} />
+        <span className="hidden lg:inline">{t('questionLibrary')}</span>
+      </Button>
       <Button variant="ghost" size="sm" render={<Link href="/questions" />}>
-        {t('questions')}
+        <HugeiconsIcon icon={BookSearchIcon} />
+        <span className="hidden lg:inline">{t('questions')}</span>
       </Button>
       <Button
         variant="ghost"

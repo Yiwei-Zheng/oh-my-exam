@@ -158,9 +158,11 @@ function AssetTreeNode({
 export function AssetsPanel({
   inventory,
   onInventory,
+  readOnly = false,
 }: {
   inventory: AssetInventory | null
   onInventory: (value: AssetInventory) => void
+  readOnly?: boolean
 }) {
   const { t } = useLocale()
   const [tree, setTree] = useState<TreeNode[]>([])
@@ -174,11 +176,14 @@ export function AssetsPanel({
   const [markdown, setMarkdown] = useState('')
   const [saving, setSaving] = useState(false)
   useEffect(() => {
-    apiRequest<TreeNode[]>('/api/v1/admin/question-tree').then((nodes) => {
+    const path = readOnly
+      ? '/api/v1/question-tree'
+      : '/api/v1/admin/question-tree'
+    apiRequest<TreeNode[]>(path).then((nodes) => {
       setTree(nodes)
       setExpanded(new Set(expandableIds(nodes, 1)))
     })
-  }, [])
+  }, [readOnly])
 
   const visibleTree = useMemo(() => filterTree(tree, filter), [filter, tree])
   const visibleExpanded = useMemo(
@@ -199,9 +204,10 @@ export function AssetsPanel({
     setSelectedPaper(paper)
     setSelected(null)
     setSimilar([])
-    const next = await apiRequest<Question[]>(
-      `/api/v1/admin/papers/${paper.id}/questions`,
-    )
+    const path = readOnly
+      ? `/api/v1/papers/${paper.id}/questions`
+      : `/api/v1/admin/papers/${paper.id}/questions`
+    const next = await apiRequest<Question[]>(path)
     setQuestions(next)
   }
 
@@ -242,7 +248,8 @@ export function AssetsPanel({
   }
 
   async function refreshInventory() {
-    onInventory(await apiRequest<AssetInventory>('/api/v1/admin/assets'))
+    const path = readOnly ? '/api/v1/assets' : '/api/v1/admin/assets'
+    onInventory(await apiRequest<AssetInventory>(path))
   }
 
   return (
@@ -252,12 +259,14 @@ export function AssetsPanel({
         <div className="flex gap-2">
           <Button variant="outline" onClick={refreshInventory}>
             <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
-            Refresh
+            {t('refresh')}
           </Button>
-          <Button render={<Link href="/admin/update" />}>
-            <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
-            {t('updateLibrary')}
-          </Button>
+          {!readOnly && (
+            <Button render={<Link href="/admin/update" />}>
+              <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
+              {t('updateLibrary')}
+            </Button>
+          )}
         </div>
       </div>
       {inventory && (
@@ -357,37 +366,54 @@ export function AssetsPanel({
                   chooseQuestion(question, question.exam_id || selected.exam_id)
                 }
                 textPanel={
-                  <div className="space-y-4">
-                    <div className="flex justify-between gap-4">
+                  readOnly ? (
+                    <div className="space-y-6">
                       <div>
-                        <p className="font-semibold">{t('structuredText')}</p>
-                        <p className="text-xs text-muted-foreground">
-                          v{selected.answer_structured?.version || 0}
-                        </p>
+                        <p className="mb-2 font-semibold">{t('rawText')}</p>
+                        <pre className="whitespace-pre-wrap rounded-xl bg-muted p-4 font-sans text-sm">
+                          {rawText || '—'}
+                        </pre>
                       </div>
-                      <Button onClick={saveRevision} disabled={saving}>
-                        {t('saveRevision')}
-                      </Button>
+                      <div>
+                        <p className="mb-2 font-semibold">{t('markdown')}</p>
+                        <pre className="whitespace-pre-wrap rounded-xl bg-muted p-4 font-mono text-sm">
+                          {markdown || '—'}
+                        </pre>
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="raw-text">{t('rawText')}</Label>
-                      <Textarea
-                        id="raw-text"
-                        rows={10}
-                        value={rawText}
-                        onChange={(event) => setRawText(event.target.value)}
-                      />
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="flex justify-between gap-4">
+                        <div>
+                          <p className="font-semibold">{t('structuredText')}</p>
+                          <p className="text-xs text-muted-foreground">
+                            v{selected.answer_structured?.version || 0}
+                          </p>
+                        </div>
+                        <Button onClick={saveRevision} disabled={saving}>
+                          {t('saveRevision')}
+                        </Button>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="raw-text">{t('rawText')}</Label>
+                        <Textarea
+                          id="raw-text"
+                          rows={10}
+                          value={rawText}
+                          onChange={(event) => setRawText(event.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="markdown">{t('markdown')}</Label>
+                        <Textarea
+                          id="markdown"
+                          rows={12}
+                          value={markdown}
+                          onChange={(event) => setMarkdown(event.target.value)}
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="markdown">{t('markdown')}</Label>
-                      <Textarea
-                        id="markdown"
-                        rows={12}
-                        value={markdown}
-                        onChange={(event) => setMarkdown(event.target.value)}
-                      />
-                    </div>
-                  </div>
+                  )
                 }
               />
             ) : (

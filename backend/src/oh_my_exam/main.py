@@ -186,6 +186,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except CatalogNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+    @app.get("/api/v1/assets")
+    def asset_inventory() -> dict[str, object]:
+        try:
+            return catalog.asset_inventory()
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/question-tree")
+    def question_tree() -> list[dict[str, object]]:
+        try:
+            return catalog.question_tree()
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/v1/papers/{paper_id}/questions")
+    def paper_questions(paper_id: int) -> list[dict[str, object]]:
+        try:
+            return catalog.list_paper_questions(paper_id)
+        except CatalogNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
     @app.post("/api/v1/questions/image-search")
     def search_questions_by_image(
         payload: ImageQuestionSearchRequest,

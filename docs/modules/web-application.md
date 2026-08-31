@@ -15,9 +15,10 @@ without mixing these identity tasks into the catalog browser.
 
 Students and teachers land on `/questions`, where they search extracted text,
 filter by exam, preview the original clipped question, and follow indexed
-similar-question matches. On desktop the search result list and document view
-remain side by side. Tablet moves secondary match content below the document;
-phone stacks every task vertically without horizontal workspace scrolling.
+similar-question matches. The `/library` route opens the full paper asset tree
+as a read-only document workspace with question, answer, structured text, and
+similar-question views. Answer revisions and catalog updates remain restricted
+to administrators.
 
 The document rail contains question JPG, answer JPG, structured text, and source
 paper views. Full papers use authorized PDF responses; question-level crops use

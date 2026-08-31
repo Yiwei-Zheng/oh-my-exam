@@ -131,6 +131,9 @@ architecture must allow new exam families without global rewrites.
   navigation. Phone uses drill-down routes.
 - Administrator paper assets use the canonical collapsible tree rather than a
   flattened paper list. Filtering preserves matching nodes and their ancestors.
+- Students and teachers can open the same paper asset tree in a read-only
+  workspace. They can browse question and answer images, structured answer text,
+  and similar questions, but cannot revise answers or run catalog updates.
 - Exam-program paper and question totals appear as aligned columns inside the
   paper tree; there is no duplicate exam-program inventory widget beside it.
 - The administrator overview samples host CPU, RAM and disk use every two
