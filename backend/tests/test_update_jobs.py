@@ -2,12 +2,26 @@ from __future__ import annotations
 
 from pathlib import Path
 import json
+import subprocess
+import sys
 import time
 from threading import Event
 
 import pytest
 
 from oh_my_exam.update_jobs import UpdateJobManager
+
+
+def test_importing_pipeline_does_not_construct_web_app() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import oh_my_exam.pipelines.update_catalog; "
+            "assert 'oh_my_exam.main' not in sys.modules",
+        ],
+        check=True,
+    )
 
 
 def test_update_workflows_only_expose_complete_subject_pipelines(tmp_path: Path) -> None:
