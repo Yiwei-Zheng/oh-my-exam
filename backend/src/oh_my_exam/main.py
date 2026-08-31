@@ -29,6 +29,7 @@ from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_image_store import FileSystemQuestionImageStore, QuestionImageNotFoundError
 from .system_monitor import SystemMonitor
+from .update_api_models import QuestionUpdateProbeRequest, QuestionUpdateStartRequest
 from .update_jobs import UpdateJobManager
 
 
@@ -248,14 +249,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/{kind}.jpg")
     def get_question_image(exam_id: str, question_id: int, kind: str) -> FileResponse:
         try:
-            image = catalog.get_question_image(exam_id, question_id, kind)
-            image_path = question_images.find_by_storage_key(image.storage_key)
+            try:
+                image = catalog.get_question_image(exam_id, question_id, kind)
+                image_path = question_images.find_by_storage_key(image.storage_key)
+                filename = image.filename
+            except (CatalogNotFoundError, QuestionImageNotFoundError):
+                filename = catalog.get_legacy_question_image_filename(exam_id, question_id, kind)
+                image_path = question_images.find_by_filename(filename)
         except (CatalogNotFoundError, QuestionImageNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         return FileResponse(
             image_path,
             media_type="image/jpeg",
-            filename=image.filename,
+            filename=filename,
             content_disposition_type="inline",
             headers={
                 "Cache-Control": "private, max-age=86400, immutable",
@@ -415,12 +421,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/v1/admin/question-update")
     def latest_question_update(_: User = Depends(admin_user)) -> dict[str, object]:
-        return {"configured": updates.configured, "job": updates.latest()}
+        return {
+            "configured": updates.configured,
+            "workflows": updates.workflows(),
+            "job": updates.latest(),
+        }
+
+    @app.post("/api/v1/admin/question-update/probe")
+    def probe_question_update(
+        payload: QuestionUpdateProbeRequest,
+        _: User = Depends(admin_user),
+    ) -> dict[str, object]:
+        try:
+            return updates.probe(payload.subjects, settings.paper_root)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"resource_probe_failed: {exc}") from exc
 
     @app.post("/api/v1/admin/question-update", status_code=202)
-    def start_question_update(user: User = Depends(admin_user)) -> dict[str, object]:
+    def start_question_update(
+        payload: QuestionUpdateStartRequest | None = None,
+        user: User = Depends(admin_user),
+    ) -> dict[str, object]:
         try:
-            return {"job": updates.start(user.id)}
+            return {
+                "job": updates.start(
+                    user.id,
+                    subject_ids=payload.subjects if payload else None,
+                    concurrency=payload.concurrency if payload else 4,
+                )
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
         except RuntimeError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 

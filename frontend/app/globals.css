@@ -212,3 +212,49 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+@keyframes update-page-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 22px, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes update-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes update-track-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.update-page-enter {
+  animation: update-page-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.update-card-enter {
+  animation: update-card-enter 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.update-track-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: update-track-draw 900ms 140ms cubic-bezier(0.22, 1, 0.36, 1)
+    forwards;
+}

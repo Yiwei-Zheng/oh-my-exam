@@ -52,7 +52,9 @@ architecture must allow new exam families without global rewrites.
   the top five matches.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
-- A question can be opened as a pre-rendered JPG produced by its preprocessing pipeline.
+- Clicking a question opens a focused modal document viewer instead of adding an
+  inline preview below the result list. The viewer prefers a pre-rendered JPG and
+  falls back to the protected source PDF page when an older catalog has no image.
 - An answer can be viewed as a pre-rendered JPG, within its complete source PDF, and
   as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
@@ -62,6 +64,10 @@ architecture must allow new exam families without global rewrites.
 
 - Administrators can discover, download, validate, split, extract text or OCR,
   link questions and answers, classify, package, and publish from the web UI.
+- The question-bank update page lists only subjects with an end-to-end workflow.
+  Administrators select subjects with grouped tree checkboxes, probe fixed upstream sources, compare the
+  result with local immutable PDFs, confirm newly discovered resources, and set
+  download concurrency before processing begins.
 - Web requests create durable job records and start the pipeline in an isolated
   subprocess; they do not execute processing inside the request handler.
 - Every step has explicit inputs, outputs, status, logs, and artifact identity.
@@ -103,8 +109,8 @@ architecture must allow new exam families without global rewrites.
 - The administrator overview samples host CPU, RAM and disk use every two
   seconds while visible. Project storage separates code, databases, papers and
   other runtime data.
-- The document rail switches between question JPG, answer JPG, structured text,
-  and source paper while retaining question context.
+- The question modal switches between the protected question paper, answer paper,
+  and structured text while retaining question context.
 - Light, dark, and follow-system themes are supported.
 - Chinese and English use the same i18n system. All user-visible interface text
   belongs in translation resources.

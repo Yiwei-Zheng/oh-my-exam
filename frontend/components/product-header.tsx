@@ -40,9 +40,19 @@ export function ProductHeader() {
         <span>Oh My Exam</span>
       </Link>
       {user?.role === 'admin' && (
-        <Button variant="ghost" size="sm" render={<Link href="/admin" />}>
-          {t('admin')}
-        </Button>
+        <>
+          <Button variant="ghost" size="sm" render={<Link href="/admin" />}>
+            {t('admin')}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="hidden md:inline-flex"
+            render={<Link href="/admin/update" />}
+          >
+            {t('updateLibrary')}
+          </Button>
+        </>
       )}
       <Button variant="ghost" size="sm" render={<Link href="/questions" />}>
         {t('questions')}

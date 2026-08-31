@@ -47,7 +47,14 @@ oh-my-exam/
 
 ## Catalog release
 
-The Web pipeline button launches the packaged release command unless deployment configuration overrides it. The command builds a candidate catalog from portable subject databases, extracts answer text, runs SQLite integrity and non-empty-catalog checks, and atomically replaces the active catalog only after validation. There is no manual review gate. A failed candidate leaves the active file untouched.
+The dedicated Web update page probes fixed upstream sources and compares their
+resource identities with local immutable PDFs before an administrator confirms
+the download. Subject selection and bounded download concurrency are passed to
+the backend-owned update subprocess. The command downloads, splits, packages,
+builds a candidate catalog, extracts answer text, runs SQLite integrity and
+non-empty-catalog checks, and atomically replaces the active catalog only after
+validation. There is no manual review gate after processing starts. A failed
+candidate leaves the active file untouched.
 
 Answer corrections are append-only `answer_versions` rows with `raw_text` and `markdown`. Saving creates and immediately publishes a new version. Structured marking points are intentionally absent.
 

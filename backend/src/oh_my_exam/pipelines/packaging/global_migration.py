@@ -62,6 +62,7 @@ def migrate_portable_catalogs(options: GlobalMigrationOptions) -> GlobalMigratio
         raise ValueError(f"no portable SQLite databases found under: {database_root}")
 
     paper_index = _build_paper_index(paper_root)
+    image_index = _build_image_index(image_root)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = output_path.with_name(f"{output_path.name}.building")
     if temporary_path.exists():
@@ -78,6 +79,7 @@ def migrate_portable_catalogs(options: GlobalMigrationOptions) -> GlobalMigratio
                     source_path,
                     paper_root,
                     image_root,
+                    image_index,
                     paper_index,
                     summary,
                 )
@@ -122,6 +124,7 @@ def _migrate_source(
     source_path: Path,
     paper_root: Path,
     image_root: Path,
+    image_index: dict[str, list[Path]],
     paper_index: dict[str, Path],
     summary: GlobalMigrationSummary,
 ) -> None:
@@ -141,6 +144,7 @@ def _migrate_source(
 
         paper_map: dict[int, int] = {}
         paper_stable_keys: dict[int, str] = {}
+        paper_stems: dict[int, tuple[str, str]] = {}
         document_map: dict[tuple[int, int], int] = {}
         for row in source.execute("SELECT id, qp_stem, ms_stem FROM papers ORDER BY id"):
             source_paper_id = int(row["id"])
@@ -148,6 +152,7 @@ def _migrate_source(
             ms_stem = str(row["ms_stem"]).strip()
             paper_id = _insert_paper(target, program_id, qualification, exam_board, course_code, qp_stem)
             paper_map[source_paper_id] = paper_id
+            paper_stems[source_paper_id] = (qp_stem, ms_stem)
             paper_stable_keys[source_paper_id] = f"{qualification}:{exam_board}:{course_code}:{qp_stem}"
             qp_path = paper_index.get(qp_stem.casefold())
             if qp_path is not None:
@@ -227,6 +232,37 @@ def _migrate_source(
                         actual_size,
                     ),
                 )
+        else:
+            for row in question_rows:
+                source_question_id = int(row["id"])
+                source_paper_id = int(row["paper_id"])
+                local_key = str(row["local_question_key"])
+                qp_stem, ms_stem = paper_stems[source_paper_id]
+                for image_kind, stem in (("question", qp_stem), ("answer", ms_stem)):
+                    image_path = _find_legacy_image(
+                        image_index,
+                        f"{stem}_{local_key}",
+                        exam_board,
+                        qualification,
+                        course_code,
+                    )
+                    if image_path is None:
+                        continue
+                    storage_key = image_path.relative_to(image_root).as_posix()
+                    target.execute(
+                        """
+                        INSERT INTO question_images (
+                            question_id, image_kind, storage_key, original_filename, size_bytes
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            question_map[source_question_id],
+                            image_kind,
+                            storage_key,
+                            image_path.name,
+                            image_path.stat().st_size,
+                        ),
+                    )
 
         answer_map: dict[int, int] = {}
         region_rows = source.execute(
@@ -305,6 +341,36 @@ def _build_paper_index(paper_root: Path) -> dict[str, Path]:
         preview = ", ".join(sorted(duplicates)[:5])
         raise ValueError(f"duplicate PDF stems under paper root: {preview}")
     return index
+
+
+def _build_image_index(image_root: Path) -> dict[str, list[Path]]:
+    index: dict[str, list[Path]] = {}
+    for path in image_root.rglob("*"):
+        if path.is_file() and path.suffix.casefold() in {".jpg", ".jpeg", ".png", ".webp"}:
+            index.setdefault(path.stem.casefold(), []).append(path.resolve())
+    return index
+
+
+def _find_legacy_image(
+    image_index: dict[str, list[Path]],
+    stem: str,
+    exam_board: str,
+    qualification: str,
+    course_code: str,
+) -> Path | None:
+    candidates = image_index.get(stem.casefold(), [])
+    if not candidates:
+        return None
+    identity = {exam_board.casefold(), qualification.casefold(), course_code.casefold()}
+    matching = [
+        path
+        for path in candidates
+        if identity.issubset({part.casefold() for part in path.parts})
+    ]
+    resolved = matching or candidates
+    if len(resolved) != 1:
+        raise ValueError(f"ambiguous legacy question image: {stem}")
+    return resolved[0]
 
 
 def _resolve_image_path(image_root: Path, storage_key: str) -> Path:

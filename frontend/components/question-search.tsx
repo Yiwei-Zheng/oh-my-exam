@@ -20,6 +20,7 @@ import {
 
 import { useLocale } from '@/components/locale-provider'
 import { ExamTreeSelect } from '@/components/exam-tree-select'
+import { QuestionPreviewDialog } from '@/components/question-preview-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,7 +42,8 @@ function buildTopicTree(topics: Topic[]): TopicNode[] {
   )
   const roots: TopicNode[] = []
   nodes.forEach((node) => {
-    const parent = node.parent_id === null ? undefined : nodes.get(node.parent_id)
+    const parent =
+      node.parent_id === null ? undefined : nodes.get(node.parent_id)
     if (parent) parent.children.push(node)
     else roots.push(node)
   })
@@ -53,7 +55,8 @@ function filterTopicTree(nodes: TopicNode[], query: string): TopicNode[] {
   const normalized = query.trim().toLocaleLowerCase()
   return nodes.flatMap((node) => {
     const children = filterTopicTree(node.children, query)
-    return node.title.toLocaleLowerCase().includes(normalized) || children.length
+    return node.title.toLocaleLowerCase().includes(normalized) ||
+      children.length
       ? [{ ...node, children }]
       : []
   })
@@ -236,13 +239,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
   }, [acceptImage, mode])
 
   const selectedExamId = selected?.exam_id || (examId === 'all' ? '' : examId)
-  const imageUrl = useMemo(
-    () =>
-      selected && selectedExamId
-        ? `/api/v1/exams/${encodeURIComponent(selectedExamId)}/questions/${selected.id}/question.jpg`
-        : '',
-    [selected, selectedExamId],
-  )
   const topicTree = useMemo(() => buildTopicTree(topics), [topics])
   const visibleTopicTree = useMemo(
     () => filterTopicTree(topicTree, topicFilter),
@@ -286,7 +282,9 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
         if (examId !== 'all') params.set('exam_id', examId)
         if (mode === 'topic' && topicCode !== 'all') {
           const selectedTopic = findTopic(topicTree, topicCode)
-          for (const code of selectedTopic ? collectTopicCodes(selectedTopic) : [topicCode]) {
+          for (const code of selectedTopic
+            ? collectTopicCodes(selectedTopic)
+            : [topicCode]) {
             params.append('topic', code)
           }
         }
@@ -308,15 +306,22 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
 
   async function choose(question: Question) {
     const resolved = question.exam_id || (examId === 'all' ? '' : examId)
-    setSelected(question)
     setSimilar([])
-    if (!resolved) return
+    if (!resolved) {
+      setError(t('loadFailed'))
+      return
+    }
     try {
-      setSimilar(
-        await apiRequest<Question[]>(
+      const [detail, related] = await Promise.all([
+        apiRequest<Question>(
+          `/api/v1/exams/${encodeURIComponent(resolved)}/questions/${question.id}`,
+        ),
+        apiRequest<Question[]>(
           `/api/v1/exams/${encodeURIComponent(resolved)}/questions/${question.id}/similar?limit=8`,
         ),
-      )
+      ])
+      setSelected({ ...detail, exam_id: resolved })
+      setSimilar(related)
     } catch {
       setError(t('loadFailed'))
     }
@@ -341,7 +346,7 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
           <p className="mt-3 text-muted-foreground">{t('searchHint')}</p>
         </div>
       )}
-      <Card className="overflow-hidden">
+      <Card className="relative z-20 overflow-visible">
         <CardContent className="p-0">
           <Tabs
             value={mode}
@@ -531,7 +536,7 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
           </Tabs>
         </CardContent>
       </Card>
-      <div className="grid min-h-[560px] gap-4 lg:grid-cols-[380px_minmax(0,1fr)]">
+      <div className="relative z-0 min-h-[360px]">
         <Card className="overflow-hidden">
           <CardHeader className="border-b">
             <CardTitle className="text-base">
@@ -543,7 +548,7 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent className="max-h-[720px] overflow-y-auto p-0">
+          <CardContent className="max-h-[620px] overflow-y-auto p-0">
             {loading && (
               <div className="space-y-3 p-4">
                 {[1, 2, 3, 4].map((item) => (
@@ -580,77 +585,14 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
               ))}
           </CardContent>
         </Card>
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            {!selected ? (
-              <div className="grid min-h-[560px] place-items-center p-8 text-center text-muted-foreground">
-                <div>
-                  <HugeiconsIcon
-                    icon={BookSearchIcon}
-                    className="mx-auto mb-4 size-10 text-primary"
-                  />
-                  <p>{t('chooseQuestion')}</p>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className="flex items-center justify-between border-b p-4">
-                  <div>
-                    <p className="font-mono text-xs text-primary">
-                      {selected.paper_key}
-                    </p>
-                    <h2 className="font-semibold">
-                      Q{selected.question_number}
-                    </h2>
-                  </div>
-                  <Button
-                    variant="outline"
-                    render={
-                      <a href={imageUrl} target="_blank" rel="noreferrer" />
-                    }
-                  >
-                    {t('openPdf')}
-                  </Button>
-                </div>
-                {/* Protected dynamic images are served by the application API. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imageUrl}
-                  alt={`${selected.paper_key} question ${selected.question_number}`}
-                  className="max-h-[680px] min-h-80 w-full bg-white object-contain p-3"
-                />
-                <div className="border-t p-4">
-                  <h3 className="mb-3 font-semibold">{t('similar')}</h3>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {similar.map((item) => (
-                      <button
-                        key={item.id}
-                        onClick={() =>
-                          choose({ ...item, exam_id: selectedExamId })
-                        }
-                        className="rounded-xl border p-3 text-left text-sm hover:bg-muted"
-                      >
-                        <span className="font-mono text-xs text-primary">
-                          {item.paper_key} · Q{item.question_number}
-                        </span>
-                        {item.shared_topics?.length ? (
-                          <span className="mt-2 flex flex-wrap gap-1">
-                            {item.shared_topics.map((topic) => (
-                              <Badge key={topic} variant="secondary">
-                                {topic}
-                              </Badge>
-                            ))}
-                          </span>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
+      <QuestionPreviewDialog
+        question={selected}
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+        similar={similar}
+        onChooseSimilar={(item) => choose({ ...item, exam_id: selectedExamId })}
+      />
     </section>
   )
 }

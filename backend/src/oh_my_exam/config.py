@@ -59,7 +59,7 @@ class Settings:
         command_raw = os.environ.get("OME_QUESTION_UPDATE_COMMAND_JSON", "")
         command: tuple[str, ...] = (
             sys.executable,
-            str(backend_root / "scripts" / "release_catalog.py"),
+            str(backend_root / "scripts" / "update_catalog.py"),
         )
         if command_raw:
             parsed = json.loads(command_raw)

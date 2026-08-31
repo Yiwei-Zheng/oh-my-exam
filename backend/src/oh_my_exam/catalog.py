@@ -518,6 +518,27 @@ class GlobalCatalog:
             filename=str(image["original_filename"]),
         )
 
+    def get_legacy_question_image_filename(self, exam_id: str, question_id: int, kind: str) -> str:
+        if kind not in {"question", "answer"}:
+            raise CatalogNotFoundError(f"unsupported question image kind: {kind}")
+        with closing(self._connect()) as connection:
+            program_id = self._program_id(connection, exam_id)
+            row = connection.execute(
+                """
+                SELECT p.source_key, qu.local_key
+                FROM questions qu
+                JOIN papers p ON p.id = qu.paper_id
+                WHERE qu.id = ? AND p.exam_program_id = ?
+                """,
+                (question_id, program_id),
+            ).fetchone()
+        if row is None:
+            raise CatalogNotFoundError(f"question not found: {question_id}")
+        source_key = str(row["source_key"])
+        if kind == "answer":
+            source_key = source_key.replace("_qp_", "_ms_", 1)
+        return f"{source_key}_{row['local_key']}.jpg"
+
     def get_paper_storage_key(self, exam_id: str, paper_id: int, kind: str) -> str:
         if kind not in {"question", "answer"}:
             raise CatalogNotFoundError(f"unsupported paper kind: {kind}")

@@ -230,6 +230,21 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert unsupported_kind.status_code == 404
 
 
+def test_legacy_catalog_serves_existing_question_image(tmp_path: Path) -> None:
+    client = _client(tmp_path, with_admin=True)
+    database_path = tmp_path / "databases" / "global_exam_catalog.sqlite"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("DROP TABLE question_images")
+    _login_admin(client)
+
+    response = client.get(
+        "/api/v1/exams/admissions:uat:engaa/questions/7/question.jpg"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+
+
 def test_question_tree_uses_uppercase_exam_codes_and_collapses_duplicate_year(tmp_path: Path) -> None:
     database = tmp_path / "databases" / "global.sqlite"
     _create_global_database(database)

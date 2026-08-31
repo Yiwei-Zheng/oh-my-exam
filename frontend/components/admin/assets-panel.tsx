@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
@@ -10,12 +11,12 @@ import {
 
 import type { AssetInventory } from '@/components/admin/types'
 import { useLocale } from '@/components/locale-provider'
+import { QuestionPreviewDialog } from '@/components/question-preview-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { apiRequest } from '@/lib/api'
 import type { Question, TreeNode } from '@/lib/types'
@@ -139,20 +140,10 @@ export function AssetsPanel({
   const [rawText, setRawText] = useState('')
   const [markdown, setMarkdown] = useState('')
   const [saving, setSaving] = useState(false)
-  const [updateConfigured, setUpdateConfigured] = useState(false)
-  const [updateRunning, setUpdateRunning] = useState(false)
-
   useEffect(() => {
-    Promise.all([
-      apiRequest<TreeNode[]>('/api/v1/admin/question-tree'),
-      apiRequest<{ configured: boolean; job: { status: string } | null }>(
-        '/api/v1/admin/question-update',
-      ),
-    ]).then(([nodes, update]) => {
+    apiRequest<TreeNode[]>('/api/v1/admin/question-tree').then((nodes) => {
       setTree(nodes)
       setExpanded(new Set(expandableIds(nodes, 1)))
-      setUpdateConfigured(update.configured)
-      setUpdateRunning(update.job?.status === 'running')
     })
   }, [])
 
@@ -178,7 +169,6 @@ export function AssetsPanel({
       `/api/v1/admin/papers/${paper.id}/questions`,
     )
     setQuestions(next)
-    if (next[0]) await chooseQuestion(next[0], paper.examId)
   }
 
   async function chooseQuestion(
@@ -210,26 +200,9 @@ export function AssetsPanel({
     }
   }
 
-  async function startUpdate() {
-    if (!updateConfigured || updateRunning) return
-    setUpdateRunning(true)
-    try {
-      await apiRequest('/api/v1/admin/question-update', { method: 'POST' })
-    } catch {
-      setUpdateRunning(false)
-    }
-  }
-
   async function refreshInventory() {
     onInventory(await apiRequest<AssetInventory>('/api/v1/admin/assets'))
   }
-
-  const questionImage = selected
-    ? `/api/v1/exams/${encodeURIComponent(selected.exam_id || '')}/questions/${selected.id}/question.jpg`
-    : ''
-  const answerImage = selected
-    ? `/api/v1/exams/${encodeURIComponent(selected.exam_id || '')}/questions/${selected.id}/answer.jpg`
-    : ''
 
   return (
     <div className="space-y-6">
@@ -240,12 +213,9 @@ export function AssetsPanel({
             <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
             Refresh
           </Button>
-          <Button
-            onClick={startUpdate}
-            disabled={!updateConfigured || updateRunning}
-          >
+          <Button render={<Link href="/admin/update" />}>
             <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
-            {updateRunning ? t('pipelineRunning') : t('updateLibrary')}
+            {t('updateLibrary')}
           </Button>
         </div>
       </div>
@@ -334,95 +304,69 @@ export function AssetsPanel({
               ))}
             </div>
           </div>
-          <div className="grid min-w-0 gap-4 2xl:grid-cols-[280px_minmax(0,1fr)]">
-            <div className="rounded-xl border">
-              <div className="border-b p-4 text-sm font-semibold">
-                {selectedPaper?.label || t('selectPaper')}
-              </div>
-              <div className="max-h-[620px] overflow-y-auto">
-                {questions.map((question) => (
-                  <button
-                    key={question.id}
-                    onClick={() => chooseQuestion(question)}
-                    className={`w-full border-b p-4 text-left hover:bg-muted ${selected?.id === question.id ? 'bg-primary/10' : ''}`}
-                  >
-                    <strong className="font-mono text-xs text-primary">
-                      Q{question.question_number}
-                    </strong>
-                    <span className="mt-2 line-clamp-3 block text-sm text-muted-foreground">
-                      {question.content || question.local_key}
-                    </span>
-                  </button>
-                ))}
-              </div>
+          <div className="min-w-0 rounded-xl border">
+            <div className="border-b p-4 text-sm font-semibold">
+              {selectedPaper?.label || t('selectPaper')}
             </div>
-            <div className="min-w-0 overflow-hidden rounded-xl border">
-            {!selected ? (
-              <div className="grid h-full place-items-center p-8 text-center text-muted-foreground">
-                {t('selectPaper')}
-              </div>
-            ) : (
-              <Tabs defaultValue="question" className="h-full">
-                <div className="border-b p-3">
-                  <TabsList>
-                    <TabsTrigger value="question">{t('question')}</TabsTrigger>
-                    <TabsTrigger value="answer">{t('answer')}</TabsTrigger>
-                    <TabsTrigger value="text">{t('text')}</TabsTrigger>
-                  </TabsList>
-                </div>
-                <TabsContent value="question" className="m-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    className="max-h-[720px] min-h-[420px] w-full bg-white object-contain p-3"
-                    src={questionImage}
-                    alt={t('questionPdf')}
-                  />
-                </TabsContent>
-                <TabsContent value="answer" className="m-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    className="max-h-[720px] min-h-[420px] w-full bg-white object-contain p-3"
-                    src={answerImage}
-                    alt={t('answerPdf')}
-                  />
-                </TabsContent>
-                <TabsContent value="text" className="space-y-4 p-4">
-                  <div className="flex justify-between">
-                    <div>
-                      <p className="font-semibold">{t('structuredText')}</p>
-                      <p className="text-xs text-muted-foreground">
-                        v{selected.answer_structured?.version || 0}
-                      </p>
-                    </div>
-                    <Button onClick={saveRevision} disabled={saving}>
-                      {t('saveRevision')}
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="raw-text">{t('rawText')}</Label>
-                    <Textarea
-                      id="raw-text"
-                      rows={10}
-                      value={rawText}
-                      onChange={(event) => setRawText(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="markdown">{t('markdown')}</Label>
-                    <Textarea
-                      id="markdown"
-                      rows={12}
-                      value={markdown}
-                      onChange={(event) => setMarkdown(event.target.value)}
-                    />
-                  </div>
-                </TabsContent>
-              </Tabs>
-            )}
+            <div className="max-h-[620px] overflow-y-auto">
+              {questions.map((question) => (
+                <button
+                  key={question.id}
+                  onClick={() => chooseQuestion(question)}
+                  className={`w-full border-b p-4 text-left hover:bg-muted ${selected?.id === question.id ? 'bg-primary/10' : ''}`}
+                >
+                  <strong className="font-mono text-xs text-primary">
+                    Q{question.question_number}
+                  </strong>
+                  <span className="mt-2 line-clamp-3 block text-sm text-muted-foreground">
+                    {question.content || question.local_key}
+                  </span>
+                </button>
+              ))}
             </div>
           </div>
         </CardContent>
       </Card>
+      <QuestionPreviewDialog
+        question={selected}
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+        textPanel={
+          selected ? (
+            <div className="space-y-4">
+              <div className="flex justify-between gap-4">
+                <div>
+                  <p className="font-semibold">{t('structuredText')}</p>
+                  <p className="text-xs text-muted-foreground">
+                    v{selected.answer_structured?.version || 0}
+                  </p>
+                </div>
+                <Button onClick={saveRevision} disabled={saving}>
+                  {t('saveRevision')}
+                </Button>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="raw-text">{t('rawText')}</Label>
+                <Textarea
+                  id="raw-text"
+                  rows={10}
+                  value={rawText}
+                  onChange={(event) => setRawText(event.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="markdown">{t('markdown')}</Label>
+                <Textarea
+                  id="markdown"
+                  rows={12}
+                  value={markdown}
+                  onChange={(event) => setMarkdown(event.target.value)}
+                />
+              </div>
+            </div>
+          ) : undefined
+        }
+      />
     </div>
   )
 }

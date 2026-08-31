@@ -2,11 +2,20 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
 from threading import Lock, Thread
 from typing import Sequence
+
+
+WORKFLOWS: tuple[dict[str, str], ...] = (
+    {"id": "cie:9709", "code": "9709", "name": "Mathematics", "family": "CIE A-Level"},
+    {"id": "cie:9231", "code": "9231", "name": "Mathematics - Further", "family": "CIE A-Level"},
+    {"id": "uat:tmua", "code": "TMUA", "name": "Test of Mathematics for University Admission", "family": "UAT-UK"},
+)
+WORKFLOW_IDS = {str(item["id"]) for item in WORKFLOWS}
 
 
 class UpdateJobManager:
@@ -26,9 +35,37 @@ class UpdateJobManager:
     def configured(self) -> bool:
         return bool(self.command)
 
-    def start(self, requested_by: int) -> dict[str, object]:
+    def workflows(self) -> list[dict[str, object]]:
+        return [{**item, "status": "ready"} for item in WORKFLOWS]
+
+    def probe(self, subject_ids: Sequence[str], paper_root: Path) -> dict[str, object]:
+        selected = self._validate_subjects(subject_ids)
+        resources: list[dict[str, object]] = []
+        cie_subjects = [item for item in selected if item.startswith("cie:")]
+        if cie_subjects:
+            resources.extend(self._probe_cie(cie_subjects, paper_root))
+        if "uat:tmua" in selected:
+            resources.extend(self._probe_tmua(paper_root))
+        new_resources = [item for item in resources if not item["local"]]
+        return {
+            "subjects": selected,
+            "resource_count": len(resources),
+            "local_count": len(resources) - len(new_resources),
+            "new_count": len(new_resources),
+            "new_resources": new_resources,
+            "probed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    def start(
+        self,
+        requested_by: int,
+        subject_ids: Sequence[str] | None = None,
+        concurrency: int = 4,
+    ) -> dict[str, object]:
         if not self.configured:
             raise RuntimeError("question update pipeline is not configured")
+        selected = self._validate_subjects(subject_ids or tuple(WORKFLOW_IDS))
+        concurrency = max(1, min(12, int(concurrency)))
         with self._lock, self._connect() as connection:
             running = connection.execute(
                 "SELECT * FROM question_update_jobs WHERE status = 'running' ORDER BY id DESC LIMIT 1"
@@ -40,7 +77,12 @@ class UpdateJobManager:
                 (requested_by,),
             )
             job_id = int(cursor.lastrowid)
-        Thread(target=self._run, args=(job_id,), daemon=True, name=f"question-update-{job_id}").start()
+        Thread(
+            target=self._run,
+            args=(job_id, selected, concurrency),
+            daemon=True,
+            name=f"question-update-{job_id}",
+        ).start()
         return self.get(job_id)
 
     def latest(self) -> dict[str, object] | None:
@@ -55,11 +97,15 @@ class UpdateJobManager:
             raise LookupError(f"update job not found: {job_id}")
         return self._serialize(row)
 
-    def _run(self, job_id: int) -> None:
+    def _run(self, job_id: int, subject_ids: Sequence[str], concurrency: int) -> None:
         try:
+            environment = os.environ.copy()
+            environment["OME_UPDATE_SUBJECTS"] = ",".join(subject_ids)
+            environment["OME_UPDATE_CONCURRENCY"] = str(concurrency)
             process = subprocess.Popen(
                 self.command,
                 cwd=self.database_path.parent,
+                env=environment,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
@@ -76,6 +122,65 @@ class UpdateJobManager:
             self._update(job_id, status="completed", stage="completed", progress=100, message="题库已更新")
         except Exception as exc:
             self._update(job_id, status="failed", stage="failed", message=str(exc)[:500])
+
+    @staticmethod
+    def _validate_subjects(subject_ids: Sequence[str]) -> list[str]:
+        selected = list(dict.fromkeys(str(item) for item in subject_ids))
+        if not selected:
+            raise ValueError("select_at_least_one_subject")
+        unknown = sorted(set(selected) - WORKFLOW_IDS)
+        if unknown:
+            raise ValueError(f"unknown_update_subjects: {', '.join(unknown)}")
+        return selected
+
+    @staticmethod
+    def _probe_cie(subject_ids: Sequence[str], paper_root: Path) -> list[dict[str, object]]:
+        from datetime import date
+
+        from .pipelines.adapters.cie_alevel.downloader.frank_discovery import discover_frank_assets
+
+        codes = {subject_id.split(":", 1)[1] for subject_id in subject_ids}
+        assets = discover_frank_assets(
+            qualification="a_level",
+            subject_codes=codes,
+            start_year=2020,
+            end_year=date.today().year,
+            seasons=("Mar", "Jun", "Nov"),
+            workers=4,
+        )
+        return [
+            {
+                "id": asset.stem,
+                "subject_id": f"cie:{asset.subject_code}",
+                "label": asset.stem,
+                "year": 2000 + int(asset.session[1:3]),
+                "document_type": asset.document_type,
+                "local": any(
+                    (paper_root / path).is_file() and (paper_root / path).stat().st_size > 0
+                    for path in (asset.relative_pdf_path, asset.legacy_relative_pdf_path)
+                ),
+            }
+            for asset in assets
+        ]
+
+    @staticmethod
+    def _probe_tmua(paper_root: Path) -> list[dict[str, object]]:
+        from .pipelines.adapters.uat.downloader.catalog import DEFAULT_ARCHIVE_URLS, discover_assets
+
+        archive_url = next(url for url in DEFAULT_ARCHIVE_URLS if "tmua-preparation" in url)
+        assets = [asset for asset in discover_assets(archive_url) if asset.exam == "tmua"]
+        return [
+            {
+                "id": asset.stem,
+                "subject_id": "uat:tmua",
+                "label": asset.stem,
+                "year": asset.year,
+                "document_type": asset.document_type,
+                "local": (paper_root / asset.relative_pdf_path).is_file()
+                and (paper_root / asset.relative_pdf_path).stat().st_size > 0,
+            }
+            for asset in assets
+        ]
 
     def _consume_progress(self, job_id: int, line: str) -> None:
         if not line:

@@ -122,6 +122,41 @@ def test_migration_requires_explicit_overwrite(tmp_path: Path) -> None:
         raise AssertionError("existing global database was overwritten without --overwrite")
 
 
+def test_migration_recovers_images_from_legacy_portable_database(tmp_path: Path) -> None:
+    database_root = tmp_path / "databases"
+    paper_root = tmp_path / "raw_papers"
+    source_path = database_root / "admissions" / "uat" / "subject.sqlite"
+    source_path.parent.mkdir(parents=True)
+    paper_dir = paper_root / "uat" / "admissions" / "tmua" / "2023"
+    paper_dir.mkdir(parents=True)
+    _write_pdf(paper_dir / "tmua_2023_s1_qp.pdf", "Question")
+    _write_pdf(paper_dir / "tmua_2023_s1_ms.pdf", "Answer")
+    _write_portable_database(source_path)
+    image_dir = tmp_path / "processed_questions" / "uat" / "admissions" / "tmua" / "2023"
+    image_dir.mkdir(parents=True)
+    (image_dir / "tmua_2023_s1_qp_q01.jpg").write_bytes(b"question jpeg")
+    (image_dir / "tmua_2023_s1_ms_q01.jpg").write_bytes(b"answer jpeg")
+    output_path = database_root / "global.sqlite"
+
+    summary = migrate_portable_catalogs(
+        GlobalMigrationOptions(
+            database_root,
+            paper_root,
+            output_path,
+            image_root=tmp_path / "processed_questions",
+        )
+    )
+
+    assert summary.question_images == 2
+    with sqlite3.connect(output_path) as conn:
+        assert conn.execute(
+            "SELECT image_kind, original_filename FROM question_images ORDER BY image_kind"
+        ).fetchall() == [
+            ("answer", "tmua_2023_s1_ms_q01.jpg"),
+            ("question", "tmua_2023_s1_qp_q01.jpg"),
+        ]
+
+
 def test_answer_markdown_removes_known_page_boilerplate() -> None:
     assert _normalize_markdown_text("physicsandmathstutor.com\n") == ""
     assert _normalize_markdown_text("Step II Hints and Answers June 2005\nx = 2\n") == "x = 2"

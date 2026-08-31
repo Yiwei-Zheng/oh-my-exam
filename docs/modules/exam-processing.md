@@ -62,8 +62,11 @@ leave the current active release unchanged.
 
 ## Runtime adapters
 
-FastAPI creates, reports, and authenticates runs. A backend-owned subprocess
-executes the release command and writes structured progress; SQLite owns run
-history. Server-Sent Events deliver progress without making the browser the
-owner of execution state. A queue may replace the local executor later without
-changing pipeline contracts.
+FastAPI creates, reports, and authenticates runs. Before creation, an
+administrator may probe the fixed sources for one or more workflow-ready
+subjects and compare discovered resource identities with local files. A
+backend-owned subprocess receives the selected subject ids and bounded worker
+count, executes acquisition through publication, and writes structured
+progress; SQLite owns run history. The browser polls durable state and is never
+the owner of execution. A queue or Server-Sent Events may replace polling later
+without changing pipeline contracts.
