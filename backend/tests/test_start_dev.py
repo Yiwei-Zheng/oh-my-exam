@@ -13,6 +13,8 @@ SPEC.loader.exec_module(start_dev)
 
 
 class RunningProcess:
+    pid = 42
+
     def poll(self) -> None:
         return None
 
@@ -47,3 +49,17 @@ def test_wait_for_port_reports_ready_listener() -> None:
         assert start_dev.wait_for_port(
             listener.getsockname()[1], [RunningProcess()], timeout_seconds=0.5
         )
+
+
+def test_windows_shutdown_terminates_the_full_process_tree(monkeypatch) -> None:
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(start_dev.os, "name", "nt")
+    monkeypatch.setattr(
+        start_dev.subprocess,
+        "run",
+        lambda command, **options: calls.append((command, options)),
+    )
+
+    start_dev.stop_process_tree(RunningProcess())
+
+    assert calls[0][0] == ["taskkill", "/PID", "42", "/T", "/F"]
