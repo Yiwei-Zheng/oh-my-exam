@@ -55,9 +55,11 @@ bounded download concurrency, the requested stage, and update/overwrite mode
 are passed through environment variables. Administrators can run download,
 split, portable-database inventory, or search publication independently, or run
 them in sequence. Incremental mode skips complete local artifacts; overwrite
-mode regenerates the selected stage. Publication always builds and validates an
-isolated candidate before atomically replacing the active catalog. A failed
-candidate leaves the active file untouched.
+mode regenerates the selected stage. Durable job state includes a pause flag.
+Probe threads honor it between subjects, while subprocess stages use `psutil`
+to suspend or resume the root process and its descendants. Publication always
+builds and validates an isolated candidate before atomically replacing the
+active catalog. A failed candidate leaves the active file untouched.
 
 Answer corrections are append-only `answer_versions` rows with `raw_text` and `markdown`. Saving creates and immediately publishes a new version. Structured marking points are intentionally absent.
 

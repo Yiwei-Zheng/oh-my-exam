@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 import sqlite3
 import subprocess
-from threading import Lock, Thread
-from typing import Sequence
+from threading import Event, Lock, Thread
+from typing import Callable, Sequence
+
+import psutil
 
 
 WORKFLOWS: tuple[dict[str, str], ...] = (
@@ -39,10 +41,13 @@ class UpdateJobManager:
         self.database_path = database_path.resolve()
         self.command = tuple(command)
         self._lock = Lock()
+        self._controls: dict[int, Event] = {}
+        self._processes: dict[int, subprocess.Popen[str]] = {}
         self._migrate()
         with self._connect() as connection:
             connection.execute(
-                "UPDATE question_update_jobs SET status = 'failed', message = '服务重启，任务已中断' WHERE status = 'running'"
+                "UPDATE question_update_jobs SET status = 'failed', paused = 0, "
+                "message = '服务重启，任务已中断' WHERE status = 'running'"
             )
 
     @property
@@ -56,11 +61,18 @@ class UpdateJobManager:
     def workflows(self) -> list[dict[str, object]]:
         return [{**item, "status": "ready"} for item in WORKFLOWS]
 
-    def probe(self, subject_ids: Sequence[str], paper_root: Path) -> dict[str, object]:
+    def probe(
+        self,
+        subject_ids: Sequence[str],
+        paper_root: Path,
+        wait_if_paused: Callable[[], None] | None = None,
+    ) -> dict[str, object]:
         selected = self._validate_subjects(subject_ids)
         resources: list[dict[str, object]] = []
         errors: list[dict[str, str]] = []
         for subject_id in selected:
+            if wait_if_paused is not None:
+                wait_if_paused()
             try:
                 if subject_id.startswith("cie:"):
                     resources.extend(self._probe_cie([subject_id], paper_root))
@@ -91,6 +103,7 @@ class UpdateJobManager:
         job_id, existing = self._create_job(requested_by, "probe", "checking", "正在嗅探来源")
         if existing is not None:
             return existing
+        self._register_control(job_id)
         Thread(
             target=self._run_probe,
             args=(job_id, selected, paper_root),
@@ -123,6 +136,7 @@ class UpdateJobManager:
         )
         if existing is not None:
             return existing
+        self._register_control(job_id)
         Thread(
             target=self._run,
             args=(job_id, selected, concurrency, stage, mode),
@@ -166,9 +180,78 @@ class UpdateJobManager:
             raise LookupError(f"update job not found: {job_id}")
         return self._serialize(row)
 
+    def pause(self, job_id: int) -> dict[str, object]:
+        job = self.get(job_id)
+        if job["status"] != "running":
+            raise ValueError("only_running_jobs_can_be_paused")
+        if job["paused"]:
+            return job
+        with self._lock:
+            control = self._controls.get(job_id)
+            process = self._processes.get(job_id)
+            if control is None:
+                raise RuntimeError("update_job_control_is_unavailable")
+            control.clear()
+        try:
+            if process is not None and process.poll() is None:
+                self._set_process_paused(process.pid, True)
+        except (psutil.Error, OSError) as exc:
+            if process is not None:
+                try:
+                    self._set_process_paused(process.pid, False)
+                except (psutil.Error, OSError):
+                    pass
+            control.set()
+            raise RuntimeError(f"unable_to_pause_update_job: {exc}") from exc
+        self._update(job_id, paused=True)
+        return self.get(job_id)
+
+    def resume(self, job_id: int) -> dict[str, object]:
+        job = self.get(job_id)
+        if job["status"] != "running":
+            raise ValueError("only_running_jobs_can_be_resumed")
+        if not job["paused"]:
+            return job
+        with self._lock:
+            control = self._controls.get(job_id)
+            process = self._processes.get(job_id)
+            if control is None:
+                raise RuntimeError("update_job_control_is_unavailable")
+        try:
+            if process is not None and process.poll() is None:
+                self._set_process_paused(process.pid, False)
+        except (psutil.Error, OSError) as exc:
+            raise RuntimeError(f"unable_to_resume_update_job: {exc}") from exc
+        control.set()
+        self._update(job_id, paused=False)
+        return self.get(job_id)
+
+    def _register_control(self, job_id: int) -> Event:
+        with self._lock:
+            existing = self._controls.get(job_id)
+            if existing is not None:
+                return existing
+            control = Event()
+            control.set()
+            self._controls[job_id] = control
+            return control
+
+    @staticmethod
+    def _set_process_paused(process_id: int, paused: bool) -> None:
+        root = psutil.Process(process_id)
+        descendants = root.children(recursive=True)
+        targets = [root, *descendants] if paused else [*descendants, root]
+        for process in targets:
+            try:
+                process.suspend() if paused else process.resume()
+            except psutil.NoSuchProcess:
+                continue
+
     def _run_probe(self, job_id: int, subject_ids: Sequence[str], paper_root: Path) -> None:
         try:
-            result = self.probe(subject_ids, paper_root)
+            control = self._register_control(job_id)
+            result = self.probe(subject_ids, paper_root, control.wait)
+            control.wait()
             self._update(
                 job_id,
                 status="completed",
@@ -179,6 +262,9 @@ class UpdateJobManager:
             )
         except Exception as exc:
             self._update(job_id, status="failed", stage="failed", message=str(exc)[:500])
+        finally:
+            with self._lock:
+                self._controls.pop(job_id, None)
 
     def _run(
         self,
@@ -189,6 +275,7 @@ class UpdateJobManager:
         mode: str,
     ) -> None:
         try:
+            control = self._register_control(job_id)
             environment = os.environ.copy()
             environment["OME_UPDATE_SUBJECTS"] = ",".join(subject_ids)
             environment["OME_UPDATE_CONCURRENCY"] = str(concurrency)
@@ -207,6 +294,10 @@ class UpdateJobManager:
                 errors="strict",
                 shell=False,
             )
+            with self._lock:
+                self._processes[job_id] = process
+            if not control.is_set() and process.poll() is None:
+                self._set_process_paused(process.pid, True)
             assert process.stdout is not None
             last_message = ""
             for line in process.stdout:
@@ -217,6 +308,10 @@ class UpdateJobManager:
             self._update(job_id, status="completed", stage="completed", progress=100, message=last_message or "题库已更新")
         except Exception as exc:
             self._update(job_id, status="failed", stage="failed", message=str(exc)[:500])
+        finally:
+            with self._lock:
+                self._processes.pop(job_id, None)
+                self._controls.pop(job_id, None)
 
     @staticmethod
     def _validate_subjects(subject_ids: Sequence[str]) -> list[str]:
@@ -335,6 +430,7 @@ class UpdateJobManager:
         progress: int | None = None,
         message: str | None = None,
         result: dict[str, object] | None = None,
+        paused: bool | None = None,
     ) -> None:
         fields: list[str] = []
         values: list[object] = []
@@ -345,7 +441,11 @@ class UpdateJobManager:
         if result is not None:
             fields.append("result_json = ?")
             values.append(json.dumps(result, ensure_ascii=False))
+        if paused is not None:
+            fields.append("paused = ?")
+            values.append(int(paused))
         if status in {"completed", "failed"}:
+            fields.append("paused = 0")
             fields.append("finished_at = ?")
             values.append(datetime.now(timezone.utc).isoformat())
         if not fields:
@@ -368,6 +468,7 @@ class UpdateJobManager:
                     message TEXT NOT NULL DEFAULT '',
                     action TEXT NOT NULL DEFAULT 'all',
                     result_json TEXT,
+                    paused INTEGER NOT NULL DEFAULT 0,
                     started_at TEXT NOT NULL DEFAULT (datetime('now')),
                     finished_at TEXT
                 )
@@ -378,6 +479,10 @@ class UpdateJobManager:
                 connection.execute("ALTER TABLE question_update_jobs ADD COLUMN action TEXT NOT NULL DEFAULT 'all'")
             if "result_json" not in columns:
                 connection.execute("ALTER TABLE question_update_jobs ADD COLUMN result_json TEXT")
+            if "paused" not in columns:
+                connection.execute(
+                    "ALTER TABLE question_update_jobs ADD COLUMN paused INTEGER NOT NULL DEFAULT 0"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
@@ -397,12 +502,14 @@ class UpdateJobManager:
         elapsed_seconds = max(0, round(((finished_at or datetime.now(timezone.utc)) - started_at).total_seconds()))
         progress = int(row["progress"])
         eta_seconds = None
-        if row["status"] == "running" and 5 <= progress < 100:
+        paused = bool(row["paused"])
+        if row["status"] == "running" and not paused and 5 <= progress < 100:
             eta_seconds = max(0, round(elapsed_seconds * (100 - progress) / progress))
         return {
             "id": int(row["id"]), "status": row["status"], "stage": row["stage"],
             "action": row["action"], "result": result,
             "progress": progress, "message": row["message"],
+            "paused": paused,
             "started_at": row["started_at"], "finished_at": row["finished_at"],
             "elapsed_seconds": elapsed_seconds, "eta_seconds": eta_seconds,
         }

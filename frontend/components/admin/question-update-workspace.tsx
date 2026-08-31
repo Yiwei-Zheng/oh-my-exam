@@ -6,6 +6,8 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
   Database01Icon,
+  PauseIcon,
+  PlayIcon,
   RefreshIcon,
   Search01Icon,
 } from '@hugeicons/core-free-icons'
@@ -53,6 +55,7 @@ interface UpdateJob {
   message: string
   action: PipelineAction
   result: ProbeResult | null
+  paused: boolean
   elapsed_seconds: number
   eta_seconds: number | null
 }
@@ -64,10 +67,10 @@ type UpdateMode = 'update' | 'overwrite'
 
 const copy = {
   'zh-CN': {
-    eyebrow: '题库维护 / 资源流水线',
-    title: '让新试卷沿着一条轨迹进入题库',
+    eyebrow: '管理后台 / 更新题库',
+    title: '更新题库',
     intro:
-      '只显示已有完整工作流的科目。先嗅探来源并和本地逐项比较，确认后再下载、切题、盘点和建立搜索索引。',
+      '选择科目后一键完成资源嗅探、下载、切题、入库和索引。每一步也可独立更新或覆盖重跑，运行中可随时暂停。',
     back: '返回管理后台',
     choose: '选择科目',
     chooseHint: '勾选本次要检查的科目，可多选。',
@@ -89,6 +92,7 @@ const copy = {
     rerun: '重新盘点并入库',
     backgroundHint: '任务由后端 CLI 在后台运行，启动后可以离开此页。',
     running: '工作流运行中',
+    paused: '工作流已暂停',
     complete: '题库更新完成',
     failed: '工作流未完成',
     retry: '重新嗅探',
@@ -96,6 +100,10 @@ const copy = {
     elapsed: '已用时间',
     remaining: '预计剩余',
     estimating: '正在估算',
+    pause: '暂停',
+    resume: '继续',
+    pauseFailed: '未能暂停当前任务，请稍后重试。',
+    resumeFailed: '未能继续当前任务，请稍后重试。',
     stageDescriptions: {
       checking: '检查来源和本地资源状态',
       downloading: '发现、下载并校验原始 PDF',
@@ -112,6 +120,14 @@ const copy = {
     startFailed: '未能启动工作流，请稍后重试。',
     more: '项未展开',
     stages: ['嗅探', '下载', '切题', '盘点入库', '可搜索'],
+    stageDetails: [
+      '检查远端来源并与本地资源逐项比较',
+      '下载并校验所选科目的原始 PDF',
+      '重新生成题目与答案图片',
+      '扫描本地资源并更新科目数据库',
+      '重建分类与全文搜索索引',
+    ],
+    workflow: '执行步骤',
     stageHint: '每一步都可增量更新或覆盖重跑，也可以一键执行完整流水线。',
     update: '更新',
     overwrite: '覆盖',
@@ -119,10 +135,10 @@ const copy = {
     overwriteAll: '覆盖全部重跑',
   },
   en: {
-    eyebrow: 'Library maintenance / resource pipeline',
-    title: 'Move new papers into the library on one clear track',
+    eyebrow: 'Admin / Update library',
+    title: 'Update library',
     intro:
-      'Only subjects with a complete workflow appear here. Probe sources, compare locally, then download, split, inventory, and index.',
+      'Select subjects to automate probing, downloading, splitting, inventory, and indexing. Every stage can also be updated or overwritten independently, and paused while running.',
     back: 'Back to admin',
     choose: 'Choose subjects',
     chooseHint: 'Select one or more subjects to inspect.',
@@ -146,6 +162,7 @@ const copy = {
     backgroundHint:
       'The backend CLI continues in the background, so you can leave after it starts.',
     running: 'Workflow in progress',
+    paused: 'Workflow paused',
     complete: 'Library update complete',
     failed: 'Workflow did not complete',
     retry: 'Probe again',
@@ -153,6 +170,10 @@ const copy = {
     elapsed: 'Elapsed',
     remaining: 'Estimated remaining',
     estimating: 'Estimating',
+    pause: 'Pause',
+    resume: 'Resume',
+    pauseFailed: 'The current task could not be paused. Try again shortly.',
+    resumeFailed: 'The current task could not be resumed. Try again shortly.',
     stageDescriptions: {
       checking: 'Checking sources and local resource state',
       downloading: 'Discovering, downloading, and validating source PDFs',
@@ -171,6 +192,14 @@ const copy = {
     startFailed: 'The workflow could not be started. Try again shortly.',
     more: 'more not shown',
     stages: ['Probe', 'Download', 'Split', 'Inventory', 'Searchable'],
+    stageDetails: [
+      'Compare remote sources with local resources',
+      'Download and validate source PDFs for selected subjects',
+      'Regenerate question and answer images',
+      'Scan local resources and update subject databases',
+      'Rebuild classification and full-text search indexes',
+    ],
+    workflow: 'Workflow stages',
     stageHint:
       'Incrementally update or overwrite any stage, or run the complete pipeline.',
     update: 'Update',
@@ -343,29 +372,143 @@ export function QuestionUpdateWorkspace() {
     else void start(stage, mode)
   }
 
+  async function togglePause() {
+    if (!job || job.status !== 'running') return
+    const nextPaused = !job.paused
+    setBusy(true)
+    setError('')
+    try {
+      const result = await apiRequest<{ job: UpdateJob }>(
+        `/api/v1/admin/question-update/${job.id}/${nextPaused ? 'pause' : 'resume'}`,
+        { method: 'POST' },
+      )
+      acceptJob(result.job)
+    } catch {
+      setError(nextPaused ? c.pauseFailed : c.resumeFailed)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <div className="min-h-svh bg-[radial-gradient(circle_at_12%_0%,color-mix(in_oklch,var(--primary),transparent_88%),transparent_38%)]">
+    <div className="min-h-svh bg-background">
       <ProductHeader />
-      <main className="update-page-enter mx-auto w-full max-w-6xl px-4 py-8 md:px-8 md:py-12">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-3xl">
+      <main className="update-page-enter mx-auto w-full max-w-7xl px-4 py-6 md:px-8 md:py-10">
+        <header className="mb-6 flex flex-wrap items-start justify-between gap-4 border-b pb-6">
+          <div className="max-w-2xl">
             <p className="font-mono text-xs font-semibold uppercase tracking-[.18em] text-primary">
               {c.eyebrow}
             </p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-[-.035em] text-balance md:text-5xl">
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-.03em] text-balance md:text-4xl">
               {c.title}
             </h1>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
+            <p className="mt-3 text-sm leading-6 text-muted-foreground md:text-base">
               {c.intro}
             </p>
           </div>
-          <Button variant="outline" render={<Link href="/admin" />}>
+          <Button variant="ghost" render={<Link href="/admin" />}>
             {c.back}
           </Button>
-        </div>
+        </header>
 
-        <WorkflowTrack
+        {error && (
+          <Alert variant="destructive" className="mb-5">
+            <AlertTitle>{error}</AlertTitle>
+          </Alert>
+        )}
+        {!configured && (
+          <Alert className="mb-5">
+            <AlertTitle>{c.unavailable}</AlertTitle>
+          </Alert>
+        )}
+
+        {job && (
+          <section
+            aria-live="polite"
+            className="update-card-enter mb-5 rounded-3xl border bg-card p-5 shadow-sm md:p-6"
+          >
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold">
+                    {job.status === 'completed'
+                      ? c.complete
+                      : job.status === 'failed'
+                        ? c.failed
+                        : c.running}
+                  </p>
+                  {job.paused && <Badge variant="secondary">{c.paused}</Badge>}
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {c.stageDescriptions[
+                    job.stage as keyof typeof c.stageDescriptions
+                  ] || job.stage}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-2xl font-semibold tabular-nums">
+                  {job.progress}%
+                </span>
+                {job.status === 'running' && (
+                  <Button
+                    variant={job.paused ? 'default' : 'outline'}
+                    className="h-11"
+                    onClick={() => void togglePause()}
+                    disabled={busy}
+                  >
+                    <HugeiconsIcon
+                      icon={job.paused ? PlayIcon : PauseIcon}
+                      data-icon="inline-start"
+                    />
+                    {job.paused ? c.resume : c.pause}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className="h-full rounded-full bg-primary transition-transform duration-300 ease-out motion-reduce:transition-none"
+                style={{
+                  transform: `scaleX(${job.progress / 100})`,
+                  transformOrigin: 'left',
+                }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <StatusDetail label={c.currentWork} value={job.message} />
+              <StatusDetail
+                label={c.elapsed}
+                value={formatDuration(job.elapsed_seconds, locale)}
+              />
+              <StatusDetail
+                label={c.remaining}
+                value={
+                  job.status === 'completed'
+                    ? '—'
+                    : job.paused
+                      ? c.paused
+                      : job.eta_seconds === null
+                        ? c.estimating
+                        : formatDuration(job.eta_seconds, locale)
+                }
+              />
+            </div>
+            {job.status === 'failed' && (
+              <Button
+                variant="outline"
+                className="mt-4 h-11"
+                onClick={() => void sniff('update')}
+              >
+                {c.retry}
+              </Button>
+            )}
+          </section>
+        )}
+
+        <WorkflowStages
+          title={c.workflow}
           stages={c.stages}
+          details={c.stageDetails}
           active={activeStage}
           failed={job?.status === 'failed'}
           hint={c.stageHint}
@@ -373,6 +516,10 @@ export function QuestionUpdateWorkspace() {
           overwriteLabel={c.overwrite}
           runAllLabel={c.runAll}
           overwriteAllLabel={c.overwriteAll}
+          concurrencyLabel={c.concurrency}
+          concurrencyHint={c.concurrencyHint}
+          concurrency={concurrency}
+          onConcurrencyChange={setConcurrency}
           disabled={
             busy || !configured || !selected.length || job?.status === 'running'
           }
@@ -380,28 +527,22 @@ export function QuestionUpdateWorkspace() {
           onRunAll={(mode) => void start('all', mode)}
         />
 
-        {error && (
-          <Alert variant="destructive" className="mt-6">
-            <AlertTitle>{error}</AlertTitle>
-          </Alert>
-        )}
-        {!configured && (
-          <Alert className="mt-6">
-            <AlertTitle>{c.unavailable}</AlertTitle>
-          </Alert>
-        )}
-
-        <section className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]">
+        <section className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(300px,.9fr)_minmax(0,1.1fr)]">
           <Card
             className="update-card-enter overflow-hidden"
             style={{ animationDelay: '90ms' }}
           >
             <CardContent className="p-5 md:p-6">
-              <div className="mb-5">
-                <h2 className="text-lg font-semibold">{c.choose}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {c.chooseHint}
-                </p>
+              <div className="mb-5 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold">{c.choose}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {c.chooseHint}
+                  </p>
+                </div>
+                <Badge variant="secondary" className="font-mono">
+                  {selected.length}/{subjects.length}
+                </Badge>
               </div>
               <WorkflowSubjectTree
                 subjects={subjects}
@@ -417,9 +558,11 @@ export function QuestionUpdateWorkspace() {
                 }
                 onToggleFamily={toggleFamily}
                 onToggleSubject={toggleSubject}
+                disabled={busy || job?.status === 'running'}
               />
               <Button
-                className="mt-5 h-11 w-full sm:w-auto"
+                variant="outline"
+                className="mt-5 h-11 w-full"
                 onClick={() => void sniff('update')}
                 disabled={busy || !configured || job?.status === 'running'}
               >
@@ -436,7 +579,7 @@ export function QuestionUpdateWorkspace() {
             <CardContent className="p-5 md:p-6">
               <h2 className="text-lg font-semibold">{c.comparison}</h2>
               {!probe ? (
-                <div className="grid min-h-64 place-items-center text-center text-sm text-muted-foreground">
+                <div className="grid min-h-72 place-items-center text-center text-sm text-muted-foreground">
                   <div>
                     <HugeiconsIcon
                       icon={RefreshIcon}
@@ -512,35 +655,6 @@ export function QuestionUpdateWorkspace() {
                       )}
                     </div>
                   )}
-                  <div>
-                    <label
-                      htmlFor="pipeline-concurrency"
-                      className="text-sm font-medium"
-                    >
-                      {c.concurrency}
-                    </label>
-                    <div className="mt-2 flex items-center gap-3">
-                      <Input
-                        id="pipeline-concurrency"
-                        type="number"
-                        min={1}
-                        max={32}
-                        value={concurrency}
-                        onChange={(event) =>
-                          setConcurrency(
-                            Math.max(
-                              1,
-                              Math.min(32, Number(event.target.value) || 1),
-                            ),
-                          )
-                        }
-                        className="h-11 w-24 font-mono"
-                      />
-                      <p className="text-xs leading-5 text-muted-foreground">
-                        {c.concurrencyHint}
-                      </p>
-                    </div>
-                  </div>
                   <Button
                     className="h-11 w-full"
                     onClick={() => void start('all', 'update')}
@@ -560,68 +674,6 @@ export function QuestionUpdateWorkspace() {
             </CardContent>
           </Card>
         </section>
-
-        {job && (
-          <section
-            aria-live="polite"
-            className="update-card-enter mt-6 rounded-3xl border bg-card p-5 md:p-6"
-          >
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-semibold">
-                  {job.status === 'completed'
-                    ? c.complete
-                    : job.status === 'failed'
-                      ? c.failed
-                      : c.running}
-                </p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {c.stageDescriptions[
-                    job.stage as keyof typeof c.stageDescriptions
-                  ] || job.stage}
-                </p>
-              </div>
-              <span className="font-mono text-2xl font-semibold tabular-nums">
-                {job.progress}%
-              </span>
-            </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full bg-primary transition-transform duration-300 ease-out"
-                style={{
-                  transform: `scaleX(${job.progress / 100})`,
-                  transformOrigin: 'left',
-                }}
-              />
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <StatusDetail label={c.currentWork} value={job.message} />
-              <StatusDetail
-                label={c.elapsed}
-                value={formatDuration(job.elapsed_seconds, locale)}
-              />
-              <StatusDetail
-                label={c.remaining}
-                value={
-                  job.status === 'completed'
-                    ? '—'
-                    : job.eta_seconds === null
-                      ? c.estimating
-                      : formatDuration(job.eta_seconds, locale)
-                }
-              />
-            </div>
-            {job.status === 'failed' && (
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => void sniff('update')}
-              >
-                {c.retry}
-              </Button>
-            )}
-          </section>
-        )}
       </main>
     </div>
   )
@@ -659,6 +711,7 @@ function WorkflowSubjectTree({
   onToggleExpanded,
   onToggleFamily,
   onToggleSubject,
+  disabled,
 }: {
   subjects: WorkflowSubject[]
   selected: string[]
@@ -666,6 +719,7 @@ function WorkflowSubjectTree({
   onToggleExpanded: (family: string) => void
   onToggleFamily: (ids: string[]) => void
   onToggleSubject: (id: string) => void
+  disabled: boolean
 }) {
   const families = useMemo(() => {
     const grouped = new Map<string, WorkflowSubject[]>()
@@ -679,7 +733,10 @@ function WorkflowSubjectTree({
   }, [subjects])
 
   return (
-    <div role="tree" className="overflow-hidden rounded-2xl border">
+    <div
+      role="tree"
+      className="max-h-[34rem] overflow-y-auto rounded-2xl border"
+    >
       {families.map(([family, items]) => {
         const ids = items.map((item) => item.id)
         const selectedCount = ids.filter((id) => selected.includes(id)).length
@@ -699,6 +756,7 @@ function WorkflowSubjectTree({
                 className="grid size-11 shrink-0 place-items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => onToggleExpanded(family)}
                 aria-label={family}
+                disabled={disabled}
               >
                 <HugeiconsIcon
                   icon={ArrowRight01Icon}
@@ -716,6 +774,7 @@ function WorkflowSubjectTree({
                     if (element) element.indeterminate = partial
                   }}
                   onChange={() => onToggleFamily(ids)}
+                  disabled={disabled}
                   className="size-5 accent-[var(--primary)]"
                 />
                 <span className="min-w-0 flex-1 truncate">{family}</span>
@@ -738,6 +797,7 @@ function WorkflowSubjectTree({
                       type="checkbox"
                       checked={selected.includes(subject.id)}
                       onChange={() => onToggleSubject(subject.id)}
+                      disabled={disabled}
                       className="size-5 accent-[var(--primary)]"
                     />
                     <strong className="font-mono text-sm">
@@ -757,8 +817,10 @@ function WorkflowSubjectTree({
   )
 }
 
-function WorkflowTrack({
+function WorkflowStages({
+  title,
   stages,
+  details,
   active,
   failed,
   hint,
@@ -766,11 +828,17 @@ function WorkflowTrack({
   overwriteLabel,
   runAllLabel,
   overwriteAllLabel,
+  concurrencyLabel,
+  concurrencyHint,
+  concurrency,
+  onConcurrencyChange,
   disabled,
   onRun,
   onRunAll,
 }: {
+  title: string
   stages: readonly string[]
+  details: readonly string[]
   active: number
   failed: boolean
   hint: string
@@ -778,6 +846,10 @@ function WorkflowTrack({
   overwriteLabel: string
   runAllLabel: string
   overwriteAllLabel: string
+  concurrencyLabel: string
+  concurrencyHint: string
+  concurrency: number
+  onConcurrencyChange: (value: number) => void
   disabled: boolean
   onRun: (stage: PipelineStage, mode: UpdateMode) => void
   onRunAll: (mode: UpdateMode) => void
@@ -791,81 +863,99 @@ function WorkflowTrack({
   ]
   return (
     <section
-      aria-label="Update workflow"
-      className="update-track relative overflow-hidden rounded-3xl border bg-card/80 px-4 py-6 backdrop-blur md:px-8 md:py-8"
+      aria-label={title}
+      className="update-track overflow-hidden rounded-3xl border bg-card shadow-sm"
     >
-      <div className="relative z-10 mb-6 flex flex-wrap items-center justify-between gap-4">
-        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-          {hint}
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            className="h-11"
-            disabled={disabled}
-            onClick={() => onRunAll('update')}
-          >
-            {runAllLabel}
-          </Button>
-          <Button
-            variant="outline"
-            className="h-11"
-            disabled={disabled}
-            onClick={() => onRunAll('overwrite')}
-          >
-            {overwriteAllLabel}
-          </Button>
+      <div className="flex flex-col gap-5 border-b p-5 md:flex-row md:items-end md:justify-between md:p-6">
+        <div className="max-w-2xl">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <p className="mt-1 text-sm leading-6 text-muted-foreground">{hint}</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="sm:max-w-72">
+            <label
+              htmlFor="pipeline-concurrency"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              {concurrencyLabel}
+            </label>
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                id="pipeline-concurrency"
+                type="number"
+                min={1}
+                max={32}
+                value={concurrency}
+                disabled={disabled}
+                onChange={(event) =>
+                  onConcurrencyChange(
+                    Math.max(1, Math.min(32, Number(event.target.value) || 1)),
+                  )
+                }
+                aria-describedby="pipeline-concurrency-hint"
+                className="h-11 w-20 font-mono"
+              />
+              <p
+                id="pipeline-concurrency-hint"
+                className="line-clamp-2 text-xs leading-4 text-muted-foreground"
+              >
+                {concurrencyHint}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              className="h-11 flex-1 sm:flex-none"
+              disabled={disabled}
+              onClick={() => onRunAll('update')}
+            >
+              <HugeiconsIcon icon={RefreshIcon} data-icon="inline-start" />
+              {runAllLabel}
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11 flex-1 sm:flex-none"
+              disabled={disabled}
+              onClick={() => onRunAll('overwrite')}
+            >
+              {overwriteAllLabel}
+            </Button>
+          </div>
         </div>
       </div>
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 1000 120"
-        preserveAspectRatio="none"
-        className="pointer-events-none absolute inset-x-8 top-5 hidden h-24 w-[calc(100%-4rem)] md:block"
-      >
-        <path
-          d="M42 78 C180 8 286 108 430 52 S710 18 958 68"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          className="text-border"
-        />
-        <path
-          d="M42 78 C180 8 286 108 430 52 S710 18 958 68"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="3"
-          pathLength="1"
-          className="update-track-path text-primary"
-        />
-      </svg>
-      <ol className="relative grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:gap-5">
+      <ol className="divide-y">
         {stages.map((label, index) => (
           <li
             key={label}
             className={cn(
-              'flex min-h-36 flex-col justify-between gap-3 rounded-2xl border bg-background/95 p-3 transition-all duration-300',
-              index <= active && 'border-primary/50 text-primary',
-              failed &&
-                index === active &&
-                'border-destructive/50 text-destructive',
+              'grid min-h-20 gap-3 px-5 py-4 transition-colors duration-200 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center md:px-6',
+              index === active && 'bg-primary/[.055]',
+              failed && index === active && 'bg-destructive/[.055]',
             )}
           >
-            <div className="flex items-center gap-3">
-              <span
-                className={cn(
-                  'grid size-7 shrink-0 place-items-center rounded-full border bg-background font-mono text-xs font-semibold',
-                  index <= active &&
-                    'border-primary bg-primary text-primary-foreground',
-                )}
-              >
-                {index + 1}
-              </span>
-              <span className="text-sm font-semibold">{label}</span>
+            <span
+              className={cn(
+                'grid size-8 shrink-0 place-items-center rounded-full border bg-background font-mono text-xs font-semibold text-muted-foreground',
+                index <= active &&
+                  'border-primary bg-primary text-primary-foreground',
+                failed &&
+                  index === active &&
+                  'border-destructive bg-destructive text-destructive-foreground',
+              )}
+            >
+              {index + 1}
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">{label}</p>
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                {details[index]}
+              </p>
             </div>
-            <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+            <div className="ml-11 flex gap-2 sm:ml-0">
               <Button
                 size="sm"
-                className="h-11"
+                variant={index === active ? 'default' : 'secondary'}
+                className="h-11 flex-1 sm:flex-none"
                 disabled={disabled}
                 onClick={() => onRun(actions[index], 'update')}
               >
@@ -874,7 +964,7 @@ function WorkflowTrack({
               <Button
                 size="sm"
                 variant="outline"
-                className="h-11"
+                className="h-11 flex-1 sm:flex-none"
                 disabled={disabled}
                 onClick={() => onRun(actions[index], 'overwrite')}
               >

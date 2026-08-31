@@ -74,6 +74,9 @@ architecture must allow new exam families without global rewrites.
 - Web requests create durable job records and start the pipeline in an isolated
   subprocess; source probing also runs as a durable background job so slow
   upstream sites never hold the Web request open.
+- Every running operation can be paused and resumed from the update page.
+  Source probing pauses at the next subject boundary; subprocess-backed stages
+  suspend and resume the complete process tree without restarting the stage.
 - The subprocess boundary uses UTF-8 explicitly. Running jobs report the current
   stage and resource, elapsed time, and an estimated remaining duration.
 - Every step has explicit inputs, outputs, status, logs, and artifact identity.

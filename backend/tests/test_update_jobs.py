@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import time
+from threading import Event
 
 import pytest
 
@@ -122,6 +123,42 @@ def test_probe_runs_as_a_background_job(monkeypatch, tmp_path: Path) -> None:
         time.sleep(0.01)
     assert latest["status"] == "completed"
     assert latest["result"]["resource_count"] == 0
+
+
+def test_probe_job_can_pause_and_resume_between_subjects(monkeypatch, tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ())
+    with manager._connect() as connection:
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO users (id) VALUES (1)")
+    entered = Event()
+    release = Event()
+
+    def probe_cie(_subjects, _root):
+        entered.set()
+        assert release.wait(1)
+        return []
+
+    monkeypatch.setattr(manager, "_probe_cie", probe_cie)
+    job = manager.start_probe(1, ["cie:9709", "cie:9231"], tmp_path)
+    assert entered.wait(1)
+
+    paused = manager.pause(int(job["id"]))
+    release.set()
+    time.sleep(0.05)
+
+    assert paused["paused"] is True
+    assert manager.get(int(job["id"]))["status"] == "running"
+    resumed = manager.resume(int(job["id"]))
+    assert resumed["paused"] is False
+
+    deadline = time.monotonic() + 2
+    while (
+        (latest := manager.get(int(job["id"]))).get("status") == "running"
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.01)
+    assert latest["status"] == "completed"
+    assert latest["paused"] is False
 
 
 def test_job_progress_does_not_move_backwards(tmp_path: Path) -> None:
