@@ -200,6 +200,7 @@ def _migrate_source(
                     (question_map[int(row["question_id"])], content),
                 )
 
+        image_kinds: set[tuple[int, str]] = set()
         if _table_exists(source, "question_images"):
             for row in source.execute(
                 """
@@ -232,6 +233,7 @@ def _migrate_source(
                         actual_size,
                     ),
                 )
+                image_kinds.add((source_question_id, "question" if int(row["source_type"]) == 0 else "answer"))
         else:
             for row in question_rows:
                 source_question_id = int(row["id"])
@@ -263,6 +265,7 @@ def _migrate_source(
                             image_path.stat().st_size,
                         ),
                     )
+                    image_kinds.add((source_question_id, image_kind))
 
         answer_map: dict[int, int] = {}
         region_rows = source.execute(
@@ -295,6 +298,8 @@ def _migrate_source(
                     """,
                     (question_id, document_id, *values),
                 )
+                continue
+            if (source_question_id, "answer") not in image_kinds:
                 continue
             answer_id = answer_map.get(source_question_id)
             if answer_id is None:

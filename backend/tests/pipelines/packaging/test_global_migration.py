@@ -157,6 +157,35 @@ def test_migration_recovers_images_from_legacy_portable_database(tmp_path: Path)
         ]
 
 
+def test_migration_does_not_publish_answer_without_image(tmp_path: Path) -> None:
+    database_root = tmp_path / "databases"
+    paper_root = tmp_path / "raw_papers"
+    source_path = database_root / "subject.sqlite"
+    database_root.mkdir()
+    paper_root.mkdir()
+    _write_portable_database(source_path)
+    paper_dir = paper_root / "uat" / "admissions" / "tmua" / "2023"
+    paper_dir.mkdir(parents=True)
+    _write_pdf(paper_dir / "tmua_2023_s1_qp.pdf", "Question")
+    _write_pdf(paper_dir / "tmua_2023_s1_ms.pdf", "Answer")
+    image_root = tmp_path / "processed_questions"
+    image_root.mkdir()
+    (image_root / "tmua_2023_s1_qp_q01.jpg").write_bytes(b"question jpeg")
+    output_path = database_root / "global.sqlite"
+
+    migrate_portable_catalogs(
+        GlobalMigrationOptions(
+            database_root,
+            paper_root,
+            output_path,
+            image_root=image_root,
+        )
+    )
+
+    with sqlite3.connect(output_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM answers").fetchone()[0] == 0
+
+
 def test_answer_markdown_removes_known_page_boilerplate() -> None:
     assert _normalize_markdown_text("physicsandmathstutor.com\n") == ""
     assert _normalize_markdown_text("Step II Hints and Answers June 2005\nx = 2\n") == "x = 2"

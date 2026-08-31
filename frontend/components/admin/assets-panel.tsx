@@ -11,7 +11,7 @@ import {
 
 import type { AssetInventory } from '@/components/admin/types'
 import { useLocale } from '@/components/locale-provider'
-import { QuestionPreviewDialog } from '@/components/question-preview-dialog'
+import { QuestionPreview } from '@/components/question-preview-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,23 +52,32 @@ function AssetTreeNode({
   depth,
   expanded,
   selectedPaperId,
+  questions,
+  selectedQuestionId,
   onToggle,
   onPaper,
+  onQuestion,
 }: {
   node: TreeNode
   depth: number
   expanded: Set<string>
   selectedPaperId?: number
+  questions: Question[]
+  selectedQuestionId?: number
   onToggle: (id: string) => void
   onPaper: (paper: PaperChoice) => void
+  onQuestion: (question: Question) => void
 }) {
   const isBranch = Boolean(node.children?.length)
-  const isExpanded = expanded.has(node.id)
   const isPaper = node.kind === 'paper' && node.paper_id && node.exam_id
+  const isExpanded = isPaper
+    ? selectedPaperId === node.paper_id
+    : expanded.has(node.id)
+  const isExpandable = isBranch || Boolean(isPaper)
   return (
     <div
       role="treeitem"
-      aria-expanded={isBranch ? isExpanded : undefined}
+      aria-expanded={isExpandable ? isExpanded : undefined}
       aria-selected={isPaper ? selectedPaperId === node.paper_id : false}
     >
       <button
@@ -87,7 +96,7 @@ function AssetTreeNode({
       >
         <HugeiconsIcon
           icon={ArrowRight01Icon}
-          className={`size-4 shrink-0 transition-transform ${isBranch && isExpanded ? 'rotate-90' : ''} ${isBranch ? '' : 'opacity-25'}`}
+          className={`size-4 shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''} ${isExpandable ? '' : 'opacity-25'}`}
         />
         <span className="min-w-0 flex-1 truncate font-medium">
           {node.label}
@@ -113,9 +122,32 @@ function AssetTreeNode({
               depth={depth + 1}
               expanded={expanded}
               selectedPaperId={selectedPaperId}
+              questions={questions}
+              selectedQuestionId={selectedQuestionId}
               onToggle={onToggle}
               onPaper={onPaper}
+              onQuestion={onQuestion}
             />
+          ))}
+        </div>
+      )}
+      {isPaper && isExpanded && (
+        <div role="group" className="ui-tree-enter">
+          {questions.map((question) => (
+            <div
+              key={question.id}
+              role="treeitem"
+              aria-selected={selectedQuestionId === question.id}
+            >
+              <button
+                type="button"
+                onClick={() => onQuestion(question)}
+                className={`ui-interactive min-h-11 w-full rounded-lg pr-2 text-left font-mono text-xs transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selectedQuestionId === question.id ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}
+                style={{ paddingLeft: `${24 + (depth + 1) * 16}px` }}
+              >
+                Q{question.question_number}
+              </button>
+            </div>
           ))}
         </div>
       )}
@@ -298,75 +330,61 @@ export function AssetsPanel({
                   depth={0}
                   expanded={visibleExpanded}
                   selectedPaperId={selectedPaper?.id}
+                  questions={questions}
+                  selectedQuestionId={selected?.id}
                   onToggle={toggleNode}
                   onPaper={choosePaper}
+                  onQuestion={chooseQuestion}
                 />
               ))}
             </div>
           </div>
-          <div className="min-w-0 rounded-xl border">
-            <div className="border-b p-4 text-sm font-semibold">
-              {selectedPaper?.label || t('selectPaper')}
-            </div>
-            <div className="max-h-[620px] overflow-y-auto">
-              {questions.map((question) => (
-                <button
-                  key={question.id}
-                  onClick={() => chooseQuestion(question)}
-                  className={`w-full border-b p-4 text-left hover:bg-muted ${selected?.id === question.id ? 'bg-primary/10' : ''}`}
-                >
-                  <strong className="font-mono text-xs text-primary">
-                    Q{question.question_number}
-                  </strong>
-                  <span className="mt-2 line-clamp-3 block text-sm text-muted-foreground">
-                    {question.content || question.local_key}
-                  </span>
-                </button>
-              ))}
-            </div>
+          <div className="min-w-0 overflow-hidden rounded-xl border">
+            {selected ? (
+              <QuestionPreview
+                question={selected}
+                textPanel={
+                  <div className="space-y-4">
+                    <div className="flex justify-between gap-4">
+                      <div>
+                        <p className="font-semibold">{t('structuredText')}</p>
+                        <p className="text-xs text-muted-foreground">
+                          v{selected.answer_structured?.version || 0}
+                        </p>
+                      </div>
+                      <Button onClick={saveRevision} disabled={saving}>
+                        {t('saveRevision')}
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="raw-text">{t('rawText')}</Label>
+                      <Textarea
+                        id="raw-text"
+                        rows={10}
+                        value={rawText}
+                        onChange={(event) => setRawText(event.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="markdown">{t('markdown')}</Label>
+                      <Textarea
+                        id="markdown"
+                        rows={12}
+                        value={markdown}
+                        onChange={(event) => setMarkdown(event.target.value)}
+                      />
+                    </div>
+                  </div>
+                }
+              />
+            ) : (
+              <div className="grid min-h-[680px] place-items-center p-6 text-center text-sm text-muted-foreground">
+                {t('chooseQuestion')}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
-      <QuestionPreviewDialog
-        question={selected}
-        open={Boolean(selected)}
-        onOpenChange={(open) => !open && setSelected(null)}
-        textPanel={
-          selected ? (
-            <div className="space-y-4">
-              <div className="flex justify-between gap-4">
-                <div>
-                  <p className="font-semibold">{t('structuredText')}</p>
-                  <p className="text-xs text-muted-foreground">
-                    v{selected.answer_structured?.version || 0}
-                  </p>
-                </div>
-                <Button onClick={saveRevision} disabled={saving}>
-                  {t('saveRevision')}
-                </Button>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="raw-text">{t('rawText')}</Label>
-                <Textarea
-                  id="raw-text"
-                  rows={10}
-                  value={rawText}
-                  onChange={(event) => setRawText(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="markdown">{t('markdown')}</Label>
-                <Textarea
-                  id="markdown"
-                  rows={12}
-                  value={markdown}
-                  onChange={(event) => setMarkdown(event.target.value)}
-                />
-              </div>
-            </div>
-          ) : undefined
-        }
-      />
     </div>
   )
 }

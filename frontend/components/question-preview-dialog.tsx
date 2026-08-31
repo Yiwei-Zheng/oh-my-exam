@@ -69,84 +69,113 @@ export function QuestionPreviewDialog({
   onChooseSimilar?: (question: Question) => void
   textPanel?: ReactNode
 }) {
-  const { t } = useLocale()
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[92dvh] max-w-[calc(100%-1rem)] gap-0 overflow-hidden p-0 sm:max-w-[min(1200px,calc(100%-2rem))]">
-        {question && (
-          <>
-            <DialogHeader className="border-b px-5 py-4 pr-16">
-              <DialogTitle className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-primary">
-                  {question.paper_key}
-                </span>
-                <Badge variant="secondary">Q{question.question_number}</Badge>
-              </DialogTitle>
-              <DialogDescription>{t('questionPreview')}</DialogDescription>
-            </DialogHeader>
-            <Tabs
-              defaultValue="question"
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              <div className="border-b px-4 py-2">
-                <TabsList>
-                  <TabsTrigger value="question">{t('question')}</TabsTrigger>
-                  <TabsTrigger value="answer">{t('answer')}</TabsTrigger>
-                  {textPanel && (
-                    <TabsTrigger value="text">{t('text')}</TabsTrigger>
-                  )}
-                </TabsList>
-              </div>
-              <TabsContent value="question" className="m-0 min-h-0 flex-1">
-                <DocumentFrame
-                  key={`${question.id}:question`}
-                  question={question}
-                  sourceType={0}
-                  title={t('questionPdf')}
-                  errorMessage={t('imageUnavailable')}
-                />
-              </TabsContent>
-              <TabsContent value="answer" className="m-0 min-h-0 flex-1">
-                <DocumentFrame
-                  key={`${question.id}:answer`}
-                  question={question}
-                  sourceType={1}
-                  title={t('answerPdf')}
-                  errorMessage={t('imageUnavailable')}
-                />
-              </TabsContent>
-              {textPanel && (
-                <TabsContent
-                  value="text"
-                  className="m-0 min-h-0 flex-1 overflow-y-auto p-5"
-                >
-                  {textPanel}
-                </TabsContent>
-              )}
-            </Tabs>
-            {similar.length > 0 && (
-              <div className="max-h-32 overflow-y-auto border-t p-3">
-                <p className="mb-2 text-sm font-semibold">{t('similar')}</p>
-                <div className="flex gap-2 overflow-x-auto pb-1">
-                  {similar.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => onChooseSimilar?.(item)}
-                      className="min-h-11 shrink-0 rounded-xl border px-3 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className="font-mono text-xs text-primary">
-                        {item.paper_key} · Q{item.question_number}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
+        <QuestionPreview
+          question={question}
+          similar={similar}
+          onChooseSimilar={onChooseSimilar}
+          textPanel={textPanel}
+          dialogTitle
+        />
       </DialogContent>
     </Dialog>
+  )
+}
+
+export function QuestionPreview({
+  question,
+  similar = [],
+  onChooseSimilar,
+  textPanel,
+  dialogTitle = false,
+}: {
+  question: Question | null
+  similar?: Question[]
+  onChooseSimilar?: (question: Question) => void
+  textPanel?: ReactNode
+  dialogTitle?: boolean
+}) {
+  const { t } = useLocale()
+
+  if (!question) return null
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <DialogHeader className="border-b px-5 py-4 pr-16">
+        {dialogTitle ? (
+          <DialogTitle className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-primary">{question.paper_key}</span>
+            <Badge variant="secondary">Q{question.question_number}</Badge>
+          </DialogTitle>
+        ) : (
+          <h2 className="flex flex-wrap items-center gap-2 font-heading text-base font-medium">
+            <span className="font-mono text-primary">{question.paper_key}</span>
+            <Badge variant="secondary">Q{question.question_number}</Badge>
+          </h2>
+        )}
+        {dialogTitle ? (
+          <DialogDescription>{t('questionPreview')}</DialogDescription>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {t('questionPreview')}
+          </p>
+        )}
+      </DialogHeader>
+      <Tabs defaultValue="question" className="flex min-h-0 flex-1 flex-col">
+        <div className="border-b px-4 py-2">
+          <TabsList>
+            <TabsTrigger value="question">{t('question')}</TabsTrigger>
+            <TabsTrigger value="answer">{t('answer')}</TabsTrigger>
+            {textPanel && <TabsTrigger value="text">{t('text')}</TabsTrigger>}
+          </TabsList>
+        </div>
+        <TabsContent value="question" className="m-0 min-h-0 flex-1">
+          <DocumentFrame
+            key={`${question.id}:question`}
+            question={question}
+            sourceType={0}
+            title={t('questionPdf')}
+            errorMessage={t('imageUnavailable')}
+          />
+        </TabsContent>
+        <TabsContent value="answer" className="m-0 min-h-0 flex-1">
+          <DocumentFrame
+            key={`${question.id}:answer`}
+            question={question}
+            sourceType={1}
+            title={t('answerPdf')}
+            errorMessage={t('imageUnavailable')}
+          />
+        </TabsContent>
+        {textPanel && (
+          <TabsContent
+            value="text"
+            className="m-0 min-h-0 flex-1 overflow-y-auto p-5"
+          >
+            {textPanel}
+          </TabsContent>
+        )}
+      </Tabs>
+      {similar.length > 0 && (
+        <div className="max-h-32 overflow-y-auto border-t p-3">
+          <p className="mb-2 text-sm font-semibold">{t('similar')}</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {similar.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onChooseSimilar?.(item)}
+                className="min-h-11 shrink-0 rounded-xl border px-3 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="font-mono text-xs text-primary">
+                  {item.paper_key} · Q{item.question_number}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

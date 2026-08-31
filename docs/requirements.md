@@ -57,9 +57,10 @@ architecture must allow new exam families without global rewrites.
   the top five matches.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
-- Clicking a question opens a focused modal document viewer instead of adding an
-  inline preview below the result list. The viewer loads only the catalog-owned
-  pre-rendered JPG and reports a missing asset instead of rendering or embedding a PDF.
+- In the administrator asset tree, clicking a paper expands its questions as
+  child nodes. Clicking a question updates the adjacent document viewer without
+  opening a modal. The viewer loads only the catalog-owned pre-rendered JPG and
+  reports a missing asset instead of rendering or embedding a PDF.
 - An answer can be viewed as a pre-rendered JPG and as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
   the question may still be published.
@@ -129,8 +130,8 @@ architecture must allow new exam families without global rewrites.
 - The administrator overview samples host CPU, RAM and disk use every two
   seconds while visible. Project storage separates code, databases, papers and
   other runtime data.
-- The question modal switches between the protected question paper, answer paper,
-  and structured text while retaining question context.
+- The administrator question viewer switches between the protected question
+  paper, answer paper, and structured text while retaining question context.
 - Light, dark, and follow-system themes are supported.
 - Chinese and English use the same i18n system. All user-visible interface text
   belongs in translation resources.

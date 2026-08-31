@@ -180,6 +180,59 @@ def test_packer_reports_only_and_duplicate_sources(tmp_path: Path) -> None:
     assert not (output_dir / "cie_a_level_9231.sqlite").exists()
 
 
+def test_packer_does_not_publish_mark_scheme_without_question(tmp_path: Path) -> None:
+    metadata_root = tmp_path / "metadata"
+    output_dir = tmp_path / "databases"
+    _write_sidecar(metadata_root, "only_ms/9231_w22_ms_11_q02.json", document_type="ms")
+
+    summary = pack_subject_database(
+        PackOptions(
+            metadata_root=metadata_root,
+            output_dir=output_dir,
+            qualification="a_level",
+            exam_board="cie",
+            course_code="9231",
+        )
+    )
+
+    assert summary.only_ms == 1
+    assert summary.questions_written == 0
+    assert summary.question_images_written == 0
+
+
+def test_packer_skips_empty_parent_question_placeholder(tmp_path: Path) -> None:
+    metadata_root = tmp_path / "metadata"
+    output_dir = tmp_path / "databases"
+    placeholder = _write_sidecar(
+        metadata_root,
+        "cie/a_level/9709/2016/m16/12/qp/9709_m16_qp_12_q01.json",
+        document_type="qp",
+        question_number="1",
+        crop_regions=[],
+    )
+    placeholder.with_suffix(".jpg").unlink()
+    _write_sidecar(
+        metadata_root,
+        "cie/a_level/9709/2016/m16/12/qp/9709_m16_qp_12_q01_i.json",
+        document_type="qp",
+        question_number="1(i)",
+    )
+
+    summary = pack_subject_database(
+        PackOptions(
+            metadata_root=metadata_root,
+            output_dir=output_dir,
+            qualification="a_level",
+            exam_board="cie",
+            course_code="9709",
+        )
+    )
+
+    assert summary.questions_written == 1
+    assert summary.question_images_written == 1
+    assert any("skipped empty parent-question placeholder" in warning for warning in summary.warnings)
+
+
 def test_ms_sidecar_with_content_is_rejected_by_schema(tmp_path: Path) -> None:
     metadata_root = tmp_path / "metadata"
     output_dir = tmp_path / "databases"

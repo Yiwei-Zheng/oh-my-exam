@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from oh_my_exam.pipelines import update_catalog
 
 
-def test_update_catalog_continues_after_one_project_fails(monkeypatch, tmp_path: Path) -> None:
+def test_update_catalog_processes_remaining_projects_then_reports_partial_failure(monkeypatch, tmp_path: Path) -> None:
     active = tmp_path / "databases/global_exam_catalog.sqlite"
     calls: list[str] = []
     monkeypatch.setattr(
@@ -35,9 +37,9 @@ def test_update_catalog_continues_after_one_project_fails(monkeypatch, tmp_path:
         lambda _root: calls.append("release") or active,
     )
 
-    result = update_catalog.update_catalog(tmp_path, ["ocr:step", "uat:engaa"], 2)
+    with pytest.raises(RuntimeError, match="PMT down"):
+        update_catalog.update_catalog(tmp_path, ["ocr:step", "uat:engaa"], 2)
 
-    assert result == active
     assert calls == ["pack", "pack", "release"]
 
 

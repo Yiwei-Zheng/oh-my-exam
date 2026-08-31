@@ -118,6 +118,8 @@ def _load_one_record(
     record = build_record(path, metadata, metadata_root, exam_board=exam_board, qualification=qualification)
     if record is None:
         return None, [f"{path}: skipped because filename/source_stem does not match splitter metadata naming"]
+    if record.image_path is None and not record.crop_regions and not str(metadata.get("content") or "").strip():
+        return None, [f"{path}: skipped empty parent-question placeholder"]
     warnings.extend(record.warnings)
     return record, warnings
 

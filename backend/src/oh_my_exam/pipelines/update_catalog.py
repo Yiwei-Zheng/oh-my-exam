@@ -82,9 +82,8 @@ def update_catalog(
         if not completed:
             raise RuntimeError(f"all selected projects failed during {current_stage}: " + "; ".join(failures))
     if failures:
-        _progress("classifying", 99, f"已更新 {completed} 个项目；{len(failures)} 个失败: {'; '.join(failures)}")
-    else:
-        _progress(_stage_name(stages[-1]), 99, "所选操作已完成")
+        raise RuntimeError(f"已更新部分项目，但有 {len(failures)} 个失败: {'; '.join(failures)}")
+    _progress(_stage_name(stages[-1]), 99, "所选操作已完成")
     return active
 
 

@@ -32,7 +32,8 @@ def match_metadata_records(records: list[MetadataRecord]) -> MatchResult:
             ambiguous_match += 1
             warnings.append(f"{key}: ambiguous QP/MS match because both sides have duplicates")
         selected.extend(qp[:1])
-        selected.extend(ms[:1])
+        if qp:
+            selected.extend(ms[:1])
 
     return MatchResult(
         records=selected,
