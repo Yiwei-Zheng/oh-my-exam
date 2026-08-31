@@ -432,6 +432,30 @@ def test_9231_qp_keeps_readable_top_level_question_without_subparts() -> None:
     assert question_numbers[:6] == ["1(a)", "1(b)", "1(c)", "1(d)", "2", "3(a)"]
 
 
+def test_9231_qp_render_preserves_question_text_near_page_header() -> None:
+    module = _load_9231_cutter_module()
+    fitz = pytest.importorskip("fitz")
+    pdf_path = _project_root() / "backend" / "data" / "raw_papers" / "cie" / "a_level" / "9231" / "2023" / "w23" / "9231_w23_qp_42.pdf"
+    if not pdf_path.exists():
+        pytest.skip("local 9231 w23 qp42 sample is not installed")
+
+    module._load_pillow()
+    with fitz.open(pdf_path) as document:
+        clip = module._qp_question_clips(document, module._qp_question_ranges(document)[1])[0][1]
+        image = module._render_qp_clip(document, 3, clip, 150)
+
+    scale = 150 / 72
+    first_line = image.crop(
+        (
+            int((80 - clip.x0) * scale),
+            int((57 - clip.y0) * scale),
+            int((280 - clip.x0) * scale),
+            int((70 - clip.y0) * scale),
+        )
+    )
+    assert first_line.getextrema()[0] < 128
+
+
 def test_9231_ms_splits_image_and_text_layout_to_leaf_subquestions() -> None:
     module = _load_9231_cutter_module()
     fitz = pytest.importorskip("fitz")

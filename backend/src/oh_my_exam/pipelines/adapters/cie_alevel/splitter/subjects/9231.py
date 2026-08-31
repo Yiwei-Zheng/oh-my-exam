@@ -1050,12 +1050,12 @@ def _render_qp_clip(document: "fitz.Document", page_index: int, clip: "fitz.Rect
     image = Image.frombytes("L", (pixmap.width, pixmap.height), pixmap.samples)
     draw = ImageDraw.Draw(image)
     scale = dpi / 72.0
-    _mask_qp_header_templates(draw, image, clip, scale)
     for block in _page_rawdict(page)["blocks"]:
-        if block["type"] != 0 or not _is_repeated_answer_line(block):
-            continue
         rect = fitz_module.Rect(block["bbox"])
         if not rect.intersects(clip):
+            continue
+        is_template = _is_page_number_rect(rect, page.rect) or _is_qp_header_barcode_rect(rect)
+        if not is_template and (block["type"] != 0 or not _is_repeated_answer_line(block)):
             continue
         masked = rect & clip
         draw.rectangle(
@@ -1068,23 +1068,6 @@ def _render_qp_clip(document: "fitz.Document", page_index: int, clip: "fitz.Rect
             fill=255,
         )
     return image
-
-
-def _mask_qp_header_templates(draw, image: "PILImage.Image", clip: "fitz.Rect", scale: float) -> None:
-    fitz_module = _load_fitz()
-    for rect in (fitz_module.Rect(80.0, 42.0, 280.0, 66.0),):
-        if not rect.intersects(clip):
-            continue
-        masked = rect & clip
-        draw.rectangle(
-            (
-                max(0, int((masked.x0 - clip.x0) * scale) - 2),
-                max(0, int((masked.y0 - clip.y0) * scale) - 2),
-                min(image.width, int((masked.x1 - clip.x0) * scale) + 2),
-                min(image.height, int((masked.y1 - clip.y0) * scale) + 2),
-            ),
-            fill=255,
-        )
 
 
 def _ms_display_rect(page: "fitz.Page", rect: "fitz.Rect") -> "fitz.Rect":
