@@ -33,7 +33,9 @@ const zh = {
   topicSearch: '知识点搜题',
   knowledgePoint: '知识点',
   allTopics: '全部知识点',
-  chooseTopic: '选择知识点后查找对应题目',
+  chooseTopic: '可选择多个标签；匹配任一标签的题目都会显示',
+  selectedTopics: '已选知识点',
+  clearTopics: '清空选择',
   uploadQuestionImage: '上传或粘贴题目图片',
   imageSearchHint:
     '支持 JPG、PNG、WebP, 最大 8 MB. 也可直接按 Ctrl/Cmd+V 粘贴截图',
@@ -161,7 +163,9 @@ const en: Record<keyof typeof zh, string> = {
   topicSearch: 'Topic search',
   knowledgePoint: 'Knowledge point',
   allTopics: 'All knowledge points',
-  chooseTopic: 'Choose a knowledge point to find matching questions',
+  chooseTopic: 'Select multiple tags; questions matching any tag are shown',
+  selectedTopics: 'Selected topics',
+  clearTopics: 'Clear selection',
   uploadQuestionImage: 'Upload or paste a question image',
   imageSearchHint:
     'JPG, PNG, or WebP up to 8 MB. You can also paste a screenshot with Ctrl/Cmd+V',

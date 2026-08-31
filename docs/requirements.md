@@ -43,6 +43,11 @@ architecture must allow new exam families without global rewrites.
 - Knowledge point and syllabus section filters use their own searchable tree;
   question type, difficulty, and processing state remain tags and filters rather
   than competing roots in the paper tree.
+- The knowledge tree is global rather than grouped by exam: academic subjects
+  such as Mathematics and Physics contain broad areas such as Statistics,
+  Mechanics, or Electromagnetism, followed by specific tags. Questions may
+  carry multiple tags, and selecting multiple tree nodes returns questions
+  matching any selected tag. Exam program remains an independent filter.
 - Tree nodes load lazily and large question lists use cursor pagination.
 - Search supports printed question text, identity fields, normalized tags, and
   syllabus knowledge points.

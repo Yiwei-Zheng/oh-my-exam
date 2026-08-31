@@ -34,19 +34,116 @@ import type { Exam, ImageSearchResponse, Question, Topic } from '@/lib/types'
 type SearchMode = 'text' | 'image' | 'topic'
 const ACCEPTED_IMAGES = ['image/jpeg', 'image/png', 'image/webp']
 
-type TopicNode = Topic & { children: TopicNode[] }
+type SourceTopicNode = Topic & { children: SourceTopicNode[] }
 
-function buildTopicTree(topics: Topic[]): TopicNode[] {
-  const nodes = new Map<number, TopicNode>(
+type TopicNode = {
+  id: string
+  title: string
+  codes: string[]
+  questionCount: number | null
+  children: TopicNode[]
+}
+
+const AREA_ALIASES: Record<string, { key: string; title: string }> = {
+  mechanics: { key: 'mechanics', title: 'Mechanics' },
+  further_mechanics: { key: 'mechanics', title: 'Mechanics' },
+  probability_statistics_1: { key: 'statistics', title: 'Statistics' },
+  probability_statistics_2: { key: 'statistics', title: 'Statistics' },
+  further_statistics: { key: 'statistics', title: 'Statistics' },
+  pure: { key: 'pure_mathematics', title: 'Pure Mathematics' },
+  further_pure_1: { key: 'pure_mathematics', title: 'Pure Mathematics' },
+  further_pure_2: { key: 'pure_mathematics', title: 'Pure Mathematics' },
+}
+
+const LEAF_AREA_ALIASES: Record<string, { key: string; title: string }> = {
+  algebra_functions: { key: 'algebra', title: 'Algebra' },
+  sequences_series: { key: 'algebra', title: 'Algebra' },
+  exponentials_logarithms: { key: 'algebra', title: 'Algebra' },
+  graphs: { key: 'algebra', title: 'Algebra' },
+  matrices: { key: 'algebra', title: 'Algebra' },
+  differentiation: { key: 'calculus', title: 'Calculus' },
+  integration: { key: 'calculus', title: 'Calculus' },
+  coordinate_geometry: { key: 'geometry', title: 'Geometry' },
+  geometry: { key: 'geometry', title: 'Geometry' },
+  probability_statistics: { key: 'statistics', title: 'Statistics' },
+  logic_proof: { key: 'reasoning', title: 'Mathematical Reasoning' },
+  number_ratio_units: { key: 'number', title: 'Number' },
+  trigonometry: { key: 'trigonometry', title: 'Trigonometry' },
+}
+
+const HIDDEN_TOPIC_CODES = new Set(['paper_1', 'paper_2'])
+
+function sourceTopicTree(topics: Topic[]): SourceTopicNode[] {
+  const nodes = new Map<number, SourceTopicNode>(
     topics.map((topic) => [topic.id, { ...topic, children: [] }]),
   )
-  const roots: TopicNode[] = []
+  const roots: SourceTopicNode[] = []
   nodes.forEach((node) => {
     const parent =
       node.parent_id === null ? undefined : nodes.get(node.parent_id)
     if (parent) parent.children.push(node)
     else roots.push(node)
   })
+  return roots
+}
+
+function localTopicCode(code: string) {
+  return code.split(':').at(-1) || code
+}
+
+function buildTopicTree(topics: Topic[]): TopicNode[] {
+  const roots: TopicNode[] = []
+
+  function merge(
+    source: SourceTopicNode,
+    target: TopicNode[],
+    path: string,
+    depth: number,
+  ) {
+    const localCode = localTopicCode(source.code)
+    if (depth === 1 && HIDDEN_TOPIC_CODES.has(localCode)) return
+    const alias = depth === 1 ? AREA_ALIASES[localCode] : undefined
+    const leafArea =
+      depth === 1 && source.children.length === 0
+        ? LEAF_AREA_ALIASES[localCode]
+        : undefined
+    if (leafArea) {
+      const areaId = `${path}/${leafArea.key}`
+      let area = target.find((item) => item.id === areaId)
+      if (!area) {
+        area = {
+          id: areaId,
+          title: leafArea.title,
+          codes: [],
+          questionCount: null,
+          children: [],
+        }
+        target.push(area)
+      }
+      merge(source, area.children, areaId, depth + 1)
+      return
+    }
+    const key = alias?.key || localCode
+    const id = `${path}/${key}`
+    let node = target.find((item) => item.id === id)
+    if (!node) {
+      node = {
+        id,
+        title: alias?.title || source.title,
+        codes: [],
+        questionCount: 0,
+        children: [],
+      }
+      target.push(node)
+    }
+    node.codes.push(source.code)
+    node.questionCount = (node.questionCount || 0) + source.question_count
+    for (const child of source.children) {
+      merge(child, node.children, id, depth + 1)
+    }
+  }
+
+  for (const source of sourceTopicTree(topics)) merge(source, roots, '', 0)
   return roots
 }
 
@@ -63,15 +160,30 @@ function filterTopicTree(nodes: TopicNode[], query: string): TopicNode[] {
 }
 
 function collectTopicCodes(node: TopicNode): string[] {
-  return [node.code, ...node.children.flatMap(collectTopicCodes)]
+  return [...node.codes, ...node.children.flatMap(collectTopicCodes)]
 }
 
-function findTopic(nodes: TopicNode[], code: string): TopicNode | undefined {
+function findTopic(nodes: TopicNode[], id: string): TopicNode | undefined {
   for (const node of nodes) {
-    if (node.code === code) return node
-    const child = findTopic(node.children, code)
+    if (node.id === id) return node
+    const child = findTopic(node.children, id)
     if (child) return child
   }
+}
+
+function topicPaths(
+  nodes: TopicNode[],
+  prefix: string[] = [],
+): Map<string, string> {
+  const paths = new Map<string, string>()
+  for (const node of nodes) {
+    const path = [...prefix, node.title]
+    paths.set(node.id, path.join(' / '))
+    for (const [id, label] of topicPaths(node.children, path)) {
+      paths.set(id, label)
+    }
+  }
+  return paths
 }
 
 function TopicTreeItem({
@@ -79,33 +191,36 @@ function TopicTreeItem({
   depth,
   expanded,
   selected,
+  filtering,
   onToggle,
   onSelect,
 }: {
   node: TopicNode
   depth: number
-  expanded: Set<number>
-  selected: string
-  onToggle: (id: number) => void
-  onSelect: (code: string) => void
+  expanded: Set<string>
+  selected: Set<string>
+  filtering: boolean
+  onToggle: (id: string) => void
+  onSelect: (id: string) => void
 }) {
   const isBranch = node.children.length > 0
-  const isExpanded = expanded.has(node.id)
+  const isExpanded = expanded.has(node.id) || filtering
   return (
     <div
       role="treeitem"
       aria-expanded={isBranch ? isExpanded : undefined}
-      aria-selected={selected === node.code}
+      aria-selected={selected.has(node.id)}
     >
       <div
-        className={`flex min-h-11 items-center rounded-xl transition-colors ${selected === node.code ? 'bg-primary/10 text-primary' : 'hover:bg-muted/70'}`}
+        className={`flex min-h-11 items-center rounded-xl transition-colors ${selected.has(node.id) ? 'bg-primary/10 text-primary' : 'hover:bg-muted/70'}`}
         style={{ paddingLeft: `${4 + depth * 16}px` }}
       >
         <button
           type="button"
           className="grid size-11 shrink-0 place-items-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={node.title}
-          onClick={() => (isBranch ? onToggle(node.id) : onSelect(node.code))}
+          onClick={() => isBranch && onToggle(node.id)}
+          disabled={!isBranch}
         >
           <HugeiconsIcon
             icon={ArrowRight01Icon}
@@ -114,16 +229,29 @@ function TopicTreeItem({
         </button>
         <button
           type="button"
+          aria-pressed={selected.has(node.id)}
           className="flex min-h-11 min-w-0 flex-1 items-center justify-between gap-3 rounded-xl pr-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          onClick={() => onSelect(node.code)}
+          onClick={() => onSelect(node.id)}
         >
-          <span className="truncate text-sm font-medium">{node.title}</span>
-          <span className="font-mono text-xs tabular-nums text-muted-foreground">
-            {node.question_count}
+          <span
+            aria-hidden="true"
+            className={`grid size-5 shrink-0 place-items-center rounded-md border transition-colors ${selected.has(node.id) ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'}`}
+          >
+            {selected.has(node.id) && (
+              <HugeiconsIcon icon={Tick02Icon} className="size-3.5" />
+            )}
           </span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">
+            {node.title}
+          </span>
+          {node.questionCount !== null && (
+            <span className="font-mono text-xs tabular-nums text-muted-foreground">
+              {node.questionCount}
+            </span>
+          )}
         </button>
       </div>
-      {isBranch && isExpanded && (
+      {isBranch && (isExpanded || filtering) && (
         <div role="group" className="ui-tree-enter">
           {node.children.map((child) => (
             <TopicTreeItem
@@ -132,6 +260,7 @@ function TopicTreeItem({
               depth={depth + 1}
               expanded={expanded}
               selected={selected}
+              filtering={filtering}
               onToggle={onToggle}
               onSelect={onSelect}
             />
@@ -182,9 +311,11 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
   const [topics, setTopics] = useState<Topic[]>([])
   const [query, setQuery] = useState('')
   const [examId, setExamId] = useState('all')
-  const [topicCode, setTopicCode] = useState('all')
+  const [selectedTopicIds, setSelectedTopicIds] = useState<Set<string>>(
+    new Set(),
+  )
   const [topicFilter, setTopicFilter] = useState('')
-  const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set())
+  const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set())
   const [imageData, setImageData] = useState('')
   const [results, setResults] = useState<Question[]>([])
   const [selected, setSelected] = useState<Question | null>(null)
@@ -218,7 +349,10 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
     apiRequest<Topic[]>(`/api/v1/topics${params.size ? `?${params}` : ''}`)
       .then((next) => {
         setTopics(next)
-        setTopicCode('all')
+        setSelectedTopicIds(new Set())
+        setExpandedTopics(
+          new Set(buildTopicTree(next).map((topic) => topic.id)),
+        )
       })
       .catch(() => setTopics([]))
   }, [examId])
@@ -244,11 +378,12 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
     () => filterTopicTree(topicTree, topicFilter),
     [topicFilter, topicTree],
   )
+  const topicLabels = useMemo(() => topicPaths(topicTree), [topicTree])
 
   function canSearch() {
     if (mode === 'text') return Boolean(query.trim())
     if (mode === 'image') return Boolean(imageData)
-    return topicCode !== 'all'
+    return selectedTopicIds.size > 0
   }
 
   async function search(event: FormEvent) {
@@ -280,11 +415,17 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
           limit: '50',
         })
         if (examId !== 'all') params.set('exam_id', examId)
-        if (mode === 'topic' && topicCode !== 'all') {
-          const selectedTopic = findTopic(topicTree, topicCode)
-          for (const code of selectedTopic
-            ? collectTopicCodes(selectedTopic)
-            : [topicCode]) {
+        if (mode === 'topic' && selectedTopicIds.size) {
+          const expandedCodes = new Set<string>()
+          for (const topicId of selectedTopicIds) {
+            const selectedTopic = findTopic(topicTree, topicId)
+            for (const code of selectedTopic
+              ? collectTopicCodes(selectedTopic)
+              : []) {
+              expandedCodes.add(code)
+            }
+          }
+          for (const code of expandedCodes) {
             params.append('topic', code)
           }
         }
@@ -476,8 +617,8 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                   <div className="max-h-72 overflow-y-auto rounded-2xl border bg-muted/15 p-2">
                     <button
                       type="button"
-                      className={`min-h-11 w-full rounded-xl px-3 text-left text-sm font-medium transition-colors ${topicCode === 'all' ? 'bg-primary/10 text-primary' : 'hover:bg-muted/70'}`}
-                      onClick={() => setTopicCode('all')}
+                      className={`min-h-11 w-full rounded-xl px-3 text-left text-sm font-medium transition-colors ${selectedTopicIds.size === 0 ? 'bg-primary/10 text-primary' : 'hover:bg-muted/70'}`}
+                      onClick={() => setSelectedTopicIds(new Set())}
                     >
                       {t('allTopics')}
                     </button>
@@ -488,7 +629,8 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                           node={node}
                           depth={0}
                           expanded={expandedTopics}
-                          selected={topicCode}
+                          selected={selectedTopicIds}
+                          filtering={Boolean(topicFilter)}
                           onToggle={(id) =>
                             setExpandedTopics((current) => {
                               const next = new Set(current)
@@ -497,11 +639,54 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                               return next
                             })
                           }
-                          onSelect={setTopicCode}
+                          onSelect={(id) =>
+                            setSelectedTopicIds((current) => {
+                              const next = new Set(current)
+                              if (next.has(id)) next.delete(id)
+                              else next.add(id)
+                              return next
+                            })
+                          }
                         />
                       ))}
                     </div>
                   </div>
+                  {selectedTopicIds.size > 0 && (
+                    <div
+                      className="flex flex-wrap items-center gap-2 pt-1"
+                      aria-label={t('selectedTopics')}
+                    >
+                      {Array.from(selectedTopicIds).map((id) => (
+                        <button
+                          key={id}
+                          type="button"
+                          className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-full bg-primary/10 px-3 text-xs font-medium text-primary hover:bg-primary/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          onClick={() =>
+                            setSelectedTopicIds((current) => {
+                              const next = new Set(current)
+                              next.delete(id)
+                              return next
+                            })
+                          }
+                        >
+                          <span className="truncate">
+                            {topicLabels.get(id) || id}
+                          </span>
+                          <HugeiconsIcon
+                            icon={Cancel01Icon}
+                            className="size-3.5 shrink-0"
+                          />
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className="min-h-9 rounded-lg px-2 text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => setSelectedTopicIds(new Set())}
+                      >
+                        {t('clearTopics')}
+                      </button>
+                    </div>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     {t('chooseTopic')}
                   </p>

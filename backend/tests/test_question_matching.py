@@ -11,12 +11,23 @@ from oh_my_exam.config import Settings
 from oh_my_exam.main import create_app
 from oh_my_exam.pipelines.packaging.global_schema import migrate_global_catalog
 from oh_my_exam.question_matching import _component_family, rebuild_question_matching
+from oh_my_exam.question_matching_cli import DEFAULT_TOPICS
 
 
 def test_normalizes_historical_and_zero_padded_components() -> None:
     assert _component_family("01") == "1"
     assert _component_family("06") == "6"
     assert _component_family("72") == "6"
+
+
+def test_default_catalog_has_global_subject_and_area_hierarchy() -> None:
+    catalog = json.loads(DEFAULT_TOPICS.read_text(encoding="utf-8"))
+    physics = next(course for course in catalog["courses"] if course["course_code"] == "9702")
+    topics = {topic["code"]: topic for topic in physics["topics"]}
+
+    assert topics["physics"].get("parent") is None
+    assert topics["electromagnetism"]["parent"] == "physics"
+    assert topics["magnetic_fields"]["parent"] == "electromagnetism"
 
 
 def test_builds_syllabus_tags_search_and_similar_questions(tmp_path: Path) -> None:
@@ -48,6 +59,15 @@ def test_builds_syllabus_tags_search_and_similar_questions(tmp_path: Path) -> No
     assert "Kinematics" in results[0]["topics"]
     topic_code = "syllabus:cie:a_level:9709:kinematics"
     assert {item["id"] for item in catalog.search_questions(topic_codes=(topic_code,))} == {1, 2}
+    assert {
+        item["id"]
+        for item in catalog.search_questions(
+            topic_codes=(
+                "syllabus:cie:a_level:9709:kinematics",
+                "syllabus:cie:a_level:9709:mechanics",
+            )
+        )
+    } == {1, 2, 3}
     similar = catalog.list_similar_questions("a_level:cie:9709", 1)
     assert similar[0]["id"] == 2
     assert similar[0]["score"] > 0
