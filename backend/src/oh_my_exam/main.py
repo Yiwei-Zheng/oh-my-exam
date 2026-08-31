@@ -263,25 +263,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
-    @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/source/{kind}.jpg")
-    def get_question_source_page(exam_id: str, question_id: int, kind: str) -> Response:
-        if kind not in {"question", "answer"}:
-            raise HTTPException(status_code=404, detail=f"unsupported paper kind: {kind}")
-        try:
-            catalog.get_question_image(exam_id, question_id, kind)
-            storage_key, regions = catalog.get_question_source_regions(exam_id, question_id, kind)
-            content, page_index = papers.render_marked_page(storage_key, regions)
-        except (CatalogNotFoundError, PaperNotFoundError) as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return Response(
-            content,
-            media_type="image/jpeg",
-            headers={
-                "Cache-Control": "private, max-age=86400, immutable",
-                "X-Source-Page": str(page_index + 1),
-            },
-        )
-
     @app.get("/api/v1/exams/{exam_id}/papers/{paper_id}/{kind}")
     def get_paper(exam_id: str, paper_id: int, kind: str) -> FileResponse:
         try:

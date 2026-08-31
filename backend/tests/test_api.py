@@ -221,21 +221,6 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert paper.headers["content-type"] == "application/pdf"
     assert paper.content.startswith(b"%PDF")
 
-    source_page = client.get(
-        "/api/v1/exams/admissions:uat:engaa/questions/7/source/question.jpg"
-    )
-    assert source_page.status_code == 200
-    assert source_page.headers["content-type"] == "image/jpeg"
-    assert source_page.headers["x-source-page"] == "2"
-    with Image.open(BytesIO(source_page.content)) as rendered:
-        assert rendered.size == (400, 200)
-
-    source_answer = client.get(
-        "/api/v1/exams/admissions:uat:engaa/questions/7/source/answer.jpg"
-    )
-    assert source_answer.status_code == 200
-    assert source_answer.headers["x-source-page"] == "2"
-
     paper_range = client.get(
         "/api/v1/exams/admissions:uat:engaa/papers/1/question",
         headers={"Range": "bytes=0-3"},

@@ -526,42 +526,6 @@ class GlobalCatalog:
             filename=str(image["original_filename"]),
         )
 
-    def get_question_source_regions(
-        self, exam_id: str, question_id: int, kind: str
-    ) -> tuple[str, list[dict[str, object]]]:
-        if kind not in {"question", "answer"}:
-            raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
-        joins = (
-            "JOIN question_regions r ON r.question_id = qu.id "
-            "JOIN paper_documents pd ON pd.id = r.document_id"
-            if kind == "question"
-            else "JOIN answers a ON a.question_id = qu.id "
-            "JOIN answer_regions r ON r.answer_id = a.id "
-            "JOIN paper_documents pd ON pd.id = a.source_document_id"
-        )
-        with closing(self._connect()) as connection:
-            rows = connection.execute(
-                f"""
-                SELECT pd.storage_key, r.region_order, r.page_index,
-                       r.x0, r.y0, r.x1, r.y1
-                FROM questions qu
-                JOIN papers p ON p.id = qu.paper_id
-                {joins}
-                WHERE qu.id = ? AND p.exam_program_id = ?
-                ORDER BY r.region_order
-                """,
-                (question_id, self._program_id(connection, exam_id)),
-            ).fetchall()
-        if not rows:
-            raise CatalogNotFoundError(f"source regions not found: {question_id}/{kind}")
-        storage_key = str(rows[0]["storage_key"])
-        keys = ("region_order", "page_index", "x0", "y0", "x1", "y1")
-        return storage_key, [
-            {key: row[key] for key in keys}
-            for row in rows
-            if row["storage_key"] == storage_key
-        ]
-
     def get_paper_storage_key(self, exam_id: str, paper_id: int, kind: str) -> str:
         if kind not in {"question", "answer"}:
             raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
