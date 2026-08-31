@@ -117,6 +117,7 @@ def _create_global_database(path: Path) -> None:
             CREATE TABLE question_features (
                 question_id INTEGER, feature_id INTEGER, role TEXT, weight REAL
             );
+            INSERT INTO question_features VALUES (7, 1, 'secondary', 0.5);
             INSERT INTO question_features VALUES (7, 2, 'primary', 1.0);
             """
         )
@@ -202,6 +203,7 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     )
     assert topic_results.status_code == 200
     assert topic_results.json()[0]["id"] == 7
+    assert set(topic_results.json()[0]["topics"]) == {"Mechanics", "Kinematics"}
 
     question_image = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/question.jpg")
     assert question_image.status_code == 200
@@ -219,6 +221,21 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert paper.headers["content-type"] == "application/pdf"
     assert paper.content.startswith(b"%PDF")
 
+    source_page = client.get(
+        "/api/v1/exams/admissions:uat:engaa/questions/7/source/question.jpg"
+    )
+    assert source_page.status_code == 200
+    assert source_page.headers["content-type"] == "image/jpeg"
+    assert source_page.headers["x-source-page"] == "2"
+    with Image.open(BytesIO(source_page.content)) as rendered:
+        assert rendered.size == (400, 200)
+
+    source_answer = client.get(
+        "/api/v1/exams/admissions:uat:engaa/questions/7/source/answer.jpg"
+    )
+    assert source_answer.status_code == 200
+    assert source_answer.headers["x-source-page"] == "2"
+
     paper_range = client.get(
         "/api/v1/exams/admissions:uat:engaa/papers/1/question",
         headers={"Range": "bytes=0-3"},
@@ -230,7 +247,7 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert unsupported_kind.status_code == 404
 
 
-def test_legacy_catalog_serves_existing_question_image(tmp_path: Path) -> None:
+def test_catalog_without_registered_question_image_returns_not_found(tmp_path: Path) -> None:
     client = _client(tmp_path, with_admin=True)
     database_path = tmp_path / "databases" / "global_exam_catalog.sqlite"
     with sqlite3.connect(database_path) as connection:
@@ -241,8 +258,13 @@ def test_legacy_catalog_serves_existing_question_image(tmp_path: Path) -> None:
         "/api/v1/exams/admissions:uat:engaa/questions/7/question.jpg"
     )
 
-    assert response.status_code == 200
-    assert response.headers["content-type"] == "image/jpeg"
+    assert response.status_code == 404
+    assert response.json() == {"detail": "catalog has no pre-rendered question images"}
+
+    source_response = client.get(
+        "/api/v1/exams/admissions:uat:engaa/questions/7/source/question.jpg"
+    )
+    assert source_response.status_code == 404
 
 
 def test_question_tree_uses_uppercase_exam_codes_and_collapses_duplicate_year(tmp_path: Path) -> None:

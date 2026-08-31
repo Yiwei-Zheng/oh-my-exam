@@ -49,3 +49,9 @@ TMUA questions from being discarded by the catalog's default recency ordering.
 The search interface does not display OCR or stored question text in match
 lists; it shows identity and topic tags, then loads the pre-rendered question
 image when the user selects a match.
+
+Knowledge-point search uses the syllabus parent hierarchy and includes all
+descendant topics when a branch is selected. A question may carry multiple
+topic tags. From the preview, users can switch to the matching source-paper or
+source-answer page; the server renders the recorded page and marks every region
+for that question on the page.

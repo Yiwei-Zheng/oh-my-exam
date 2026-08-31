@@ -574,7 +574,7 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
                   </span>
                   {item.topics?.length ? (
                     <span className="mt-3 flex flex-wrap gap-1">
-                      {item.topics.slice(0, 3).map((topic) => (
+                      {item.topics.map((topic) => (
                         <Badge key={topic} variant="secondary">
                           {topic}
                         </Badge>

@@ -63,7 +63,7 @@ Answer corrections are append-only `answer_versions` rows with `raw_text` and `m
 
 ## Question browser and documents
 
-The browser uses the hierarchy qualification, exam board, program, year, session, paper and question. Paper nodes fetch question lists on demand. Knowledge points expose a separate `Mathematics / domain / topic` hierarchy backed by syllabus parent ids. The right rail switches between pre-rendered question JPG, pre-rendered answer JPG and structured text. Full source PDFs remain available through authorized internal IDs. The browser never receives filesystem paths or upstream source URLs. The image endpoint resolves catalog-owned storage keys and never crops a PDF during a request.
+The browser uses the hierarchy qualification, exam board, program, year, session, paper and question. Paper nodes fetch question lists on demand. Knowledge points expose a separate `Mathematics / domain / topic` hierarchy backed by syllabus parent ids. The right rail switches between pre-rendered question JPG, pre-rendered answer JPG and structured text. Full source PDFs remain available through authorized internal IDs. On request, the paper-store boundary renders the recorded source page and marks the question or answer regions for in-context viewing. The browser never receives filesystem paths or upstream source URLs.
 
 The authenticated administrator resource endpoint samples host CPU, memory and
 disk through `psutil`. Project storage traversal is cached and classifies code,

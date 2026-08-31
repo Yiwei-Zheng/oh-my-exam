@@ -53,10 +53,9 @@ architecture must allow new exam families without global rewrites.
 - Deep links preserve the selected node, filters, document view, and page.
 - A paper can be opened as a complete PDF.
 - Clicking a question opens a focused modal document viewer instead of adding an
-  inline preview below the result list. The viewer prefers a pre-rendered JPG and
-  falls back to the protected source PDF page when an older catalog has no image.
-- An answer can be viewed as a pre-rendered JPG, within its complete source PDF, and
-  as extracted raw text or normalized Markdown.
+  inline preview below the result list. The viewer loads only the catalog-owned
+  pre-rendered JPG and reports a missing asset instead of rendering or embedding a PDF.
+- An answer can be viewed as a pre-rendered JPG and as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
   the question may still be published.
 

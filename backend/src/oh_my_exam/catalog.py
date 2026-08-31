@@ -282,7 +282,15 @@ class GlobalCatalog:
                 sql += " AND (" + operator.join(clauses) + ")"
             if topic_codes and has_features:
                 placeholders = ", ".join("?" for _ in topic_codes)
-                sql += f" AND f.canonical_code IN ({placeholders})"
+                sql += f"""
+                    AND EXISTS (
+                        SELECT 1
+                        FROM question_features filter_qf
+                        JOIN features filter_f ON filter_f.id = filter_qf.feature_id
+                        WHERE filter_qf.question_id = qu.id
+                          AND filter_f.canonical_code IN ({placeholders})
+                    )
+                """
                 parameters.extend(topic_codes)
             sql += " GROUP BY qu.id ORDER BY p.year DESC, p.source_key, qu.sort_order"
             if similarity_text is None:
@@ -518,26 +526,41 @@ class GlobalCatalog:
             filename=str(image["original_filename"]),
         )
 
-    def get_legacy_question_image_filename(self, exam_id: str, question_id: int, kind: str) -> str:
+    def get_question_source_regions(
+        self, exam_id: str, question_id: int, kind: str
+    ) -> tuple[str, list[dict[str, object]]]:
         if kind not in {"question", "answer"}:
-            raise CatalogNotFoundError(f"unsupported question image kind: {kind}")
+            raise CatalogNotFoundError(f"unsupported paper kind: {kind}")
+        joins = (
+            "JOIN question_regions r ON r.question_id = qu.id "
+            "JOIN paper_documents pd ON pd.id = r.document_id"
+            if kind == "question"
+            else "JOIN answers a ON a.question_id = qu.id "
+            "JOIN answer_regions r ON r.answer_id = a.id "
+            "JOIN paper_documents pd ON pd.id = a.source_document_id"
+        )
         with closing(self._connect()) as connection:
-            program_id = self._program_id(connection, exam_id)
-            row = connection.execute(
-                """
-                SELECT p.source_key, qu.local_key
+            rows = connection.execute(
+                f"""
+                SELECT pd.storage_key, r.region_order, r.page_index,
+                       r.x0, r.y0, r.x1, r.y1
                 FROM questions qu
                 JOIN papers p ON p.id = qu.paper_id
+                {joins}
                 WHERE qu.id = ? AND p.exam_program_id = ?
+                ORDER BY r.region_order
                 """,
-                (question_id, program_id),
-            ).fetchone()
-        if row is None:
-            raise CatalogNotFoundError(f"question not found: {question_id}")
-        source_key = str(row["source_key"])
-        if kind == "answer":
-            source_key = source_key.replace("_qp_", "_ms_", 1)
-        return f"{source_key}_{row['local_key']}.jpg"
+                (question_id, self._program_id(connection, exam_id)),
+            ).fetchall()
+        if not rows:
+            raise CatalogNotFoundError(f"source regions not found: {question_id}/{kind}")
+        storage_key = str(rows[0]["storage_key"])
+        keys = ("region_order", "page_index", "x0", "y0", "x1", "y1")
+        return storage_key, [
+            {key: row[key] for key in keys}
+            for row in rows
+            if row["storage_key"] == storage_key
+        ]
 
     def get_paper_storage_key(self, exam_id: str, paper_id: int, kind: str) -> str:
         if kind not in {"question", "answer"}:

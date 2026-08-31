@@ -22,6 +22,11 @@ Question image API routes read these immutable derivatives directly. They do not
 fall back to cropping source PDFs. Full source PDFs and crop coordinates remain
 available as authoritative source material and provenance.
 
+The explicit source-context action is separate from the question image route.
+It renders only the recorded source page, overlays the stored question or answer
+regions, and returns a privately cached JPG so users can verify the crop in its
+original page context.
+
 Unreliable PDF text containing control characters, private-use glyphs, unexpected
 scripts, or known symbol-font mojibake is rejected instead of being published as
 question or answer text. The image remains the authoritative readable view.

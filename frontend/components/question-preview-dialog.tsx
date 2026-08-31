@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { FileValidationIcon, FileViewIcon } from '@hugeicons/core-free-icons'
 
 import { useLocale } from '@/components/locale-provider'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -14,30 +17,23 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { Question } from '@/lib/types'
 
-function paperUrl(question: Question, sourceType: 0 | 1) {
-  const examId = question.exam_id
-  if (!examId) return ''
-  const region = question.crop_regions?.find(
-    (item) => item.source_type === sourceType,
-  )
-  const kind = sourceType === 0 ? 'question' : 'answer'
-  const page = region ? `#page=${region.page_index + 1}` : ''
-  return `/api/v1/exams/${encodeURIComponent(examId)}/papers/${question.paper_id}/${kind}${page}`
-}
-
 function DocumentFrame({
   question,
   sourceType,
   title,
+  errorMessage,
+  sourcePage = false,
 }: {
   question: Question
   sourceType: 0 | 1
   title: string
+  errorMessage: string
+  sourcePage?: boolean
 }) {
   const [imageFailed, setImageFailed] = useState(false)
   const imageKind = sourceType === 0 ? 'question' : 'answer'
   const imageUrl = question.exam_id
-    ? `/api/v1/exams/${encodeURIComponent(question.exam_id)}/questions/${question.id}/${imageKind}.jpg`
+    ? `/api/v1/exams/${encodeURIComponent(question.exam_id)}/questions/${question.id}/${sourcePage ? `source/${imageKind}` : imageKind}.jpg`
     : ''
 
   if (imageUrl && !imageFailed) {
@@ -54,11 +50,12 @@ function DocumentFrame({
   }
 
   return (
-    <iframe
-      title={title}
-      src={paperUrl(question, sourceType)}
-      className="h-full min-h-[58dvh] w-full bg-white"
-    />
+    <div
+      role="alert"
+      className="grid min-h-[58dvh] place-items-center p-6 text-center text-sm text-destructive"
+    >
+      {errorMessage}
+    </div>
   )
 }
 
@@ -78,6 +75,19 @@ export function QuestionPreviewDialog({
   textPanel?: ReactNode
 }) {
   const { t } = useLocale()
+  const [view, setView] = useState<{
+    questionId: number
+    tab: 'question' | 'answer' | 'text'
+    sourcePage: boolean
+  } | null>(null)
+  const activeView =
+    question && view?.questionId === question.id
+      ? view
+      : {
+          questionId: question?.id ?? 0,
+          tab: 'question' as const,
+          sourcePage: false,
+        }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,10 +104,17 @@ export function QuestionPreviewDialog({
               <DialogDescription>{t('questionPreview')}</DialogDescription>
             </DialogHeader>
             <Tabs
-              defaultValue="question"
+              value={activeView.tab}
+              onValueChange={(tab) =>
+                setView({
+                  questionId: question.id,
+                  tab: tab as 'question' | 'answer' | 'text',
+                  sourcePage: false,
+                })
+              }
               className="flex min-h-0 flex-1 flex-col"
             >
-              <div className="border-b px-4 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
                 <TabsList>
                   <TabsTrigger value="question">{t('question')}</TabsTrigger>
                   <TabsTrigger value="answer">{t('answer')}</TabsTrigger>
@@ -105,21 +122,75 @@ export function QuestionPreviewDialog({
                     <TabsTrigger value="text">{t('text')}</TabsTrigger>
                   )}
                 </TabsList>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={
+                      activeView.sourcePage && activeView.tab === 'question'
+                        ? 'secondary'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      setView({
+                        questionId: question.id,
+                        tab: 'question',
+                        sourcePage: true,
+                      })
+                    }
+                  >
+                    <HugeiconsIcon
+                      icon={FileViewIcon}
+                      data-icon="inline-start"
+                    />
+                    {t('viewQuestionInPaper')}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={
+                      activeView.sourcePage && activeView.tab === 'answer'
+                        ? 'secondary'
+                        : 'outline'
+                    }
+                    onClick={() =>
+                      setView({
+                        questionId: question.id,
+                        tab: 'answer',
+                        sourcePage: true,
+                      })
+                    }
+                  >
+                    <HugeiconsIcon
+                      icon={FileValidationIcon}
+                      data-icon="inline-start"
+                    />
+                    {t('viewAnswerInPaper')}
+                  </Button>
+                </div>
               </div>
               <TabsContent value="question" className="m-0 min-h-0 flex-1">
                 <DocumentFrame
-                  key={`${question.id}:question`}
+                  key={`${question.id}:question:${activeView.sourcePage ? 'source' : 'crop'}`}
                   question={question}
                   sourceType={0}
                   title={t('questionPdf')}
+                  errorMessage={t('imageUnavailable')}
+                  sourcePage={
+                    activeView.sourcePage && activeView.tab === 'question'
+                  }
                 />
               </TabsContent>
               <TabsContent value="answer" className="m-0 min-h-0 flex-1">
                 <DocumentFrame
-                  key={`${question.id}:answer`}
+                  key={`${question.id}:answer:${activeView.sourcePage ? 'source' : 'crop'}`}
                   question={question}
                   sourceType={1}
                   title={t('answerPdf')}
+                  errorMessage={t('imageUnavailable')}
+                  sourcePage={
+                    activeView.sourcePage && activeView.tab === 'answer'
+                  }
                 />
               </TabsContent>
               {textPanel && (
