@@ -169,6 +169,7 @@ export function AssetsPanel({
   const [selectedPaper, setSelectedPaper] = useState<PaperChoice | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
   const [selected, setSelected] = useState<Question | null>(null)
+  const [similar, setSimilar] = useState<Question[]>([])
   const [rawText, setRawText] = useState('')
   const [markdown, setMarkdown] = useState('')
   const [saving, setSaving] = useState(false)
@@ -197,6 +198,7 @@ export function AssetsPanel({
   async function choosePaper(paper: PaperChoice) {
     setSelectedPaper(paper)
     setSelected(null)
+    setSimilar([])
     const next = await apiRequest<Question[]>(
       `/api/v1/admin/papers/${paper.id}/questions`,
     )
@@ -207,11 +209,18 @@ export function AssetsPanel({
     question: Question,
     examId = selectedPaper?.examId || '',
   ) {
-    const detail = await apiRequest<Question>(
-      `/api/v1/exams/${encodeURIComponent(examId)}/questions/${question.id}`,
-    )
+    setSimilar([])
+    const [detail, related] = await Promise.all([
+      apiRequest<Question>(
+        `/api/v1/exams/${encodeURIComponent(examId)}/questions/${question.id}`,
+      ),
+      apiRequest<Question[]>(
+        `/api/v1/exams/${encodeURIComponent(examId)}/questions/${question.id}/similar?limit=8`,
+      ),
+    ])
     const resolved = { ...detail, exam_id: examId }
     setSelected(resolved)
+    setSimilar(related)
     setRawText(resolved.answer_structured?.raw_text || '')
     setMarkdown(resolved.answer_structured?.markdown || '')
   }
@@ -343,6 +352,10 @@ export function AssetsPanel({
             {selected ? (
               <QuestionPreview
                 question={selected}
+                similar={similar}
+                onChooseSimilar={(question) =>
+                  chooseQuestion(question, selected.exam_id)
+                }
                 textPanel={
                   <div className="space-y-4">
                     <div className="flex justify-between gap-4">

@@ -130,6 +130,32 @@ export function QuestionPreview({
             {textPanel && <TabsTrigger value="text">{t('text')}</TabsTrigger>}
           </TabsList>
         </div>
+        {similar.length > 0 && (
+          <div className="border-b bg-muted/20 px-4 py-3">
+            <p className="mb-2 text-xs font-semibold text-muted-foreground">
+              {t('similar')}
+            </p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {similar.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => onChooseSimilar?.(item)}
+                  className="ui-interactive min-h-11 min-w-36 shrink-0 rounded-lg border bg-background px-3 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="block font-mono text-xs text-primary">
+                    {item.paper_key} · Q{item.question_number}
+                  </span>
+                  {item.shared_topics?.length ? (
+                    <span className="mt-1 block max-w-56 truncate text-xs text-muted-foreground">
+                      {item.shared_topics.slice(0, 2).join(' · ')}
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <TabsContent value="question" className="m-0 min-h-0 flex-1">
           <DocumentFrame
             key={`${question.id}:question`}
@@ -157,25 +183,6 @@ export function QuestionPreview({
           </TabsContent>
         )}
       </Tabs>
-      {similar.length > 0 && (
-        <div className="max-h-32 overflow-y-auto border-t p-3">
-          <p className="mb-2 text-sm font-semibold">{t('similar')}</p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {similar.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onChooseSimilar?.(item)}
-                className="min-h-11 shrink-0 rounded-xl border px-3 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="font-mono text-xs text-primary">
-                  {item.paper_key} · Q{item.question_number}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
