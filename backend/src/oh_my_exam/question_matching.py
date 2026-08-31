@@ -13,7 +13,7 @@ from oh_my_exam.pipelines.packaging.global_schema import migrate_global_catalog
 
 
 ALGORITHM_NAME = "syllabus_tfidf"
-ALGORITHM_VERSION = "1"
+ALGORITHM_VERSION = "2"
 _TOKEN = re.compile(r"[a-z][a-z0-9']{1,}|\d+(?:\.\d+)?", re.IGNORECASE)
 _STOP_WORDS = {
     "and", "are", "can", "determine", "find", "for", "from", "given", "hence", "is",
@@ -255,49 +255,44 @@ def _build_similarities(
     *,
     top_k: int,
 ) -> list[tuple[tuple[int, int], int, float]]:
-    by_course: dict[str, list[sqlite3.Row]] = defaultdict(list)
-    for row in rows:
-        if str(row["content"] or "").strip():
-            by_course[f"{row['qualification']}:{row['exam_board']}:{row['course_code']}"] .append(row)
-
+    course_rows = [row for row in rows if str(row["content"] or "").strip()]
     output: list[tuple[tuple[int, int], int, float]] = []
-    for course_rows in by_course.values():
-        counters = {int(row["id"]): Counter(_tokenize(str(row["content"]))) for row in course_rows}
-        document_frequency = Counter(term for counter in counters.values() for term in counter)
-        total = len(counters)
-        vectors: dict[int, dict[str, float]] = {}
-        postings: dict[str, list[tuple[int, float]]] = defaultdict(list)
-        for question_id, counter in counters.items():
-            vector = {
-                term: (1.0 + math.log(count)) * (math.log((1 + total) / (1 + document_frequency[term])) + 1.0)
-                for term, count in counter.items()
-                if document_frequency[term] <= max(200, total // 5)
-            }
-            norm = math.sqrt(sum(value * value for value in vector.values())) or 1.0
-            vectors[question_id] = {term: value / norm for term, value in vector.items()}
-            for term, value in vectors[question_id].items():
-                postings[term].append((question_id, value))
+    counters = {int(row["id"]): Counter(_tokenize(str(row["content"]))) for row in course_rows}
+    document_frequency = Counter(term for counter in counters.values() for term in counter)
+    total = len(counters)
+    vectors: dict[int, dict[str, float]] = {}
+    postings: dict[str, list[tuple[int, float]]] = defaultdict(list)
+    for question_id, counter in counters.items():
+        vector = {
+            term: (1.0 + math.log(count)) * (math.log((1 + total) / (1 + document_frequency[term])) + 1.0)
+            for term, count in counter.items()
+            if document_frequency[term] <= max(200, total // 5)
+        }
+        norm = math.sqrt(sum(value * value for value in vector.values())) or 1.0
+        vectors[question_id] = {term: value / norm for term, value in vector.items()}
+        for term, value in vectors[question_id].items():
+            postings[term].append((question_id, value))
 
-        paper_by_question = {int(row["id"]): int(row["paper_id"]) for row in course_rows}
-        feature_sets = {qid: {feature_id for feature_id, _, _ in values} for qid, values in tags.items()}
-        for source_id, vector in vectors.items():
-            scores: Counter[int] = Counter()
-            for term, source_weight in vector.items():
-                for target_id, target_weight in postings[term]:
-                    if target_id != source_id and paper_by_question[target_id] != paper_by_question[source_id]:
-                        scores[target_id] += source_weight * target_weight
-            source_features = feature_sets.get(source_id, set())
-            ranked: list[tuple[float, int]] = []
-            for target_id, lexical_score in scores.items():
-                target_features = feature_sets.get(target_id, set())
-                union = source_features | target_features
-                topic_score = len(source_features & target_features) / len(union) if union else 0.0
-                score = 0.75 * lexical_score + 0.25 * topic_score
-                if score >= 0.08:
-                    ranked.append((score, target_id))
-            ranked.sort(key=lambda item: (-item[0], item[1]))
-            for rank, (score, target_id) in enumerate(ranked[:top_k], 1):
-                output.append(((source_id, target_id), rank, round(score, 6)))
+    paper_by_question = {int(row["id"]): int(row["paper_id"]) for row in course_rows}
+    feature_sets = {qid: {feature_id for feature_id, _, _ in values} for qid, values in tags.items()}
+    for source_id, vector in vectors.items():
+        scores: Counter[int] = Counter()
+        for term, source_weight in vector.items():
+            for target_id, target_weight in postings[term]:
+                if target_id != source_id and paper_by_question[target_id] != paper_by_question[source_id]:
+                    scores[target_id] += source_weight * target_weight
+        source_features = feature_sets.get(source_id, set())
+        ranked: list[tuple[float, int]] = []
+        for target_id, lexical_score in scores.items():
+            target_features = feature_sets.get(target_id, set())
+            union = source_features | target_features
+            topic_score = len(source_features & target_features) / len(union) if union else 0.0
+            score = 0.75 * lexical_score + 0.25 * topic_score
+            if score >= 0.08:
+                ranked.append((score, target_id))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        for rank, (score, target_id) in enumerate(ranked[:top_k], 1):
+            output.append(((source_id, target_id), rank, round(score, 6)))
     return output
 
 
@@ -310,7 +305,7 @@ def _write_algorithm(connection: sqlite3.Connection, top_k: int) -> int:
         (
             ALGORITHM_NAME,
             ALGORITHM_VERSION,
-            json.dumps({"text_weight": 0.75, "topic_weight": 0.25, "top_k": top_k}, sort_keys=True),
+            json.dumps({"scope": "global", "text_weight": 0.75, "topic_weight": 0.25, "top_k": top_k}, sort_keys=True),
         ),
     ).lastrowid)
 

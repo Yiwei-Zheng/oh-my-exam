@@ -354,7 +354,7 @@ export function AssetsPanel({
                 question={selected}
                 similar={similar}
                 onChooseSimilar={(question) =>
-                  chooseQuestion(question, selected.exam_id)
+                  chooseQuestion(question, question.exam_id || selected.exam_id)
                 }
                 textPanel={
                   <div className="space-y-4">

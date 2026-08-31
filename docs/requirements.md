@@ -63,6 +63,8 @@ architecture must allow new exam families without global rewrites.
   reports a missing asset instead of rendering or embedding a PDF.
 - Similar-question recommendations appear above the original document preview;
   selecting one replaces the current preview and refreshes its recommendations.
+- Every question preview shows its topic tags below the document. Similarity
+  candidates span A Level and admissions programs instead of being isolated by course.
 - An answer can be viewed as a pre-rendered JPG and as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
   the question may still be published.

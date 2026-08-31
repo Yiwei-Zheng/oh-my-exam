@@ -26,6 +26,10 @@ content domain; zero-padded component identifiers are normalized. TMUA Paper 1
 and Paper 2 receive their broad paper tags plus detailed content tags before
 similarities are ranked.
 
+Similarity ranking uses one global question-text corpus. A Level and admissions
+questions can therefore recommend each other when their mathematical language
+overlaps; questions from the same paper remain excluded.
+
 Word2Vec is not used. The available corpus is small for training stable domain
 word vectors, and OCR-heavy mathematical notation produces noisy tokens. The
 chosen approach is deterministic, explainable, has no model download, and can

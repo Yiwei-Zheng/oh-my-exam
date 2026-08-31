@@ -183,6 +183,20 @@ export function QuestionPreview({
           </TabsContent>
         )}
       </Tabs>
+      <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3">
+        <span className="text-xs font-semibold text-muted-foreground">
+          {t('tags')}
+        </span>
+        {question.topics?.length ? (
+          question.topics.map((topic) => (
+            <Badge key={topic} variant="secondary">
+              {topic}
+            </Badge>
+          ))
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </div>
     </div>
   )
 }

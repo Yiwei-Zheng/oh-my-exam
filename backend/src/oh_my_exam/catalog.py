@@ -380,12 +380,16 @@ class GlobalCatalog:
                 """
                 SELECT target.id, target.stable_key, target.question_number, target.local_key,
                        p.id AS paper_id, p.source_key AS paper_key, qt.content,
+                       ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
                        qs.rank, qs.score,
                        GROUP_CONCAT(DISTINCT shared_labels.name) AS shared_topics
                 FROM question_similarities qs
                 JOIN similarity_algorithms sa ON sa.id = qs.algorithm_id
                 JOIN questions target ON target.id = qs.target_question_id
                 JOIN papers p ON p.id = target.paper_id
+                JOIN exam_programs ep ON ep.id = p.exam_program_id
+                JOIN qualifications ql ON ql.id = ep.qualification_id
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
                 LEFT JOIN question_texts qt
                   ON qt.question_id = target.id AND qt.text_kind = 'search' AND qt.language = 'en'
                 LEFT JOIN question_features source_features
@@ -417,12 +421,20 @@ class GlobalCatalog:
             question = connection.execute(
                 """
                 SELECT qu.id, qu.stable_key, qu.question_number, qu.local_key,
-                       p.id AS paper_id, p.source_key AS paper_key, qt.content
+                       p.id AS paper_id, p.source_key AS paper_key, qt.content,
+                       ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
+                       GROUP_CONCAT(DISTINCT fl.name) AS topics
                 FROM questions qu
                 JOIN papers p ON p.id = qu.paper_id
+                JOIN exam_programs ep ON ep.id = p.exam_program_id
+                JOIN qualifications ql ON ql.id = ep.qualification_id
+                JOIN exam_boards eb ON eb.id = ep.exam_board_id
                 LEFT JOIN question_texts qt
                   ON qt.question_id = qu.id AND qt.text_kind = 'search' AND qt.language = 'en'
+                LEFT JOIN question_features qf ON qf.question_id = qu.id
+                LEFT JOIN feature_labels fl ON fl.feature_id = qf.feature_id AND fl.language = 'en'
                 WHERE qu.id = ? AND p.exam_program_id = ?
+                GROUP BY qu.id
                 """,
                 (question_id, program_id),
             ).fetchone()
@@ -615,7 +627,7 @@ class GlobalCatalog:
 
     @staticmethod
     def _question_summary(row: sqlite3.Row) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "id": row["id"],
             "stable_key": row["stable_key"],
             "paper_id": row["paper_id"],
@@ -624,3 +636,9 @@ class GlobalCatalog:
             "question_number": row["question_number"],
             "content": row["content"] or "",
         }
+        keys = set(row.keys())
+        if {"qualification", "exam_board", "course_code"} <= keys:
+            result["exam_id"] = f"{row['qualification']}:{row['exam_board']}:{row['course_code']}"
+        if "topics" in keys:
+            result["topics"] = [item for item in str(row["topics"] or "").split(",") if item]
+        return result

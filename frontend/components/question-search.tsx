@@ -776,7 +776,9 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
         similar={similar}
-        onChooseSimilar={(item) => choose({ ...item, exam_id: selectedExamId })}
+        onChooseSimilar={(item) =>
+          choose({ ...item, exam_id: item.exam_id || selectedExamId })
+        }
       />
     </section>
   )
