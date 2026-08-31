@@ -9,6 +9,7 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 
+from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.models import PaperAsset
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.cie import build_frank_cie_url
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.subject_names import english_subject_name
@@ -37,6 +38,7 @@ def download_asset(
     min_delay_seconds: float = 2.0,
     timeout_seconds: float = 45.0,
     overwrite: bool = False,
+    limiter: AdaptiveRateLimiter | None = None,
 ) -> Path:
     target = output_root / asset.relative_pdf_path
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -55,17 +57,18 @@ def download_asset(
         request.add_header("Range", f"bytes={downloaded}-")
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            mode = "ab" if downloaded and response.status == 206 else "wb"
-            with target.open(mode) as fh:
-                while True:
-                    chunk = response.read(1024 * 128)
-                    if not chunk:
-                        break
-                    fh.write(chunk)
+        if limiter is None:
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                _write_response(response, target, downloaded)
+        else:
+            with limiter.slot():
+                with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                    _write_response(response, target, downloaded)
     except urllib.error.HTTPError as exc:
-        if exc.code == 429:
-            raise RateLimitedError(f"rate limited for {asset.stem}: HTTP 429") from exc
+        if exc.code in {429, 503}:
+            raise RateLimitedError(
+                f"rate limited for {asset.stem}: HTTP {exc.code}"
+            ) from exc
         if exc.code == 404:
             raise DownloadError(f"not found: {asset.stem}") from exc
         raise DownloadError(f"download failed for {asset.stem}: HTTP {exc.code}") from exc
@@ -73,8 +76,19 @@ def download_asset(
         raise DownloadError(f"download failed for {asset.stem}: {exc}") from exc
 
     write_download_metadata(target, asset)
-    time.sleep(min_delay_seconds)
+    if limiter is None:
+        time.sleep(min_delay_seconds)
     return target
+
+
+def _write_response(response, target: Path, downloaded: int) -> None:
+    mode = "ab" if downloaded and response.status == 206 else "wb"
+    with target.open(mode) as fh:
+        while True:
+            chunk = response.read(1024 * 128)
+            if not chunk:
+                break
+            fh.write(chunk)
 
 
 def _migrate_legacy_asset_files(asset: PaperAsset, output_root: Path, target: Path) -> None:
@@ -101,6 +115,7 @@ def try_download_asset(
     rate_limit_retries: int = 5,
     rate_limit_wait_seconds: float | None = None,
     overwrite: bool = False,
+    limiter: AdaptiveRateLimiter | None = None,
 ) -> DownloadOutcome:
     rate_limit_attempts = 0
     try:
@@ -112,15 +127,18 @@ def try_download_asset(
                     min_delay_seconds=min_delay_seconds,
                     timeout_seconds=timeout_seconds,
                     overwrite=overwrite,
+                    limiter=limiter,
                 )
                 return DownloadOutcome(asset=asset, status="downloaded", path=path, message="")
             except RateLimitedError as exc:
                 rate_limit_attempts += 1
                 if rate_limit_attempts > rate_limit_retries:
                     return DownloadOutcome(asset=asset, status="rate_limited", path=None, message=str(exc))
-                time.sleep(rate_limit_wait_seconds if rate_limit_wait_seconds is not None else max(min_delay_seconds * 8, 30.0))
+                if limiter is None:
+                    time.sleep(rate_limit_wait_seconds if rate_limit_wait_seconds is not None else max(min_delay_seconds * 8, 30.0))
     except RateLimitedError as exc:
-        time.sleep(min_delay_seconds * 4)
+        if limiter is None:
+            time.sleep(min_delay_seconds * 4)
         return DownloadOutcome(asset=asset, status="rate_limited", path=None, message=str(exc))
     except DownloadError as exc:
         status = "missing" if str(exc).startswith("not found:") else "failed"

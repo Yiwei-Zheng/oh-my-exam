@@ -14,6 +14,7 @@ from pathlib import Path
 from oh_my_exam.paths import BACKEND_ROOT
 from typing import Iterable
 
+from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.models import PaperAsset
 
 
@@ -24,8 +25,17 @@ FRANK_SEASONS = {"Mar": "m", "Jun": "s", "Nov": "w"}
 SESSION_TO_FRANK_SEASON = {value: key for key, value in FRANK_SEASONS.items()}
 
 
-def fetch_frank_subjects(*, timeout_seconds: float = 20.0) -> list[dict[str, str]]:
-    data = _post_json("obj/Common/Subject/combo", {}, timeout_seconds=timeout_seconds)
+def fetch_frank_subjects(
+    *,
+    timeout_seconds: float = 20.0,
+    limiter: AdaptiveRateLimiter | None = None,
+) -> list[dict[str, str]]:
+    data = _post_json(
+        "obj/Common/Subject/combo",
+        {},
+        timeout_seconds=timeout_seconds,
+        limiter=limiter,
+    )
     subjects: list[dict[str, str]] = []
     for item in data:
         if not isinstance(item, dict):
@@ -37,11 +47,19 @@ def fetch_frank_subjects(*, timeout_seconds: float = 20.0) -> list[dict[str, str
     return subjects
 
 
-def fetch_frank_files(subject: str, year: int, season: str, *, timeout_seconds: float = 20.0) -> list[str]:
+def fetch_frank_files(
+    subject: str,
+    year: int,
+    season: str,
+    *,
+    timeout_seconds: float = 20.0,
+    limiter: AdaptiveRateLimiter | None = None,
+) -> list[str]:
     data = _post_json(
         "obj/Common/Fetch/renum",
         {"subject": subject, "year": str(year), "season": season},
         timeout_seconds=timeout_seconds,
+        limiter=limiter,
     )
     if not isinstance(data, dict):
         return []
@@ -69,9 +87,18 @@ def discover_frank_assets(
     workers: int = 1,
     timeout_seconds: float = 20.0,
     progress: Callable[[dict[str, object]], None] | None = None,
+    limiter: AdaptiveRateLimiter | None = None,
 ) -> list[PaperAsset]:
     end_year = end_year or datetime.now().year
-    frank_subjects = fetch_frank_subjects(timeout_seconds=timeout_seconds)
+    workers = max(1, int(workers))
+    limiter = limiter or AdaptiveRateLimiter(
+        workers,
+        initial_interval_seconds=delay_seconds,
+    )
+    frank_subjects = fetch_frank_subjects(
+        timeout_seconds=timeout_seconds,
+        limiter=limiter,
+    )
     frank_subjects = [
         subject
         for subject in frank_subjects
@@ -86,18 +113,20 @@ def discover_frank_assets(
         for season in seasons
     ]
     assets_by_stem: dict[str, PaperAsset] = {}
-    workers = max(1, int(workers))
-
     def fetch_job(job: tuple[str, int, str]) -> tuple[tuple[str, int, str], list[str], str | None]:
         code, year, season = job
         error = None
         try:
-            files = fetch_frank_files(code, year, season, timeout_seconds=timeout_seconds)
+            files = fetch_frank_files(
+                code,
+                year,
+                season,
+                timeout_seconds=timeout_seconds,
+                limiter=limiter,
+            )
         except Exception as exc:  # A single flaky Frank query should not abort the whole availability sync.
             files = []
             error = str(exc)
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)
         return job, files, error
 
     completed = 0
@@ -372,7 +401,13 @@ def _asset_from_frank_file(file_name: str, subject_names: dict[str, str], qualif
     )
 
 
-def _post_json(endpoint: str, data: dict[str, str], *, timeout_seconds: float) -> object:
+def _post_json(
+    endpoint: str,
+    data: dict[str, str],
+    *,
+    timeout_seconds: float,
+    limiter: AdaptiveRateLimiter | None = None,
+) -> object:
     body = urllib.parse.urlencode(data).encode()
     request = urllib.request.Request(
         f"{FRANK_BASE_URL}/{endpoint}",
@@ -382,7 +417,18 @@ def _post_json(endpoint: str, data: dict[str, str], *, timeout_seconds: float) -
     last_error: Exception | None = None
     for attempt in range(3):
         try:
-            return json.loads(urllib.request.urlopen(request, timeout=timeout_seconds).read().decode("utf-8", "replace"))
+            if limiter is None:
+                payload = urllib.request.urlopen(
+                    request,
+                    timeout=timeout_seconds,
+                ).read()
+            else:
+                with limiter.slot():
+                    payload = urllib.request.urlopen(
+                        request,
+                        timeout=timeout_seconds,
+                    ).read()
+            return json.loads(payload.decode("utf-8", "replace"))
         except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
             last_error = exc
             if attempt < 2:

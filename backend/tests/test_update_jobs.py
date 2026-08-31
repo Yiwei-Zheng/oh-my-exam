@@ -260,3 +260,31 @@ def test_failed_subprocess_reports_last_diagnostic(monkeypatch, tmp_path: Path) 
     assert failed["status"] == "failed"
     assert failed["stage"] == "failed"
     assert failed["message"] == "题库更新进程退出，代码 2: fatal splitter detail"
+
+
+def test_terminal_job_cannot_be_overwritten_by_stale_worker(tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ("update",))
+    with manager._connect() as connection:
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO users (id) VALUES (1)")
+        cursor = connection.execute(
+            """
+            INSERT INTO question_update_jobs
+                (requested_by, status, stage, action, progress, message, finished_at)
+            VALUES (1, 'failed', 'failed', 'download', 8, '服务重启，任务已中断', datetime('now'))
+            """
+        )
+        job_id = int(cursor.lastrowid)
+
+    manager._update(
+        job_id,
+        stage="downloading",
+        progress=20,
+        message="cie:9709: 正在发现可下载资源",
+    )
+    manager._update(job_id, status="completed", progress=100)
+
+    failed = manager.get(job_id)
+    assert failed["status"] == "failed"
+    assert failed["stage"] == "failed"
+    assert failed["message"] == "服务重启，任务已中断"

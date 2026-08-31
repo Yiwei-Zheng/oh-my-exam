@@ -4,12 +4,12 @@ import hashlib
 import json
 import os
 import shutil
-import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Iterable
 
+from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.step.downloader.models import EXAM_BOARD, SOURCE_PROVIDER, StepAsset
 
 
@@ -23,6 +23,7 @@ def download_asset(
     timeout_seconds: float = 60.0,
     reuse_from: Path | None = None,
     overwrite: bool = False,
+    limiter: AdaptiveRateLimiter | None = None,
 ) -> tuple[Path, str]:
     target = raw_root / asset.relative_pdf_path
     metadata_path = target.with_suffix(".json")
@@ -42,10 +43,13 @@ def download_asset(
         for attempt in range(3):
             request = urllib.request.Request(asset.source_url, headers={"User-Agent": "Oh-My-Exam/0.1"})
             try:
-                with urllib.request.urlopen(request, timeout=timeout_seconds) as response, part_path.open("wb") as output:
-                    expected_size = response.headers.get("Content-Length")
-                    while chunk := response.read(128 * 1024):
-                        output.write(chunk)
+                if limiter is None:
+                    with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                        expected_size = _write_response(response, part_path)
+                else:
+                    with limiter.slot():
+                        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                            expected_size = _write_response(response, part_path)
                 if expected_size is not None and part_path.stat().st_size != int(expected_size):
                     raise RuntimeError(f"incomplete download: {asset.source_url}")
                 if not _pdf_looks_complete(part_path):
@@ -88,6 +92,10 @@ def download_assets(
 ) -> dict[str, int]:
     assets = list(assets)
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
+    limiter = AdaptiveRateLimiter(
+        workers,
+        initial_interval_seconds=delay_seconds,
+    )
     groups: dict[str, list[StepAsset]] = {}
     for asset in assets:
         groups.setdefault(asset.source_url, []).append(asset)
@@ -103,13 +111,12 @@ def download_assets(
                     timeout_seconds=timeout_seconds,
                     reuse_from=reuse_from,
                     overwrite=overwrite,
+                    limiter=limiter,
                 )
                 reuse_from = path
                 records.append({"asset": asset.stem, "status": status, "path": path.as_posix()})
             except Exception as exc:
                 records.append({"asset": asset.stem, "status": "failed", "message": str(exc)})
-            if delay_seconds > 0:
-                time.sleep(delay_seconds)
         return records
 
     completed = 0
@@ -125,6 +132,14 @@ def download_assets(
                 if progress:
                     progress(record)
     return counts
+
+
+def _write_response(response, part_path: Path) -> str | None:
+    expected_size = response.headers.get("Content-Length")
+    with part_path.open("wb") as output:
+        while chunk := response.read(128 * 1024):
+            output.write(chunk)
+    return expected_size
 
 
 def _sha256(path: Path) -> str:

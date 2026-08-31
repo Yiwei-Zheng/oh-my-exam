@@ -7,6 +7,7 @@ import json
 import re
 from pathlib import Path
 
+from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.cie import load_assets
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.download import DownloadOutcome, download_asset, try_download_asset
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.frank_discovery import load_availability_index
@@ -50,11 +51,16 @@ def crawl_assets(
     should_stop: Callable[[], bool] | None = None,
     skipped_progress_interval: int = 1,
     overwrite: bool = False,
+    limiter: AdaptiveRateLimiter | None = None,
 ) -> dict[str, int]:
     completed = _read_completed_stems(report_path) if resume else set()
     counts = {"downloaded": 0, "missing": 0, "failed": 0, "rate_limited": 0, "skipped": 0}
     report_path.parent.mkdir(parents=True, exist_ok=True)
     max_workers = max(1, int(max_workers))
+    limiter = limiter or AdaptiveRateLimiter(
+        max_workers,
+        initial_interval_seconds=delay_seconds,
+    )
     with report_path.open("a", encoding="utf-8") as report:
         pending: list[tuple[int, PaperAsset]] = []
         for index, asset in enumerate(assets, start=1):
@@ -69,7 +75,10 @@ def crawl_assets(
             for index, asset in pending:
                 if should_stop and should_stop():
                     break
-                options: dict[str, object] = {"min_delay_seconds": delay_seconds}
+                options: dict[str, object] = {
+                    "min_delay_seconds": delay_seconds,
+                    "limiter": limiter,
+                }
                 if overwrite:
                     options["overwrite"] = True
                 outcome = try_download_asset(asset, output_root, **options)
@@ -91,7 +100,10 @@ def crawl_assets(
                 index, asset = next(asset_iter)
             except StopIteration:
                 return False
-            options: dict[str, object] = {"min_delay_seconds": delay_seconds}
+            options: dict[str, object] = {
+                "min_delay_seconds": delay_seconds,
+                "limiter": limiter,
+            }
             if overwrite:
                 options["overwrite"] = True
             future = executor.submit(try_download_asset, asset, output_root, **options)

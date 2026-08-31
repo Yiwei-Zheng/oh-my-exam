@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
-import time
+import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Iterable
 
+from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.uat.downloader.models import ArchiveAsset
 
 
@@ -20,6 +21,7 @@ def download_asset(
     *,
     timeout_seconds: float = 60.0,
     overwrite: bool = False,
+    limiter: AdaptiveRateLimiter | None = None,
 ) -> tuple[Path, str]:
     target = raw_root / asset.relative_pdf_path
     metadata_path = target.with_suffix(".json")
@@ -28,9 +30,13 @@ def download_asset(
     target.parent.mkdir(parents=True, exist_ok=True)
     part_path = target.with_suffix(".pdf.part")
     request = urllib.request.Request(asset.source_url, headers={"User-Agent": "Oh-My-Exam/0.1"})
-    with urllib.request.urlopen(request, timeout=timeout_seconds) as response, part_path.open("wb") as output:
-        while chunk := response.read(128 * 1024):
-            output.write(chunk)
+    if limiter is None:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            _write_response(response, part_path)
+    else:
+        with limiter.slot():
+            with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+                _write_response(response, part_path)
     if part_path.stat().st_size == 0:
         part_path.unlink(missing_ok=True)
         raise RuntimeError(f"empty download: {asset.source_url}")
@@ -69,18 +75,28 @@ def download_assets(
 ) -> dict[str, int]:
     assets = list(assets)
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
+    limiter = AdaptiveRateLimiter(
+        workers,
+        initial_interval_seconds=delay_seconds,
+    )
 
     def run(asset: ArchiveAsset) -> dict[str, object]:
-        try:
-            path, status = download_asset(
-                asset,
-                raw_root,
-                timeout_seconds=timeout_seconds,
-                overwrite=overwrite,
-            )
-            return {"asset": asset.stem, "status": status, "path": path.as_posix()}
-        except Exception as exc:
-            return {"asset": asset.stem, "status": "failed", "message": str(exc)}
+        for attempt in range(3):
+            try:
+                path, status = download_asset(
+                    asset,
+                    raw_root,
+                    timeout_seconds=timeout_seconds,
+                    overwrite=overwrite,
+                    limiter=limiter,
+                )
+                return {"asset": asset.stem, "status": status, "path": path.as_posix()}
+            except urllib.error.HTTPError as exc:
+                if exc.code not in {429, 503} or attempt == 2:
+                    return {"asset": asset.stem, "status": "failed", "message": str(exc)}
+            except Exception as exc:
+                return {"asset": asset.stem, "status": "failed", "message": str(exc)}
+        raise AssertionError("unreachable")
 
     with ThreadPoolExecutor(max_workers=max(1, int(workers))) as executor:
         futures = [executor.submit(run, asset) for asset in assets]
@@ -91,9 +107,13 @@ def download_assets(
             counts[status] += 1
             if progress:
                 progress(record)
-            if delay_seconds > 0:
-                time.sleep(delay_seconds)
     return counts
+
+
+def _write_response(response, part_path: Path) -> None:
+    with part_path.open("wb") as output:
+        while chunk := response.read(128 * 1024):
+            output.write(chunk)
 
 
 def _sha256(path: Path) -> str:

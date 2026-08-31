@@ -71,7 +71,11 @@ def test_crawl_assets_continues_after_rate_limit(monkeypatch, tmp_path: Path) ->
         PaperAsset("cie", "a_level", "9709", "Math", "s24", "qp", "12"),
     ]
 
-    def fake_try_download_asset(asset: PaperAsset, output_root: Path, *, min_delay_seconds: float = 2.0) -> DownloadOutcome:
+    def fake_try_download_asset(
+        asset: PaperAsset,
+        output_root: Path,
+        **_options,
+    ) -> DownloadOutcome:
         if asset.component == "11":
             return DownloadOutcome(asset=asset, status="rate_limited", path=None, message="HTTP 429")
         return DownloadOutcome(asset=asset, status="downloaded", path=tmp_path / "paper.pdf", message="")

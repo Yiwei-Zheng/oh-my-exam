@@ -47,7 +47,9 @@ class UpdateJobManager:
         with self._connect() as connection:
             connection.execute(
                 "UPDATE question_update_jobs SET status = 'failed', paused = 0, "
-                "message = '服务重启，任务已中断' WHERE status = 'running'"
+                "message = '服务重启，任务已中断', finished_at = ? "
+                "WHERE status = 'running'",
+                (datetime.now(timezone.utc).isoformat(),),
             )
 
     @property
@@ -460,7 +462,11 @@ class UpdateJobManager:
             return
         values.append(job_id)
         with self._connect() as connection:
-            connection.execute(f"UPDATE question_update_jobs SET {', '.join(fields)} WHERE id = ?", values)
+            connection.execute(
+                f"UPDATE question_update_jobs SET {', '.join(fields)} "
+                "WHERE id = ? AND status = 'running'",
+                values,
+            )
 
     def _migrate(self) -> None:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)

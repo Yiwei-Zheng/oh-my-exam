@@ -54,7 +54,10 @@ processing stages run in the backend-owned subprocess. Subject selection,
 bounded download concurrency, the requested stage, and update/overwrite mode
 are passed through environment variables. Administrators can run download,
 split, portable-database inventory, or search publication independently, or run
-them in sequence. Incremental mode skips complete local artifacts; overwrite
+them in sequence. Network download batches use per-run AIMD request gates;
+CIE discovery and downloads share the same gate. Successful requests gradually
+expand its concurrency window while HTTP 429/503 responses halve the window
+and honor `Retry-After` before retrying. Incremental mode skips complete local artifacts; overwrite
 mode regenerates the selected stage. Durable job state includes a pause flag.
 Probe threads honor it between subjects, while subprocess stages use `psutil`
 to suspend or resume the root process and its descendants. Publication always

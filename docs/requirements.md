@@ -82,6 +82,9 @@ architecture must allow new exam families without global rewrites.
   suggests a recovery action, and keeps raw technical details available.
 - The subprocess boundary uses UTF-8 explicitly. Running jobs report the current
   stage and resource, elapsed time, and an estimated remaining duration.
+- Network-heavy source discovery and downloads start conservatively, increase
+  concurrency after sustained success, and reduce it with server-directed
+  cooldowns after HTTP 429 or 503 responses.
 - Every step has explicit inputs, outputs, status, logs, and artifact identity.
 - Steps are idempotent and retryable. A failed run keeps its logs and may be
   restarted by an administrator.

@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 
 from oh_my_exam.paths import DATA_ROOT
+from oh_my_exam.pipelines.adaptive_rate import AdaptiveRateLimiter
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.frank_discovery import discover_frank_assets
 from oh_my_exam.pipelines.adapters.cie_alevel.downloader.pipeline import crawl_assets
 from oh_my_exam.pipelines.adapters.cie_alevel.splitter.layout_splitter import split_installed_paper_sets
@@ -115,6 +116,10 @@ def _run_subject_stage(
         code = subject_id.split(":", 1)[1]
         if stage == "download":
             emit(0, f"{subject_id}: 正在发现可下载资源")
+            limiter = AdaptiveRateLimiter(
+                workers,
+                initial_interval_seconds=0.2,
+            )
             assets = discover_frank_assets(
                 qualification="a_level",
                 subject_codes={code},
@@ -122,6 +127,7 @@ def _run_subject_stage(
                 end_year=date.today().year,
                 seasons=("Mar", "Jun", "Nov"),
                 workers=workers,
+                limiter=limiter,
             )
             if not assets:
                 raise RuntimeError("Frank returned no resources")
@@ -142,6 +148,7 @@ def _run_subject_stage(
                 max_workers=workers,
                 progress=download_progress,
                 overwrite=overwrite,
+                limiter=limiter,
             )
         elif stage == "split":
             emit(0, f"{subject_id}: 正在准备题目和答案切图")
