@@ -4,6 +4,7 @@ import { useState, type ReactNode } from 'react'
 
 import { useLocale } from '@/components/locale-provider'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -98,22 +99,43 @@ export function QuestionPreview({
   dialogTitle?: boolean
 }) {
   const { t } = useLocale()
+  const [similarOpen, setSimilarOpen] = useState(false)
 
   if (!question) return null
+  const chooseSimilar = (item: Question) => {
+    setSimilarOpen(false)
+    onChooseSimilar?.(item)
+  }
   return (
     <div className="flex h-full min-h-0 flex-col">
       <DialogHeader className="border-b px-5 py-4 pr-16">
-        {dialogTitle ? (
-          <DialogTitle className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-primary">{question.paper_key}</span>
-            <Badge variant="secondary">Q{question.question_number}</Badge>
-          </DialogTitle>
-        ) : (
-          <h2 className="flex flex-wrap items-center gap-2 font-heading text-base font-medium">
-            <span className="font-mono text-primary">{question.paper_key}</span>
-            <Badge variant="secondary">Q{question.question_number}</Badge>
-          </h2>
-        )}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {dialogTitle ? (
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-primary">
+                {question.paper_key}
+              </span>
+              <Badge variant="secondary">Q{question.question_number}</Badge>
+            </DialogTitle>
+          ) : (
+            <h2 className="flex flex-wrap items-center gap-2 font-heading text-base font-medium">
+              <span className="font-mono text-primary">
+                {question.paper_key}
+              </span>
+              <Badge variant="secondary">Q{question.question_number}</Badge>
+            </h2>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={() => setSimilarOpen(true)}
+          >
+            {t('similar')}
+            <Badge variant="secondary">{similar.length}</Badge>
+          </Button>
+        </div>
         {dialogTitle ? (
           <DialogDescription>{t('questionPreview')}</DialogDescription>
         ) : (
@@ -130,32 +152,6 @@ export function QuestionPreview({
             {textPanel && <TabsTrigger value="text">{t('text')}</TabsTrigger>}
           </TabsList>
         </div>
-        {similar.length > 0 && (
-          <div className="border-b bg-muted/20 px-4 py-3">
-            <p className="mb-2 text-xs font-semibold text-muted-foreground">
-              {t('similar')}
-            </p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {similar.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onChooseSimilar?.(item)}
-                  className="ui-interactive min-h-11 min-w-36 shrink-0 rounded-lg border bg-background px-3 py-2 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="block font-mono text-xs text-primary">
-                    {item.paper_key} · Q{item.question_number}
-                  </span>
-                  {item.shared_topics?.length ? (
-                    <span className="mt-1 block max-w-56 truncate text-xs text-muted-foreground">
-                      {item.shared_topics.slice(0, 2).join(' · ')}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         <TabsContent value="question" className="m-0 min-h-0 flex-1">
           <DocumentFrame
             key={`${question.id}:question`}
@@ -197,6 +193,56 @@ export function QuestionPreview({
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </div>
+      <Dialog open={similarOpen} onOpenChange={setSimilarOpen}>
+        <DialogContent className="max-h-[min(80dvh,720px)] gap-4 overflow-hidden sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('similar')}</DialogTitle>
+            <DialogDescription>{t('similarHint')}</DialogDescription>
+          </DialogHeader>
+          <div className="grid min-h-0 gap-2 overflow-y-auto pr-1">
+            {similar.length ? (
+              similar.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => chooseSimilar(item)}
+                  className="ui-interactive flex min-h-14 w-full items-start gap-3 rounded-xl border bg-background p-3 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {String(index + 1).padStart(2, '0')}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block break-words font-mono text-sm text-primary">
+                      {item.paper_key} · Q{item.question_number}
+                    </span>
+                    {(item.shared_topics?.length
+                      ? item.shared_topics
+                      : item.topics
+                    )?.length ? (
+                      <span className="mt-2 flex flex-wrap gap-1.5">
+                        {(item.shared_topics?.length
+                          ? item.shared_topics
+                          : item.topics
+                        )
+                          ?.slice(0, 3)
+                          .map((topic) => (
+                            <Badge key={topic} variant="secondary">
+                              {topic}
+                            </Badge>
+                          ))}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                {t('noSimilar')}
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

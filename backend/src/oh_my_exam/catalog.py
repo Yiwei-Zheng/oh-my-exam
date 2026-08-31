@@ -315,7 +315,6 @@ class GlobalCatalog:
             summary = self._question_summary(row)
             summary.update({
                 "exam_id": f"{row['qualification']}:{row['exam_board']}:{row['course_code']}",
-                "topics": [item for item in str(row["topics"] or "").split(",") if item],
                 "score": score,
             })
             results.append(summary)
@@ -382,6 +381,7 @@ class GlobalCatalog:
                        p.id AS paper_id, p.source_key AS paper_key, qt.content,
                        ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
                        qs.rank, qs.score,
+                       GROUP_CONCAT(DISTINCT target_labels.name) AS topics,
                        GROUP_CONCAT(DISTINCT shared_labels.name) AS shared_topics
                 FROM question_similarities qs
                 JOIN similarity_algorithms sa ON sa.id = qs.algorithm_id
@@ -399,6 +399,10 @@ class GlobalCatalog:
                  AND target_features.feature_id = source_features.feature_id
                 LEFT JOIN feature_labels shared_labels
                   ON shared_labels.feature_id = target_features.feature_id AND shared_labels.language = 'en'
+                LEFT JOIN question_features target_all_features
+                  ON target_all_features.question_id = target.id
+                LEFT JOIN feature_labels target_labels
+                  ON target_labels.feature_id = target_all_features.feature_id AND target_labels.language = 'en'
                 WHERE qs.source_question_id = ? AND sa.name = 'syllabus_tfidf'
                 GROUP BY target.id, qs.rank, qs.score
                 ORDER BY qs.rank
@@ -640,5 +644,8 @@ class GlobalCatalog:
         if {"qualification", "exam_board", "course_code"} <= keys:
             result["exam_id"] = f"{row['qualification']}:{row['exam_board']}:{row['course_code']}"
         if "topics" in keys:
-            result["topics"] = [item for item in str(row["topics"] or "").split(",") if item]
+            topics = [item for item in str(row["topics"] or "").split(",") if item]
+            if not topics and "course_code" in keys:
+                topics = [str(row["course_code"]).upper()]
+            result["topics"] = topics
         return result

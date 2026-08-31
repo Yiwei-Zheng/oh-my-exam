@@ -61,10 +61,12 @@ architecture must allow new exam families without global rewrites.
   child nodes. Clicking a question updates the adjacent document viewer without
   opening a modal. The viewer loads only the catalog-owned pre-rendered JPG and
   reports a missing asset instead of rendering or embedding a PDF.
-- Similar-question recommendations appear above the original document preview;
-  selecting one replaces the current preview and refreshes its recommendations.
+- Every question has similar-question recommendations available in a separate
+  dialog; selecting one replaces the current preview and refreshes its recommendations.
 - Every question preview shows its topic tags below the document. Similarity
   candidates span A Level and admissions programs instead of being isolated by course.
+  When no syllabus topic is available, the exam program code is shown as a
+  structural tag instead of leaving the preview or recommendation unlabelled.
 - An answer can be viewed as a pre-rendered JPG and as extracted raw text or normalized Markdown.
 - If answer text extraction fails, the authoritative PDF remains available and
   the question may still be published.

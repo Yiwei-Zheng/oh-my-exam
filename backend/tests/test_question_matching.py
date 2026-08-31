@@ -115,8 +115,10 @@ def test_builds_similarities_across_exam_programs(tmp_path: Path) -> None:
             INSERT INTO exam_programs VALUES (2, 2, 2, 'tmua', 'TMUA');
             INSERT INTO papers VALUES (1, 1, 'alevel', '9709_s24_qp_42', 2024, 's24', '42', NULL);
             INSERT INTO papers VALUES (2, 2, 'admissions', 'tmua_2024_p1_qp', 2024, '2024', 'p1', NULL);
+            INSERT INTO papers VALUES (3, 2, 'admissions-blank', 'tmua_2023_p1_qp', 2023, '2023', 'p1', NULL);
             INSERT INTO questions VALUES (1, 1, 'alevel-q1', 'q1', '1', 1, 'unknown', NULL);
             INSERT INTO questions VALUES (2, 2, 'tmua-q1', 'q1', '1', 1, 'unknown', NULL);
+            INSERT INTO questions VALUES (3, 3, 'tmua-blank', 'q1', '1', 1, 'unknown', NULL);
             INSERT INTO question_texts VALUES (1, 1, 'search', 'en', 'Find the acceleration and velocity of the particle.');
             INSERT INTO question_texts VALUES (2, 2, 'search', 'en', 'Find the velocity and acceleration of the particle.');
             """
@@ -124,7 +126,7 @@ def test_builds_similarities_across_exam_programs(tmp_path: Path) -> None:
 
     summary = rebuild_question_matching(database, topics, top_k=2)
 
-    assert summary.similarities == 2
+    assert summary.similarities == 6
     catalog = GlobalCatalog(database)
     a_level_similar = catalog.list_similar_questions("a_level:cie:9709", 1)
     admissions_similar = catalog.list_similar_questions("admissions:uat:tmua", 2)
@@ -132,6 +134,12 @@ def test_builds_similarities_across_exam_programs(tmp_path: Path) -> None:
     assert a_level_similar[0]["exam_id"] == "admissions:uat:tmua"
     assert admissions_similar[0]["id"] == 1
     assert admissions_similar[0]["exam_id"] == "a_level:cie:9709"
+    assert catalog.get_question("admissions:uat:tmua", 3)["topics"] == ["TMUA"]
+    assert a_level_similar[1]["topics"] == ["TMUA"]
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT COUNT(DISTINCT source_question_id) FROM question_similarities"
+        ).fetchone()[0] == 3
 
 
 def test_classifies_non_cie_exam_programs_from_catalog_identity(tmp_path: Path) -> None:

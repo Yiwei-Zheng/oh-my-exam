@@ -30,6 +30,10 @@ Similarity ranking uses one global question-text corpus. A Level and admissions
 questions can therefore recommend each other when their mathematical language
 overlaps; questions from the same paper remain excluded.
 
+Questions without enough text matches are filled from shared topics, the same
+component, the same exam program, and finally the global pool. This guarantees
+recommendations for every question while keeping text matches ranked first.
+
 Word2Vec is not used. The available corpus is small for training stable domain
 word vectors, and OCR-heavy mathematical notation produces noisy tokens. The
 chosen approach is deterministic, explainable, has no model download, and can

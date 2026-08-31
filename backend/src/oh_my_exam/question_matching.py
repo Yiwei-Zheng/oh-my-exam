@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 from contextlib import closing
 from dataclasses import dataclass
+from itertools import chain
 import json
 import math
 from pathlib import Path
@@ -13,7 +14,7 @@ from oh_my_exam.pipelines.packaging.global_schema import migrate_global_catalog
 
 
 ALGORITHM_NAME = "syllabus_tfidf"
-ALGORITHM_VERSION = "2"
+ALGORITHM_VERSION = "3"
 _TOKEN = re.compile(r"[a-z][a-z0-9']{1,}|\d+(?:\.\d+)?", re.IGNORECASE)
 _STOP_WORDS = {
     "and", "are", "can", "determine", "find", "for", "from", "given", "hence", "is",
@@ -255,9 +256,12 @@ def _build_similarities(
     *,
     top_k: int,
 ) -> list[tuple[tuple[int, int], int, float]]:
-    course_rows = [row for row in rows if str(row["content"] or "").strip()]
     output: list[tuple[tuple[int, int], int, float]] = []
-    counters = {int(row["id"]): Counter(_tokenize(str(row["content"]))) for row in course_rows}
+    counters = {
+        int(row["id"]): Counter(_tokenize(str(row["content"])))
+        for row in rows
+        if str(row["content"] or "").strip()
+    }
     document_frequency = Counter(term for counter in counters.values() for term in counter)
     total = len(counters)
     vectors: dict[int, dict[str, float]] = {}
@@ -273,9 +277,22 @@ def _build_similarities(
         for term, value in vectors[question_id].items():
             postings[term].append((question_id, value))
 
-    paper_by_question = {int(row["id"]): int(row["paper_id"]) for row in course_rows}
+    row_by_question = {int(row["id"]): row for row in rows}
+    paper_by_question = {question_id: int(row["paper_id"]) for question_id, row in row_by_question.items()}
     feature_sets = {qid: {feature_id for feature_id, _, _ in values} for qid, values in tags.items()}
-    for source_id, vector in vectors.items():
+    feature_questions: dict[int, list[int]] = defaultdict(list)
+    component_questions: dict[tuple[str, str, str, str], list[int]] = defaultdict(list)
+    program_questions: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+    all_question_ids = list(row_by_question)
+    for question_id, row in row_by_question.items():
+        for feature_id in feature_sets.get(question_id, set()):
+            feature_questions[feature_id].append(question_id)
+        program_key = (str(row["qualification"]), str(row["exam_board"]), str(row["course_code"]))
+        program_questions[program_key].append(question_id)
+        component_questions[(*program_key, _component_family(row["component"]))].append(question_id)
+
+    for source_id in all_question_ids:
+        vector = vectors.get(source_id, {})
         scores: Counter[int] = Counter()
         for term, source_weight in vector.items():
             for target_id, target_weight in postings[term]:
@@ -291,7 +308,38 @@ def _build_similarities(
             if score >= 0.08:
                 ranked.append((score, target_id))
         ranked.sort(key=lambda item: (-item[0], item[1]))
-        for rank, (score, target_id) in enumerate(ranked[:top_k], 1):
+        ranked = ranked[:top_k]
+        selected = {target_id for _, target_id in ranked}
+        source_row = row_by_question[source_id]
+        program_key = (
+            str(source_row["qualification"]),
+            str(source_row["exam_board"]),
+            str(source_row["course_code"]),
+        )
+        fallback_groups = chain(
+            (feature_questions[feature_id] for feature_id in source_features),
+            (component_questions[(*program_key, _component_family(source_row["component"]))],),
+            (program_questions[program_key],),
+            (all_question_ids,),
+        )
+        for candidates in fallback_groups:
+            for target_id in candidates:
+                if len(ranked) >= top_k:
+                    break
+                if (
+                    target_id == source_id
+                    or target_id in selected
+                    or paper_by_question[target_id] == paper_by_question[source_id]
+                ):
+                    continue
+                target_features = feature_sets.get(target_id, set())
+                union = source_features | target_features
+                topic_score = len(source_features & target_features) / len(union) if union else 0.0
+                ranked.append((max(0.01, 0.25 * topic_score), target_id))
+                selected.add(target_id)
+            if len(ranked) >= top_k:
+                break
+        for rank, (score, target_id) in enumerate(ranked, 1):
             output.append(((source_id, target_id), rank, round(score, 6)))
     return output
 
@@ -305,7 +353,13 @@ def _write_algorithm(connection: sqlite3.Connection, top_k: int) -> int:
         (
             ALGORITHM_NAME,
             ALGORITHM_VERSION,
-            json.dumps({"scope": "global", "text_weight": 0.75, "topic_weight": 0.25, "top_k": top_k}, sort_keys=True),
+            json.dumps({
+                "fallback": "topic_component_program_global",
+                "scope": "global",
+                "text_weight": 0.75,
+                "topic_weight": 0.25,
+                "top_k": top_k,
+            }, sort_keys=True),
         ),
     ).lastrowid)
 
