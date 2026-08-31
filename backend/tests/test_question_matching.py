@@ -62,7 +62,13 @@ def test_builds_syllabus_tags_search_and_similar_questions(tmp_path: Path) -> No
         database,
         tmp_path / "raw_papers",
         app_database_path=tmp_path / "application.sqlite3",
+        bootstrap_admin_email="admin@example.com",
+        bootstrap_admin_password="a-long-test-password",
     )))
+    assert client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "a-long-test-password"},
+    ).status_code == 200
     assert client.get(
         "/api/v1/questions/search",
         params={"query": "constant acceleration", "exam_id": "a_level:cie:9709"},

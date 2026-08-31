@@ -220,7 +220,7 @@ def main() -> int:
         str(VENV_PYTHON),
         str(PROJECT_ROOT / "scripts" / "start_api.py"),
         "--host",
-        host,
+        "127.0.0.1",
         "--port",
         str(args.api_port),
     ]
@@ -244,7 +244,7 @@ def main() -> int:
         environment.get("OME_ALLOWED_DEV_ORIGINS", ""), lan_url
     )
     print(f"Local:    http://127.0.0.1:{args.frontend_port}")
-    print(f"API:      http://127.0.0.1:{args.api_port}")
+    print(f"API:      http://127.0.0.1:{args.api_port} (local only)")
     if lan_url is None and host != "127.0.0.1":
         print("LAN:      unavailable (no active LAN IPv4 address was found)")
     print("Press Ctrl+C to stop both servers.\n")

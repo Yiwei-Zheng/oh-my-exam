@@ -157,8 +157,27 @@ def _write_pdf(path: Path, first_page: str, second_page: str) -> None:
         document.close()
 
 
+def _login_admin(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "admin@example.com", "password": "a-long-test-password"},
+    )
+    assert response.status_code == 200
+
+
 def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+    client = _client(tmp_path, with_admin=True)
+
+    for path in (
+        "/api/v1/exams",
+        "/api/v1/questions/search",
+        "/api/v1/exams/admissions:uat:engaa/questions/7/question.jpg",
+        "/api/v1/exams/admissions:uat:engaa/papers/1/question",
+    ):
+        response = client.get(path)
+        assert response.status_code == 401
+        assert response.json() == {"detail": "authentication_required"}
+    _login_admin(client)
 
     exams = client.get("/api/v1/exams")
     assert exams.status_code == 200
@@ -230,7 +249,8 @@ def test_question_tree_uses_uppercase_exam_codes_and_collapses_duplicate_year(tm
 
 
 def test_capabilities_and_placeholders_are_explicit(tmp_path: Path) -> None:
-    client = _client(tmp_path)
+    client = _client(tmp_path, with_admin=True)
+    _login_admin(client)
 
     capabilities = client.get("/api/v1/capabilities").json()
     assert capabilities["catalog"]["status"] == "ready"
@@ -421,7 +441,7 @@ def test_api_does_not_serve_frontend_or_repository_files(tmp_path: Path) -> None
     assert client.get("/").status_code == 404
     assert client.get("/admin").status_code == 404
     assert client.get("/assets/app.js").status_code == 404
-    assert client.get("/api/v1/unknown").status_code == 404
+    assert client.get("/api/v1/unknown").status_code == 401
     assert client.get("/%2e%2e/pyproject.toml").status_code == 404
 
 
@@ -433,7 +453,9 @@ def test_image_search_returns_ocr_text_and_matches_any_term(
         "extract_image_text",
         lambda _data_url: ImageText("unrelated acceleration noise", "test-ocr"),
     )
-    response = _client(tmp_path).post(
+    client = _client(tmp_path, with_admin=True)
+    _login_admin(client)
+    response = client.post(
         "/api/v1/questions/image-search",
         json={"image_data_url": "data:image/png;base64," + "A" * 32},
     )
@@ -453,7 +475,9 @@ def test_image_search_rejects_more_than_top_five_matches(
         lambda _data_url: ImageText("acceleration", "test-ocr"),
     )
 
-    response = _client(tmp_path).post(
+    client = _client(tmp_path, with_admin=True)
+    _login_admin(client)
+    response = client.post(
         "/api/v1/questions/image-search",
         json={
             "image_data_url": "data:image/png;base64," + "A" * 32,

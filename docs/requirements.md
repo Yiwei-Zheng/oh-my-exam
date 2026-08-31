@@ -30,6 +30,9 @@ architecture must allow new exam families without global rewrites.
   are limited independently by normalized account and client IP.
 - Browser authentication uses secure HttpOnly cookies; credentials and bearer
   tokens are not stored in frontend source or local storage.
+- Catalog metadata, search, question images, and source PDFs require an active
+  authenticated session. Only health checks, login, and invitation registration
+  are public API endpoints.
 - Source PDFs are protected resources. The browser receives internal document
   ids, never filesystem paths, object keys, or upstream source URLs.
 

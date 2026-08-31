@@ -4,6 +4,10 @@
 
 Oh-My-Exam is a modular monolith with a browser client and a server application separated by `/api/v1`. The frontend never imports backend code. FastAPI owns authentication, catalog reads and corrections, PDF delivery and pipeline job control. Pipeline modules also expose CLI entry points and do not depend on the GUI.
 
+API access is default-deny: only health, login, and invitation registration are
+public. The development launcher exposes Next.js to the LAN while FastAPI stays
+on loopback and is reached through the frontend proxy.
+
 ```text
 Browser -> Caddy -> Next.js web server
                  -> /api/v1 -> FastAPI

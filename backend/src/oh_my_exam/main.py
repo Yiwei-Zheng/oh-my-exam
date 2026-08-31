@@ -93,8 +93,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app = FastAPI(title="Oh-My-Exam API", version="0.1.0")
 
+    public_api_paths = {
+        "/api/v1/health",
+        "/api/v1/auth/login",
+        "/api/v1/auth/register",
+    }
+
+    @app.middleware("http")
+    async def require_authenticated_api(request: Request, call_next):
+        path = request.url.path.rstrip("/")
+        is_api = path == "/api/v1" or path.startswith("/api/v1/")
+        if request.method != "OPTIONS" and is_api and path not in public_api_paths:
+            user = identity.user_from_session(request.cookies.get(SESSION_COOKIE))
+            if user is None:
+                return JSONResponse(
+                    {"detail": "authentication_required"},
+                    status_code=401,
+                    headers={"Cache-Control": "no-store"},
+                )
+            request.state.user = user
+        return await call_next(request)
+
     def current_user(request: Request) -> User:
-        user = identity.user_from_session(request.cookies.get(SESSION_COOKIE))
+        user = getattr(request.state, "user", None) or identity.user_from_session(
+            request.cookies.get(SESSION_COOKIE)
+        )
         if user is None:
             raise HTTPException(status_code=401, detail="authentication_required")
         return user

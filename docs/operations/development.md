@@ -28,14 +28,14 @@ Local development creates and reuses `backend/data/application.secret` when
 `OME_JWT_SECRET` is omitted. Production must provide an explicit secret through
 the protected systemd environment file.
 
-The launcher starts the API on port 8000 and Next.js on port 4173, streams both
-logs into one terminal, and stops both process trees on Ctrl+C. By default both
-servers listen on all interfaces. The launcher prints the detected LAN address
-and a terminal QR code that opens the frontend from another device on the same
-network. It also passes that exact host to Next.js as an allowed development
-origin so HMR and development font resources remain available without allowing
-unrelated origins. The same launcher works on every supported platform through
-Python:
+The launcher starts the loopback-only API on port 8000 and Next.js on port 4173,
+streams both logs into one terminal, and stops both process trees on Ctrl+C. By
+default only the frontend listens on all interfaces. The launcher prints the
+detected LAN address and a terminal QR code that opens the frontend from another
+device on the same network. It also passes that exact host to Next.js as an
+allowed development origin so HMR and development font resources remain
+available without allowing unrelated origins. The same launcher works on every
+supported platform through Python:
 
 ```bash
 python start_server.py
