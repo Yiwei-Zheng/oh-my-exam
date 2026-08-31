@@ -427,17 +427,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "job": updates.latest(),
         }
 
-    @app.post("/api/v1/admin/question-update/probe")
+    @app.post("/api/v1/admin/question-update/probe", status_code=202)
     def probe_question_update(
         payload: QuestionUpdateProbeRequest,
-        _: User = Depends(admin_user),
+        user: User = Depends(admin_user),
     ) -> dict[str, object]:
         try:
-            return updates.probe(payload.subjects, settings.paper_root)
+            return {"job": updates.start_probe(user.id, payload.subjects, settings.paper_root)}
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"resource_probe_failed: {exc}") from exc
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     @app.post("/api/v1/admin/question-update", status_code=202)
     def start_question_update(
@@ -450,6 +450,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     user.id,
                     subject_ids=payload.subjects if payload else None,
                     concurrency=payload.concurrency if payload else 4,
+                    stage=payload.stage if payload else "all",
+                    mode=payload.mode if payload else "update",
                 )
             }
         except ValueError as exc:

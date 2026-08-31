@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import time
 
 import pytest
 
@@ -94,3 +96,53 @@ def test_update_rejects_unknown_or_empty_subject_selection(tmp_path: Path) -> No
         manager.probe([], tmp_path)
     with pytest.raises(ValueError, match="unknown_update_subjects"):
         manager.probe(["cie:0000"], tmp_path)
+
+
+def test_update_rejects_unknown_stage_or_mode(tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ("update",))
+
+    with pytest.raises(ValueError, match="unknown_update_stage"):
+        manager.start(1, ["cie:9709"], stage="publish")
+    with pytest.raises(ValueError, match="unknown_update_mode"):
+        manager.start(1, ["cie:9709"], mode="append")
+
+
+def test_probe_runs_as_a_background_job(monkeypatch, tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ())
+    with manager._connect() as connection:
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO users (id) VALUES (1)")
+    monkeypatch.setattr(manager, "_probe_cie", lambda _subjects, _root: [])
+
+    job = manager.start_probe(1, ["cie:9709"], tmp_path)
+
+    assert job["action"] == "probe"
+    deadline = time.monotonic() + 2
+    while (latest := manager.latest())["status"] == "running" and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert latest["status"] == "completed"
+    assert latest["result"]["resource_count"] == 0
+
+
+def test_job_progress_does_not_move_backwards(tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ())
+    with manager._connect() as connection:
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO users (id) VALUES (1)")
+        cursor = connection.execute(
+            """
+            INSERT INTO question_update_jobs
+                (requested_by, status, stage, action, progress, message)
+            VALUES (1, 'running', 'classifying', 'search', 82, 'publishing')
+            """
+        )
+        job_id = int(cursor.lastrowid)
+
+    manager._consume_progress(
+        job_id,
+        json.dumps({"stage": "checking", "progress": 8, "message": "validating"}),
+    )
+
+    job = manager.get(job_id)
+    assert job["stage"] == "classifying"
+    assert job["progress"] == 82

@@ -21,13 +21,15 @@ def download_asset(
     *,
     timeout_seconds: float = 60.0,
     reuse_from: Path | None = None,
+    overwrite: bool = False,
 ) -> tuple[Path, str]:
     target = raw_root / asset.relative_pdf_path
     metadata_path = target.with_suffix(".json")
-    if target.exists() and metadata_path.exists() and _pdf_looks_complete(target):
+    if not overwrite and target.exists() and metadata_path.exists() and _pdf_looks_complete(target):
         return target, "skipped"
-    target.unlink(missing_ok=True)
-    metadata_path.unlink(missing_ok=True)
+    if not _pdf_looks_complete(target):
+        target.unlink(missing_ok=True)
+        metadata_path.unlink(missing_ok=True)
     target.parent.mkdir(parents=True, exist_ok=True)
     part_path = target.with_suffix(".pdf.part")
     if reuse_from is not None and reuse_from.is_file() and _pdf_looks_complete(reuse_from):
@@ -80,6 +82,7 @@ def download_assets(
     delay_seconds: float = 0.2,
     timeout_seconds: float = 60.0,
     progress: ProgressCallback | None = None,
+    overwrite: bool = False,
 ) -> dict[str, int]:
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
     source_paths: dict[str, Path] = {}
@@ -90,6 +93,7 @@ def download_assets(
                 raw_root,
                 timeout_seconds=timeout_seconds,
                 reuse_from=source_paths.get(asset.source_url),
+                overwrite=overwrite,
             )
             source_paths[asset.source_url] = path
             record: dict[str, object] = {"asset": asset.stem, "status": status, "path": path.as_posix()}

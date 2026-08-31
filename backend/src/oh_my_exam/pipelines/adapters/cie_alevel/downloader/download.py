@@ -36,19 +36,20 @@ def download_asset(
     *,
     min_delay_seconds: float = 2.0,
     timeout_seconds: float = 45.0,
+    overwrite: bool = False,
 ) -> Path:
     target = output_root / asset.relative_pdf_path
     target.parent.mkdir(parents=True, exist_ok=True)
     metadata_path = target.with_suffix(".json")
     _migrate_legacy_asset_files(asset, output_root, target)
-    if target.exists() and target.stat().st_size > 0 and metadata_path.exists():
+    if not overwrite and target.exists() and target.stat().st_size > 0 and metadata_path.exists():
         return target
 
     legacy_part_path = target.with_suffix(target.suffix + ".part")
     if legacy_part_path.exists() and not target.exists():
         shutil.copyfile(legacy_part_path, target)
 
-    downloaded = target.stat().st_size if target.exists() else 0
+    downloaded = 0 if overwrite else (target.stat().st_size if target.exists() else 0)
     request = urllib.request.Request(build_frank_cie_url(asset), headers={"User-Agent": "Oh-My-Exam/0.1"})
     if downloaded:
         request.add_header("Range", f"bytes={downloaded}-")
@@ -99,6 +100,7 @@ def try_download_asset(
     timeout_seconds: float = 45.0,
     rate_limit_retries: int = 5,
     rate_limit_wait_seconds: float | None = None,
+    overwrite: bool = False,
 ) -> DownloadOutcome:
     rate_limit_attempts = 0
     try:
@@ -109,6 +111,7 @@ def try_download_asset(
                     output_root,
                     min_delay_seconds=min_delay_seconds,
                     timeout_seconds=timeout_seconds,
+                    overwrite=overwrite,
                 )
                 return DownloadOutcome(asset=asset, status="downloaded", path=path, message="")
             except RateLimitedError as exc:

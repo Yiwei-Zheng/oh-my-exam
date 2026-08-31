@@ -19,6 +19,16 @@ WORKFLOWS: tuple[dict[str, str], ...] = (
     {"id": "uat:tmua", "code": "TMUA", "name": "Test of Mathematics for University Admission", "family": "UAT-UK"},
 )
 WORKFLOW_IDS = {str(item["id"]) for item in WORKFLOWS}
+UPDATE_STAGES = {"all", "download", "split", "inventory", "search"}
+UPDATE_MODES = {"update", "overwrite"}
+JOB_STAGE = {
+    "all": "checking",
+    "download": "downloading",
+    "split": "splitting",
+    "inventory": "cataloging",
+    "search": "classifying",
+}
+STAGE_ORDER = {"checking": 0, "downloading": 1, "splitting": 2, "cataloging": 3, "classifying": 4}
 
 
 class UpdateJobManager:
@@ -66,34 +76,78 @@ class UpdateJobManager:
             "probed_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    def start_probe(
+        self,
+        requested_by: int,
+        subject_ids: Sequence[str],
+        paper_root: Path,
+    ) -> dict[str, object]:
+        selected = self._validate_subjects(subject_ids)
+        job_id, existing = self._create_job(requested_by, "probe", "checking", "正在嗅探来源")
+        if existing is not None:
+            return existing
+        Thread(
+            target=self._run_probe,
+            args=(job_id, selected, paper_root),
+            daemon=True,
+            name=f"question-update-probe-{job_id}",
+        ).start()
+        return self.get(job_id)
+
     def start(
         self,
         requested_by: int,
         subject_ids: Sequence[str] | None = None,
         concurrency: int = 4,
+        stage: str = "all",
+        mode: str = "update",
     ) -> dict[str, object]:
         if not self.configured:
             raise RuntimeError("question update pipeline is not configured")
         selected = self._validate_subjects(subject_ids or tuple(WORKFLOW_IDS))
         concurrency = max(1, min(12, int(concurrency)))
+        if stage not in UPDATE_STAGES:
+            raise ValueError(f"unknown_update_stage: {stage}")
+        if mode not in UPDATE_MODES:
+            raise ValueError(f"unknown_update_mode: {mode}")
+        job_id, existing = self._create_job(
+            requested_by,
+            stage,
+            JOB_STAGE[stage],
+            "正在执行完整流水线" if stage == "all" else f"正在执行 {stage} 阶段",
+        )
+        if existing is not None:
+            return existing
+        Thread(
+            target=self._run,
+            args=(job_id, selected, concurrency, stage, mode),
+            daemon=True,
+            name=f"question-update-{job_id}",
+        ).start()
+        return self.get(job_id)
+
+    def _create_job(
+        self,
+        requested_by: int,
+        action: str,
+        stage: str,
+        message: str,
+    ) -> tuple[int, dict[str, object] | None]:
         with self._lock, self._connect() as connection:
             running = connection.execute(
                 "SELECT * FROM question_update_jobs WHERE status = 'running' ORDER BY id DESC LIMIT 1"
             ).fetchone()
             if running is not None:
-                return self._serialize(running)
+                return int(running["id"]), self._serialize(running)
             cursor = connection.execute(
-                "INSERT INTO question_update_jobs (requested_by, status, stage, progress, message) VALUES (?, 'running', 'checking', 2, '正在检查来源')",
-                (requested_by,),
+                """
+                INSERT INTO question_update_jobs
+                    (requested_by, status, stage, action, progress, message)
+                VALUES (?, 'running', ?, ?, 2, ?)
+                """,
+                (requested_by, stage, action, message),
             )
-            job_id = int(cursor.lastrowid)
-        Thread(
-            target=self._run,
-            args=(job_id, selected, concurrency),
-            daemon=True,
-            name=f"question-update-{job_id}",
-        ).start()
-        return self.get(job_id)
+            return int(cursor.lastrowid), None
 
     def latest(self) -> dict[str, object] | None:
         with self._connect() as connection:
@@ -107,11 +161,34 @@ class UpdateJobManager:
             raise LookupError(f"update job not found: {job_id}")
         return self._serialize(row)
 
-    def _run(self, job_id: int, subject_ids: Sequence[str], concurrency: int) -> None:
+    def _run_probe(self, job_id: int, subject_ids: Sequence[str], paper_root: Path) -> None:
+        try:
+            result = self.probe(subject_ids, paper_root)
+            self._update(
+                job_id,
+                status="completed",
+                stage="checking",
+                progress=100,
+                message="资源嗅探完成",
+                result=result,
+            )
+        except Exception as exc:
+            self._update(job_id, status="failed", stage="failed", message=str(exc)[:500])
+
+    def _run(
+        self,
+        job_id: int,
+        subject_ids: Sequence[str],
+        concurrency: int,
+        stage: str,
+        mode: str,
+    ) -> None:
         try:
             environment = os.environ.copy()
             environment["OME_UPDATE_SUBJECTS"] = ",".join(subject_ids)
             environment["OME_UPDATE_CONCURRENCY"] = str(concurrency)
+            environment["OME_UPDATE_STAGE"] = stage
+            environment["OME_UPDATE_MODE"] = mode
             process = subprocess.Popen(
                 self.command,
                 cwd=self.database_path.parent,
@@ -229,10 +306,15 @@ class UpdateJobManager:
         allowed_stages = {"checking", "downloading", "splitting", "cataloging", "classifying"}
         stage = str(payload.get("stage", ""))
         progress = payload.get("progress")
+        current = self.get(job_id)
+        if stage in allowed_stages and STAGE_ORDER[stage] < STAGE_ORDER.get(str(current["stage"]), 0):
+            stage = ""
         self._update(
             job_id,
             stage=stage if stage in allowed_stages else None,
-            progress=max(0, min(99, int(progress))) if isinstance(progress, (int, float)) else None,
+            progress=max(int(current["progress"]), min(99, int(progress)))
+            if isinstance(progress, (int, float))
+            else None,
             message=str(payload.get("message", ""))[:500] or None,
         )
         return str(payload.get("message", ""))[:500] or None
@@ -245,6 +327,7 @@ class UpdateJobManager:
         stage: str | None = None,
         progress: int | None = None,
         message: str | None = None,
+        result: dict[str, object] | None = None,
     ) -> None:
         fields: list[str] = []
         values: list[object] = []
@@ -252,6 +335,9 @@ class UpdateJobManager:
             if value is not None:
                 fields.append(f"{name} = ?")
                 values.append(value)
+        if result is not None:
+            fields.append("result_json = ?")
+            values.append(json.dumps(result, ensure_ascii=False))
         if status in {"completed", "failed"}:
             fields.append("finished_at = ?")
             values.append(datetime.now(timezone.utc).isoformat())
@@ -273,11 +359,18 @@ class UpdateJobManager:
                     stage TEXT NOT NULL,
                     progress INTEGER NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
                     message TEXT NOT NULL DEFAULT '',
+                    action TEXT NOT NULL DEFAULT 'all',
+                    result_json TEXT,
                     started_at TEXT NOT NULL DEFAULT (datetime('now')),
                     finished_at TEXT
                 )
                 """
             )
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(question_update_jobs)")}
+            if "action" not in columns:
+                connection.execute("ALTER TABLE question_update_jobs ADD COLUMN action TEXT NOT NULL DEFAULT 'all'")
+            if "result_json" not in columns:
+                connection.execute("ALTER TABLE question_update_jobs ADD COLUMN result_json TEXT")
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.database_path)
@@ -287,8 +380,10 @@ class UpdateJobManager:
 
     @staticmethod
     def _serialize(row: sqlite3.Row) -> dict[str, object]:
+        result = json.loads(row["result_json"]) if row["result_json"] else None
         return {
             "id": int(row["id"]), "status": row["status"], "stage": row["stage"],
+            "action": row["action"], "result": result,
             "progress": int(row["progress"]), "message": row["message"],
             "started_at": row["started_at"], "finished_at": row["finished_at"],
         }

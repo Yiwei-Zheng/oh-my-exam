@@ -51,7 +51,14 @@ interface UpdateJob {
   stage: string
   progress: number
   message: string
+  action: PipelineAction
+  result: ProbeResult | null
 }
+
+type PipelineAction =
+  'probe' | 'all' | 'download' | 'split' | 'inventory' | 'search'
+type PipelineStage = Exclude<PipelineAction, 'all'>
+type UpdateMode = 'update' | 'overwrite'
 
 const copy = {
   'zh-CN': {
@@ -60,11 +67,11 @@ const copy = {
     intro:
       '只显示已有完整工作流的科目。先嗅探来源并和本地逐项比较，确认后再下载、切题、盘点和建立搜索索引。',
     back: '返回管理后台',
-    choose: '1. 选择科目',
+    choose: '选择科目',
     chooseHint: '勾选本次要检查的科目，可多选。',
     sniff: '嗅探并比较',
     sniffing: '正在嗅探来源…',
-    comparison: '2. 比较结果',
+    comparison: '嗅探结果',
     found: '来源资源',
     local: '本地已有',
     fresh: '新增资源',
@@ -89,6 +96,11 @@ const copy = {
     startFailed: '未能启动工作流，请稍后重试。',
     more: '项未展开',
     stages: ['嗅探', '下载', '切题', '盘点入库', '可搜索'],
+    stageHint: '每一步都可增量更新或覆盖重跑，也可以一键执行完整流水线。',
+    update: '更新',
+    overwrite: '覆盖',
+    runAll: '一键全部执行',
+    overwriteAll: '覆盖全部重跑',
   },
   en: {
     eyebrow: 'Library maintenance / resource pipeline',
@@ -96,11 +108,11 @@ const copy = {
     intro:
       'Only subjects with a complete workflow appear here. Probe sources, compare locally, then download, split, inventory, and index.',
     back: 'Back to admin',
-    choose: '1. Choose subjects',
+    choose: 'Choose subjects',
     chooseHint: 'Select one or more subjects to inspect.',
     sniff: 'Probe and compare',
     sniffing: 'Probing sources…',
-    comparison: '2. Comparison',
+    comparison: 'Probe results',
     found: 'Source resources',
     local: 'Already local',
     fresh: 'New resources',
@@ -129,6 +141,12 @@ const copy = {
     startFailed: 'The workflow could not be started. Try again shortly.',
     more: 'more not shown',
     stages: ['Probe', 'Download', 'Split', 'Inventory', 'Searchable'],
+    stageHint:
+      'Incrementally update or overwrite any stage, or run the complete pipeline.',
+    update: 'Update',
+    overwrite: 'Overwrite',
+    runAll: 'Run all updates',
+    overwriteAll: 'Overwrite and rerun all',
   },
 } as const
 
@@ -139,6 +157,15 @@ const stageIndex: Record<string, number> = {
   cataloging: 3,
   classifying: 4,
   completed: 4,
+}
+
+const actionIndex: Record<PipelineAction, number> = {
+  probe: 0,
+  all: 4,
+  download: 1,
+  split: 2,
+  inventory: 3,
+  search: 4,
 }
 
 export function QuestionUpdateWorkspace() {
@@ -169,7 +196,7 @@ export function QuestionUpdateWorkspace() {
         setExpandedFamilies(
           new Set(result.workflows.map((item) => item.family)),
         )
-        setJob(result.job)
+        acceptJob(result.job)
       })
       .catch(() => setError(c.probeFailed))
   }, [c.probeFailed])
@@ -178,18 +205,28 @@ export function QuestionUpdateWorkspace() {
     if (job?.status !== 'running') return
     const timer = window.setInterval(() => {
       apiRequest<{ job: UpdateJob | null }>('/api/v1/admin/question-update')
-        .then((result) => setJob(result.job))
+        .then((result) => acceptJob(result.job))
         .catch(() => undefined)
     }, 1200)
     return () => window.clearInterval(timer)
   }, [job?.status])
 
   const activeStage = useMemo(() => {
-    if (job?.status === 'completed') return 4
-    if (job?.status === 'running') return stageIndex[job.stage] ?? 0
-    if (probe) return probe.new_count > 0 ? 1 : 0
+    if (job?.status === 'completed') return actionIndex[job.action] ?? 4
+    if (job?.status === 'running') {
+      return job.action === 'all'
+        ? (stageIndex[job.stage] ?? 0)
+        : (actionIndex[job.action] ?? 0)
+    }
+    if (job?.status === 'failed') return actionIndex[job.action] ?? 0
+    if (probe) return 0
     return -1
   }, [job, probe])
+
+  function acceptJob(next: UpdateJob | null) {
+    setJob(next)
+    if (next?.action === 'probe' && next.result) setProbe(next.result)
+  }
 
   function toggleSubject(id: string) {
     if (busy || job?.status === 'running') return
@@ -214,21 +251,23 @@ export function QuestionUpdateWorkspace() {
     setError('')
   }
 
-  async function sniff() {
+  async function sniff(mode: UpdateMode = 'update') {
     if (!selected.length) {
       setError(c.empty)
       return
     }
     setBusy(true)
     setError('')
-    setProbe(null)
+    if (mode === 'overwrite') setProbe(null)
     try {
-      setProbe(
-        await apiRequest<ProbeResult>('/api/v1/admin/question-update/probe', {
+      const result = await apiRequest<{ job: UpdateJob }>(
+        '/api/v1/admin/question-update/probe',
+        {
           method: 'POST',
           body: JSON.stringify({ subjects: selected }),
-        }),
+        },
       )
+      acceptJob(result.job)
     } catch {
       setError(c.probeFailed)
     } finally {
@@ -236,8 +275,14 @@ export function QuestionUpdateWorkspace() {
     }
   }
 
-  async function start() {
-    if (!probe || !selected.length) return
+  async function start(
+    stage: Exclude<PipelineAction, 'probe'> = 'all',
+    mode: UpdateMode = 'update',
+  ) {
+    if (!selected.length) {
+      setError(c.empty)
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -245,15 +290,25 @@ export function QuestionUpdateWorkspace() {
         '/api/v1/admin/question-update',
         {
           method: 'POST',
-          body: JSON.stringify({ subjects: selected, concurrency }),
+          body: JSON.stringify({
+            subjects: selected,
+            concurrency,
+            stage,
+            mode,
+          }),
         },
       )
-      setJob(result.job)
+      acceptJob(result.job)
     } catch {
       setError(c.startFailed)
     } finally {
       setBusy(false)
     }
+  }
+
+  function runStage(stage: PipelineStage, mode: UpdateMode) {
+    if (stage === 'probe') void sniff(mode)
+    else void start(stage, mode)
   }
 
   return (
@@ -281,6 +336,16 @@ export function QuestionUpdateWorkspace() {
           stages={c.stages}
           active={activeStage}
           failed={job?.status === 'failed'}
+          hint={c.stageHint}
+          updateLabel={c.update}
+          overwriteLabel={c.overwrite}
+          runAllLabel={c.runAll}
+          overwriteAllLabel={c.overwriteAll}
+          disabled={
+            busy || !configured || !selected.length || job?.status === 'running'
+          }
+          onRun={runStage}
+          onRunAll={(mode) => void start('all', mode)}
         />
 
         {error && (
@@ -323,7 +388,7 @@ export function QuestionUpdateWorkspace() {
               />
               <Button
                 className="mt-5 h-11 w-full sm:w-auto"
-                onClick={sniff}
+                onClick={() => void sniff('update')}
                 disabled={busy || !configured || job?.status === 'running'}
               >
                 <HugeiconsIcon icon={Search01Icon} data-icon="inline-start" />
@@ -446,7 +511,7 @@ export function QuestionUpdateWorkspace() {
                   </div>
                   <Button
                     className="h-11 w-full"
-                    onClick={start}
+                    onClick={() => void start('all', 'update')}
                     disabled={busy || job?.status === 'running'}
                   >
                     <HugeiconsIcon
@@ -496,7 +561,11 @@ export function QuestionUpdateWorkspace() {
               />
             </div>
             {job.status === 'failed' && (
-              <Button variant="outline" className="mt-4" onClick={sniff}>
+              <Button
+                variant="outline"
+                className="mt-4"
+                onClick={() => void sniff('update')}
+              >
                 {c.retry}
               </Button>
             )}
@@ -616,16 +685,61 @@ function WorkflowTrack({
   stages,
   active,
   failed,
+  hint,
+  updateLabel,
+  overwriteLabel,
+  runAllLabel,
+  overwriteAllLabel,
+  disabled,
+  onRun,
+  onRunAll,
 }: {
   stages: readonly string[]
   active: number
   failed: boolean
+  hint: string
+  updateLabel: string
+  overwriteLabel: string
+  runAllLabel: string
+  overwriteAllLabel: string
+  disabled: boolean
+  onRun: (stage: PipelineStage, mode: UpdateMode) => void
+  onRunAll: (mode: UpdateMode) => void
 }) {
+  const actions: PipelineStage[] = [
+    'probe',
+    'download',
+    'split',
+    'inventory',
+    'search',
+  ]
   return (
     <section
       aria-label="Update workflow"
       className="update-track relative overflow-hidden rounded-3xl border bg-card/80 px-4 py-6 backdrop-blur md:px-8 md:py-8"
     >
+      <div className="relative z-10 mb-6 flex flex-wrap items-center justify-between gap-4">
+        <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+          {hint}
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            className="h-11"
+            disabled={disabled}
+            onClick={() => onRunAll('update')}
+          >
+            {runAllLabel}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-11"
+            disabled={disabled}
+            onClick={() => onRunAll('overwrite')}
+          >
+            {overwriteAllLabel}
+          </Button>
+        </div>
+      </div>
       <svg
         aria-hidden="true"
         viewBox="0 0 1000 120"
@@ -648,28 +762,49 @@ function WorkflowTrack({
           className="update-track-path text-primary"
         />
       </svg>
-      <ol className="relative grid grid-cols-2 gap-4 md:grid-cols-5 md:gap-8">
+      <ol className="relative grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5 lg:gap-5">
         {stages.map((label, index) => (
           <li
             key={label}
             className={cn(
-              'flex min-h-16 items-center gap-3 rounded-2xl border bg-background/95 px-3 py-2 transition-all duration-300 md:flex-col md:justify-center md:text-center',
+              'flex min-h-36 flex-col justify-between gap-3 rounded-2xl border bg-background/95 p-3 transition-all duration-300',
               index <= active && 'border-primary/50 text-primary',
               failed &&
                 index === active &&
                 'border-destructive/50 text-destructive',
             )}
           >
-            <span
-              className={cn(
-                'grid size-7 shrink-0 place-items-center rounded-full border bg-background font-mono text-xs font-semibold',
-                index <= active &&
-                  'border-primary bg-primary text-primary-foreground',
-              )}
-            >
-              {index + 1}
-            </span>
-            <span className="text-sm font-medium">{label}</span>
+            <div className="flex items-center gap-3">
+              <span
+                className={cn(
+                  'grid size-7 shrink-0 place-items-center rounded-full border bg-background font-mono text-xs font-semibold',
+                  index <= active &&
+                    'border-primary bg-primary text-primary-foreground',
+                )}
+              >
+                {index + 1}
+              </span>
+              <span className="text-sm font-semibold">{label}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 lg:grid-cols-1">
+              <Button
+                size="sm"
+                className="h-11"
+                disabled={disabled}
+                onClick={() => onRun(actions[index], 'update')}
+              >
+                {updateLabel}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-11"
+                disabled={disabled}
+                onClick={() => onRun(actions[index], 'overwrite')}
+              >
+                {overwriteLabel}
+              </Button>
+            </div>
           </li>
         ))}
       </ol>

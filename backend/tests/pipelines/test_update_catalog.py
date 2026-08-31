@@ -38,4 +38,31 @@ def test_update_catalog_continues_after_one_project_fails(monkeypatch, tmp_path:
     result = update_catalog.update_catalog(tmp_path, ["ocr:step", "uat:engaa"], 2)
 
     assert result == active
-    assert calls == ["pack", "release"]
+    assert calls == ["pack", "pack", "release"]
+
+
+def test_update_catalog_can_run_one_stage_in_overwrite_mode(monkeypatch, tmp_path: Path) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(update_catalog, "discover_step_assets", lambda: ["asset"])
+    monkeypatch.setattr(
+        update_catalog,
+        "download_step_assets",
+        lambda *_args, **kwargs: calls.append(kwargs["overwrite"])
+        or {"downloaded": 1, "skipped": 0, "failed": 0},
+    )
+    monkeypatch.setattr(
+        update_catalog,
+        "split_step_downloads",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("split should not run")),
+    )
+
+    result = update_catalog.update_catalog(
+        tmp_path,
+        ["ocr:step"],
+        2,
+        stage="download",
+        mode="overwrite",
+    )
+
+    assert result == tmp_path
+    assert calls == [True]

@@ -65,6 +65,7 @@ def split_paper_set_to_images(
     options: SplitOptions | None = None,
 ) -> dict[str, object]:
     options = options or SplitOptions()
+    completed_keys = _completed_split_keys(report_path) if not overwrite else set()
     output_dir = (
         processed_root
         / paper_set.exam_board
@@ -106,6 +107,7 @@ def split_installed_paper_sets(
     options: SplitOptions | None = None,
     progress: ProgressCallback | None = None,
     should_stop: StopCallback | None = None,
+    overwrite: bool = False,
 ) -> dict[str, int]:
     paper_sets = filter_paper_sets(
         discover_installed_paper_sets(raw_root),
@@ -127,6 +129,10 @@ def split_installed_paper_sets(
             return {"index": index, "total": len(paper_sets), "key": paper_set.key, "status": "skipped", "message": "stopped"}
         if paper_set.qp is None and paper_set.ms is None:
             return {"index": index, "total": len(paper_sets), "key": paper_set.key, "status": "skipped"}
+        if not overwrite and paper_set.key in completed_keys and _paper_set_is_split(paper_set, processed_root):
+            return {"index": index, "total": len(paper_sets), "key": paper_set.key, "status": "skipped"}
+        if overwrite:
+            shutil.rmtree(_paper_set_output_root(paper_set, processed_root), ignore_errors=True)
         split_paper_set_to_images(paper_set, raw_root, processed_root, options=options)
         return {"index": index, "total": len(paper_sets), "key": paper_set.key, "status": "split"}
 
@@ -179,6 +185,42 @@ def split_installed_paper_sets(
                     _record_split_result(record, report, counts, progress, progress_state)
                     submit_until_full()
     return counts
+
+
+def _paper_set_is_split(paper_set: InstalledPaperSet, processed_root: Path) -> bool:
+    output_root = _paper_set_output_root(paper_set, processed_root)
+    assets = [("qp", paper_set.qp), ("ms", paper_set.ms)]
+    return all(
+        asset is None or any((output_root / document_type).glob(f"{asset.stem}_*.json"))
+        for document_type, asset in assets
+    )
+
+
+def _paper_set_output_root(paper_set: InstalledPaperSet, processed_root: Path) -> Path:
+    return (
+        processed_root
+        / paper_set.exam_board
+        / paper_set.qualification
+        / paper_set.subject_code
+        / str(paper_set.year)
+        / paper_set.session
+        / paper_set.component
+    )
+
+
+def _completed_split_keys(report_path: Path) -> set[str]:
+    if not report_path.exists():
+        return set()
+    completed: set[str] = set()
+    with report_path.open(encoding="utf-8") as report:
+        for line in report:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("status") == "split" and isinstance(record.get("key"), str):
+                completed.add(record["key"])
+    return completed
 
 
 def _record_split_result(

@@ -68,8 +68,12 @@ architecture must allow new exam families without global rewrites.
   Administrators select subjects with grouped tree checkboxes, probe fixed upstream sources, compare the
   result with local immutable PDFs, confirm newly discovered resources, and set
   download concurrency before processing begins.
+- Probe, download, split, inventory, and search publication are individually
+  runnable from the workflow track. Each stage offers incremental update and
+  overwrite modes; the same modes are available for the complete pipeline.
 - Web requests create durable job records and start the pipeline in an isolated
-  subprocess; they do not execute processing inside the request handler.
+  subprocess; source probing also runs as a durable background job so slow
+  upstream sites never hold the Web request open.
 - Every step has explicit inputs, outputs, status, logs, and artifact identity.
 - Steps are idempotent and retryable. A failed run keeps its logs and may be
   restarted by an administrator.

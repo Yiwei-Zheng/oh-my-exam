@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import shutil
 from typing import Callable
 
 from oh_my_exam.pipelines.adapters.uat.splitter.cutter import SplitOptions, load_tmua_answer_keys, split_asset
@@ -28,6 +29,7 @@ def split_downloaded(
     limit: int | None = None,
     options: SplitOptions | None = None,
     progress: Callable[[dict[str, object]], None] | None = None,
+    overwrite: bool = False,
 ) -> dict[str, int]:
     assets = [load_asset(path) for path in discover_downloaded(raw_root)]
     assets = [
@@ -38,10 +40,17 @@ def split_downloaded(
     ]
     if limit is not None:
         assets = assets[:limit]
-    counts = {"split": 0, "failed": 0}
+    counts = {"split": 0, "failed": 0, "skipped": 0}
+    completed = _completed_assets(report_path) if not overwrite else set()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with report_path.open("a", encoding="utf-8") as report:
         for asset in assets:
+            output_dir = processed_root / asset.output_relative_dir
+            if not overwrite and asset.stem in completed and any(output_dir.glob(f"{asset.stem}_*.json")):
+                counts["skipped"] += 1
+                continue
+            if overwrite:
+                shutil.rmtree(output_dir, ignore_errors=True)
             try:
                 answer_choices = None
                 if asset.exam == "tmua" and asset.document_type == "ms":
@@ -59,3 +68,18 @@ def split_downloaded(
             if progress:
                 progress(record)
     return counts
+
+
+def _completed_assets(report_path: Path) -> set[str]:
+    if not report_path.exists():
+        return set()
+    completed: set[str] = set()
+    with report_path.open(encoding="utf-8") as report:
+        for line in report:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("status") == "split" and isinstance(record.get("asset"), str):
+                completed.add(record["asset"])
+    return completed

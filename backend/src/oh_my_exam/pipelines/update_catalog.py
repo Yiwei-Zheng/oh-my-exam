@@ -15,7 +15,6 @@ from oh_my_exam.pipelines.adapters.step.splitter.pipeline import split_downloade
 from oh_my_exam.pipelines.adapters.uat.downloader.catalog import DEFAULT_ARCHIVE_URLS, discover_assets
 from oh_my_exam.pipelines.adapters.uat.downloader.download import download_assets as download_uat_assets
 from oh_my_exam.pipelines.adapters.uat.splitter.pipeline import split_downloaded as split_uat_downloads
-from oh_my_exam.pipelines.adapters.uat.tmua_pipeline import process_tmua
 from oh_my_exam.pipelines.packaging import PackOptions, pack_subject_database
 from oh_my_exam.pipelines.release import build_and_activate_release
 
@@ -24,132 +23,190 @@ CIE_NAMES = {"9709": "Mathematics", "9231": "Mathematics - Further"}
 UAT_NAMES = {
     "engaa": "Engineering Admissions Assessment",
     "nsaa": "Natural Sciences Admissions Assessment",
+    "tmua": "Test of Mathematics for University Admission",
 }
+STAGES = ("download", "split", "inventory", "search")
 
 
 def _progress(stage: str, progress: int, message: str) -> None:
     print(json.dumps({"stage": stage, "progress": progress, "message": message}, ensure_ascii=False), flush=True)
 
 
-def update_catalog(data_root: Path, subject_ids: list[str], workers: int) -> Path:
+def update_catalog(
+    data_root: Path,
+    subject_ids: list[str],
+    workers: int,
+    stage: str = "all",
+    mode: str = "update",
+) -> Path:
     workers = max(1, min(12, int(workers)))
+    if stage not in {"all", *STAGES}:
+        raise ValueError(f"unsupported update stage: {stage}")
+    if mode not in {"update", "overwrite"}:
+        raise ValueError(f"unsupported update mode: {mode}")
     raw_root = data_root / "raw_papers"
     processed_root = data_root / "processed_questions"
     report_root = data_root / "reports"
     database_root = data_root / "databases"
-    _progress("checking", 5, "正在重新嗅探所选科目的资源")
+    overwrite = mode == "overwrite"
     failures: list[str] = []
-    completed: list[str] = []
-    for subject_id in subject_ids:
-        try:
-            if subject_id.startswith("cie:"):
-                code = subject_id.split(":", 1)[1]
-                assets = discover_frank_assets(
-                    qualification="a_level",
-                    subject_codes={code},
-                    start_year=2020,
-                    end_year=date.today().year,
-                    seasons=("Mar", "Jun", "Nov"),
-                    workers=workers,
-                )
-                if not assets:
-                    raise RuntimeError("Frank returned no resources")
-                _progress("downloading", 18, f"{subject_id}: 发现 {len(assets)} 份 Frank 资源")
-                counts = crawl_assets(
-                    assets,
-                    raw_root,
-                    report_root / f"web_update_cie_{code}_download.jsonl",
-                    delay_seconds=0.2,
-                    max_workers=workers,
-                )
-                if counts["failed"]:
-                    raise RuntimeError(f"download failed for {counts['failed']} assets")
-                counts = split_installed_paper_sets(
+    stages = STAGES if stage == "all" else (stage,)
+    active = data_root
+    if stage == "all":
+        _progress("checking", 5, "正在检查来源并准备完整流水线")
+    for current_stage in stages:
+        if current_stage == "search":
+            _progress("classifying", 82, "正在建立搜索索引并发布题库")
+            active = build_and_activate_release(data_root)
+            continue
+        completed = 0
+        for subject_id in subject_ids:
+            try:
+                _run_subject_stage(
+                    current_stage,
+                    subject_id,
                     raw_root,
                     processed_root,
-                    report_root / f"web_update_cie_{code}_split.jsonl",
-                    subject_codes={code},
-                    workers=workers,
+                    report_root,
+                    database_root,
+                    workers,
+                    overwrite,
                 )
-                if counts["failed"]:
-                    raise RuntimeError(f"split failed for {counts['failed']} paper sets")
-                pack_subject_database(
-                    PackOptions(
-                        metadata_root=processed_root,
-                        output_dir=database_root / "a_level" / "cie",
-                        qualification="a_level",
-                        exam_board="cie",
-                        course_code=code,
-                        course_display_name=CIE_NAMES[code],
-                        overwrite=True,
-                    )
-                )
-            elif subject_id == "ocr:step":
-                assets = discover_step_assets()
-                _progress("downloading", 30, f"{subject_id}: 发现 {len(assets)} 份 PMT 资源")
-                counts = download_step_assets(assets, raw_root, delay_seconds=0)
-                if counts["failed"]:
-                    raise RuntimeError(f"download failed for {counts['failed']} assets")
-                counts = split_step_downloads(raw_root, processed_root, report_root / "web_update_step_split.jsonl")
-                if counts["failed"]:
-                    raise RuntimeError(f"split failed for {counts['failed']} assets")
-                pack_subject_database(
-                    PackOptions(
-                        metadata_root=processed_root,
-                        output_dir=database_root / "admissions" / "ocr",
-                        qualification="admissions",
-                        exam_board="ocr",
-                        course_code="step",
-                        course_display_name="Sixth Term Examination Paper",
-                        overwrite=True,
-                    )
-                )
-            elif subject_id == "uat:tmua":
-                process_tmua(data_root, download=True, activate=False)
-            else:
-                exam = subject_id.split(":", 1)[1]
-                archive_url = next(url for url in DEFAULT_ARCHIVE_URLS if "esat-preparation" in url)
-                assets = [asset for asset in discover_assets(archive_url) if asset.exam == exam]
-                if not assets:
-                    raise RuntimeError("UAT-UK returned no resources")
-                _progress("downloading", 30, f"{subject_id}: 发现 {len(assets)} 份 UAT-UK 资源")
-                counts = download_uat_assets(assets, raw_root, delay_seconds=0)
-                if counts["failed"]:
-                    raise RuntimeError(f"download failed for {counts['failed']} assets")
-                counts = split_uat_downloads(
-                    raw_root,
-                    processed_root,
-                    report_root / f"web_update_{exam}_split.jsonl",
-                    exams={exam},
-                )
-                if counts["failed"]:
-                    raise RuntimeError(f"split failed for {counts['failed']} assets")
-                pack_subject_database(
-                    PackOptions(
-                        metadata_root=processed_root,
-                        output_dir=database_root / "admissions" / "uat",
-                        qualification="admissions",
-                        exam_board="uat",
-                        course_code=exam,
-                        course_display_name=UAT_NAMES[exam],
-                        overwrite=True,
-                    )
-                )
-            completed.append(subject_id)
-        except Exception as exc:
-            failures.append(f"{subject_id}: {exc}")
-            _progress("splitting", 60, f"{subject_id} 失败，继续处理其他项目: {exc}")
-
-    if not completed:
-        raise RuntimeError("all selected projects failed: " + "; ".join(failures))
-
-    _progress("splitting", 68, f"已完成 {len(completed)} 个项目，正在盘点入库")
-    active = build_and_activate_release(data_root)
+                completed += 1
+            except Exception as exc:
+                failures.append(f"{current_stage}/{subject_id}: {exc}")
+                _progress(_stage_name(current_stage), 60, f"{subject_id} 失败，继续处理其他项目: {exc}")
+        if not completed:
+            raise RuntimeError(f"all selected projects failed during {current_stage}: " + "; ".join(failures))
     if failures:
-        _progress("classifying", 99, f"已更新 {len(completed)} 个项目；{len(failures)} 个失败: {'; '.join(failures)}")
+        _progress("classifying", 99, f"已更新 {completed} 个项目；{len(failures)} 个失败: {'; '.join(failures)}")
     else:
-        _progress("classifying", 99, "全部所选项目已更新")
+        _progress(_stage_name(stages[-1]), 99, "所选操作已完成")
     return active
+
+
+def _run_subject_stage(
+    stage: str,
+    subject_id: str,
+    raw_root: Path,
+    processed_root: Path,
+    report_root: Path,
+    database_root: Path,
+    workers: int,
+    overwrite: bool,
+) -> None:
+    if subject_id.startswith("cie:"):
+        code = subject_id.split(":", 1)[1]
+        if stage == "download":
+            assets = discover_frank_assets(
+                qualification="a_level",
+                subject_codes={code},
+                start_year=2020,
+                end_year=date.today().year,
+                seasons=("Mar", "Jun", "Nov"),
+                workers=workers,
+            )
+            if not assets:
+                raise RuntimeError("Frank returned no resources")
+            _progress("downloading", 20, f"{subject_id}: 发现 {len(assets)} 份 Frank 资源")
+            counts = crawl_assets(
+                assets,
+                raw_root,
+                report_root / f"web_update_cie_{code}_download.jsonl",
+                delay_seconds=0.2,
+                resume=False,
+                max_workers=workers,
+                overwrite=overwrite,
+            )
+        elif stage == "split":
+            _progress("splitting", 45, f"{subject_id}: 正在切题")
+            counts = split_installed_paper_sets(
+                raw_root,
+                processed_root,
+                report_root / f"web_update_cie_{code}_split.jsonl",
+                subject_codes={code},
+                workers=workers,
+                overwrite=overwrite,
+            )
+        else:
+            _progress("cataloging", 70, f"{subject_id}: 正在盘点入库")
+            pack_subject_database(PackOptions(
+                metadata_root=processed_root,
+                output_dir=database_root / "a_level" / "cie",
+                qualification="a_level",
+                exam_board="cie",
+                course_code=code,
+                course_display_name=CIE_NAMES[code],
+                overwrite=overwrite,
+            ))
+            return
+    elif subject_id == "ocr:step":
+        if stage == "download":
+            assets = discover_step_assets()
+            _progress("downloading", 20, f"{subject_id}: 发现 {len(assets)} 份 PMT 资源")
+            counts = download_step_assets(assets, raw_root, delay_seconds=0, overwrite=overwrite)
+        elif stage == "split":
+            _progress("splitting", 45, f"{subject_id}: 正在切题")
+            counts = split_step_downloads(
+                raw_root,
+                processed_root,
+                report_root / "web_update_step_split.jsonl",
+                overwrite=overwrite,
+            )
+        else:
+            _progress("cataloging", 70, f"{subject_id}: 正在盘点入库")
+            pack_subject_database(PackOptions(
+                metadata_root=processed_root,
+                output_dir=database_root / "admissions" / "ocr",
+                qualification="admissions",
+                exam_board="ocr",
+                course_code="step",
+                course_display_name="Sixth Term Examination Paper",
+                overwrite=overwrite,
+            ))
+            return
+    else:
+        exam = subject_id.split(":", 1)[1]
+        if stage == "download":
+            page = "tmua-preparation" if exam == "tmua" else "esat-preparation"
+            archive_url = next(url for url in DEFAULT_ARCHIVE_URLS if page in url)
+            assets = [asset for asset in discover_assets(archive_url) if asset.exam == exam]
+            if not assets:
+                raise RuntimeError("UAT-UK returned no resources")
+            _progress("downloading", 20, f"{subject_id}: 发现 {len(assets)} 份 UAT-UK 资源")
+            counts = download_uat_assets(assets, raw_root, delay_seconds=0, overwrite=overwrite)
+        elif stage == "split":
+            _progress("splitting", 45, f"{subject_id}: 正在切题")
+            counts = split_uat_downloads(
+                raw_root,
+                processed_root,
+                report_root / f"web_update_{exam}_split.jsonl",
+                exams={exam},
+                overwrite=overwrite,
+            )
+        else:
+            _progress("cataloging", 70, f"{subject_id}: 正在盘点入库")
+            pack_subject_database(PackOptions(
+                metadata_root=processed_root,
+                output_dir=database_root / "admissions" / "uat",
+                qualification="admissions",
+                exam_board="uat",
+                course_code=exam,
+                course_display_name=UAT_NAMES[exam],
+                overwrite=overwrite,
+            ))
+            return
+    if counts["failed"]:
+        raise RuntimeError(f"{stage} failed for {counts['failed']} assets")
+
+
+def _stage_name(stage: str) -> str:
+    return {
+        "download": "downloading",
+        "split": "splitting",
+        "inventory": "cataloging",
+        "search": "classifying",
+    }[stage]
 
 
 def main() -> None:
@@ -158,7 +215,13 @@ def main() -> None:
     unknown = set(selected) - supported
     if unknown:
         raise ValueError(f"unsupported update subjects: {', '.join(sorted(unknown))}")
-    update_catalog(DATA_ROOT, selected, int(os.environ.get("OME_UPDATE_CONCURRENCY", "4")))
+    update_catalog(
+        DATA_ROOT,
+        selected,
+        int(os.environ.get("OME_UPDATE_CONCURRENCY", "4")),
+        os.environ.get("OME_UPDATE_STAGE", "all"),
+        os.environ.get("OME_UPDATE_MODE", "update"),
+    )
 
 
 if __name__ == "__main__":

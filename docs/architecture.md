@@ -49,11 +49,14 @@ oh-my-exam/
 
 The dedicated Web update page probes fixed upstream sources and compares their
 resource identities with local immutable PDFs before an administrator confirms
-the download. Subject selection and bounded download concurrency are passed to
-the backend-owned update subprocess. The command downloads, splits, packages,
-builds a candidate catalog, extracts answer text, runs SQLite integrity and
-non-empty-catalog checks, and atomically replaces the active catalog only after
-validation. There is no manual review gate after processing starts. A failed
+the download. Probing is recorded and executed in a background thread, while
+processing stages run in the backend-owned subprocess. Subject selection,
+bounded download concurrency, the requested stage, and update/overwrite mode
+are passed through environment variables. Administrators can run download,
+split, portable-database inventory, or search publication independently, or run
+them in sequence. Incremental mode skips complete local artifacts; overwrite
+mode regenerates the selected stage. Publication always builds and validates an
+isolated candidate before atomically replacing the active catalog. A failed
 candidate leaves the active file untouched.
 
 Answer corrections are append-only `answer_versions` rows with `raw_text` and `markdown`. Saving creates and immediately publishes a new version. Structured marking points are intentionally absent.

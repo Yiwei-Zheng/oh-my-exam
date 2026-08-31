@@ -49,6 +49,7 @@ def crawl_assets(
     progress: Callable[[dict[str, object]], None] | None = None,
     should_stop: Callable[[], bool] | None = None,
     skipped_progress_interval: int = 1,
+    overwrite: bool = False,
 ) -> dict[str, int]:
     completed = _read_completed_stems(report_path) if resume else set()
     counts = {"downloaded": 0, "missing": 0, "failed": 0, "rate_limited": 0, "skipped": 0}
@@ -68,7 +69,10 @@ def crawl_assets(
             for index, asset in pending:
                 if should_stop and should_stop():
                     break
-                outcome = try_download_asset(asset, output_root, min_delay_seconds=delay_seconds)
+                options: dict[str, object] = {"min_delay_seconds": delay_seconds}
+                if overwrite:
+                    options["overwrite"] = True
+                outcome = try_download_asset(asset, output_root, **options)
                 _write_crawl_outcome(report, outcome)
                 counts[outcome.status] += 1
                 if progress:
@@ -87,7 +91,10 @@ def crawl_assets(
                 index, asset = next(asset_iter)
             except StopIteration:
                 return False
-            future = executor.submit(try_download_asset, asset, output_root, min_delay_seconds=delay_seconds)
+            options: dict[str, object] = {"min_delay_seconds": delay_seconds}
+            if overwrite:
+                options["overwrite"] = True
+            future = executor.submit(try_download_asset, asset, output_root, **options)
             future_assets[future] = (index, asset)
             return True
 
@@ -225,4 +232,3 @@ def _outcome_record(outcome: DownloadOutcome) -> dict[str, object]:
     record = asdict(outcome.asset)
     record.update({"stem": outcome.asset.stem, "status": outcome.status, "path": str(outcome.path) if outcome.path else None, "message": outcome.message})
     return record
-

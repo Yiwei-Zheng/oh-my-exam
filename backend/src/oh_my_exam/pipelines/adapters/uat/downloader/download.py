@@ -18,10 +18,11 @@ def download_asset(
     raw_root: Path,
     *,
     timeout_seconds: float = 60.0,
+    overwrite: bool = False,
 ) -> tuple[Path, str]:
     target = raw_root / asset.relative_pdf_path
     metadata_path = target.with_suffix(".json")
-    if target.exists() and target.stat().st_size > 0 and metadata_path.exists():
+    if not overwrite and target.exists() and target.stat().st_size > 0 and metadata_path.exists():
         return target, "skipped"
     target.parent.mkdir(parents=True, exist_ok=True)
     part_path = target.with_suffix(".pdf.part")
@@ -62,11 +63,17 @@ def download_assets(
     delay_seconds: float = 0.2,
     timeout_seconds: float = 60.0,
     progress: ProgressCallback | None = None,
+    overwrite: bool = False,
 ) -> dict[str, int]:
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
     for asset in assets:
         try:
-            path, status = download_asset(asset, raw_root, timeout_seconds=timeout_seconds)
+            path, status = download_asset(
+                asset,
+                raw_root,
+                timeout_seconds=timeout_seconds,
+                overwrite=overwrite,
+            )
             record: dict[str, object] = {"asset": asset.stem, "status": status, "path": path.as_posix()}
         except Exception as exc:
             status = "failed"
