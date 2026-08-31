@@ -41,6 +41,7 @@ interface ProbeResult {
   local_count: number
   new_count: number
   new_resources: UpdateResource[]
+  errors: { subject_id: string; message: string }[]
   probed_at: string
 }
 
@@ -84,6 +85,7 @@ const copy = {
     empty: '请至少选择一个科目',
     unavailable: '更新流水线尚未配置',
     probeFailed: '资源嗅探失败，请检查来源网络后重试。',
+    partialProbeFailed: '部分项目嗅探失败，其他项目的结果不受影响。',
     startFailed: '未能启动工作流，请稍后重试。',
     more: '项未展开',
     stages: ['嗅探', '下载', '切题', '盘点入库', '可搜索'],
@@ -122,6 +124,8 @@ const copy = {
     unavailable: 'The update pipeline is not configured',
     probeFailed:
       'Resource probing failed. Check source connectivity and try again.',
+    partialProbeFailed:
+      'Some projects could not be probed. Results from other projects are unaffected.',
     startFailed: 'The workflow could not be started. Try again shortly.',
     more: 'more not shown',
     stages: ['Probe', 'Download', 'Split', 'Inventory', 'Searchable'],
@@ -379,6 +383,16 @@ export function QuestionUpdateWorkspace() {
                       {probe.new_count ? c.newFoundHint : c.noNewHint}
                     </AlertDescription>
                   </Alert>
+                  {probe.errors.length > 0 && (
+                    <Alert variant="destructive">
+                      <AlertTitle>{c.partialProbeFailed}</AlertTitle>
+                      <AlertDescription>
+                        {probe.errors
+                          .map((item) => `${item.subject_id}: ${item.message}`)
+                          .join('\n')}
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   {probe.new_resources.length > 0 && (
                     <div className="max-h-44 space-y-1 overflow-y-auto rounded-2xl border p-2">
                       {probe.new_resources.slice(0, 12).map((resource) => (

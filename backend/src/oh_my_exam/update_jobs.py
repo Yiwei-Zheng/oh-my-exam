@@ -13,6 +13,9 @@ from typing import Sequence
 WORKFLOWS: tuple[dict[str, str], ...] = (
     {"id": "cie:9709", "code": "9709", "name": "Mathematics", "family": "CIE A-Level"},
     {"id": "cie:9231", "code": "9231", "name": "Mathematics - Further", "family": "CIE A-Level"},
+    {"id": "ocr:step", "code": "STEP", "name": "Sixth Term Examination Paper", "family": "Admissions"},
+    {"id": "uat:engaa", "code": "ENGAA", "name": "Engineering Admissions Assessment", "family": "UAT-UK"},
+    {"id": "uat:nsaa", "code": "NSAA", "name": "Natural Sciences Admissions Assessment", "family": "UAT-UK"},
     {"id": "uat:tmua", "code": "TMUA", "name": "Test of Mathematics for University Admission", "family": "UAT-UK"},
 )
 WORKFLOW_IDS = {str(item["id"]) for item in WORKFLOWS}
@@ -41,11 +44,17 @@ class UpdateJobManager:
     def probe(self, subject_ids: Sequence[str], paper_root: Path) -> dict[str, object]:
         selected = self._validate_subjects(subject_ids)
         resources: list[dict[str, object]] = []
-        cie_subjects = [item for item in selected if item.startswith("cie:")]
-        if cie_subjects:
-            resources.extend(self._probe_cie(cie_subjects, paper_root))
-        if "uat:tmua" in selected:
-            resources.extend(self._probe_tmua(paper_root))
+        errors: list[dict[str, str]] = []
+        for subject_id in selected:
+            try:
+                if subject_id.startswith("cie:"):
+                    resources.extend(self._probe_cie([subject_id], paper_root))
+                elif subject_id == "ocr:step":
+                    resources.extend(self._probe_step(paper_root))
+                else:
+                    resources.extend(self._probe_uat(subject_id, paper_root))
+            except Exception as exc:
+                errors.append({"subject_id": subject_id, "message": str(exc)[:500]})
         new_resources = [item for item in resources if not item["local"]]
         return {
             "subjects": selected,
@@ -53,6 +62,7 @@ class UpdateJobManager:
             "local_count": len(resources) - len(new_resources),
             "new_count": len(new_resources),
             "new_resources": new_resources,
+            "errors": errors,
             "probed_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -114,12 +124,13 @@ class UpdateJobManager:
                 shell=False,
             )
             assert process.stdout is not None
+            last_message = ""
             for line in process.stdout:
-                self._consume_progress(job_id, line.strip())
+                last_message = self._consume_progress(job_id, line.strip()) or last_message
             code = process.wait()
             if code:
                 raise RuntimeError(f"题库更新进程退出，代码 {code}")
-            self._update(job_id, status="completed", stage="completed", progress=100, message="题库已更新")
+            self._update(job_id, status="completed", stage="completed", progress=100, message=last_message or "题库已更新")
         except Exception as exc:
             self._update(job_id, status="failed", stage="failed", message=str(exc)[:500])
 
@@ -148,6 +159,8 @@ class UpdateJobManager:
             seasons=("Mar", "Jun", "Nov"),
             workers=4,
         )
+        if not assets:
+            raise RuntimeError(f"Frank returned no resources for {', '.join(sorted(codes))}")
         return [
             {
                 "id": asset.stem,
@@ -164,15 +177,36 @@ class UpdateJobManager:
         ]
 
     @staticmethod
-    def _probe_tmua(paper_root: Path) -> list[dict[str, object]]:
-        from .pipelines.adapters.uat.downloader.catalog import DEFAULT_ARCHIVE_URLS, discover_assets
+    def _probe_step(paper_root: Path) -> list[dict[str, object]]:
+        from .pipelines.adapters.step.downloader.catalog import discover_assets
 
-        archive_url = next(url for url in DEFAULT_ARCHIVE_URLS if "tmua-preparation" in url)
-        assets = [asset for asset in discover_assets(archive_url) if asset.exam == "tmua"]
         return [
             {
                 "id": asset.stem,
-                "subject_id": "uat:tmua",
+                "subject_id": "ocr:step",
+                "label": asset.stem,
+                "year": asset.year,
+                "document_type": asset.document_type,
+                "local": (paper_root / asset.relative_pdf_path).is_file()
+                and (paper_root / asset.relative_pdf_path).stat().st_size > 0,
+            }
+            for asset in discover_assets()
+        ]
+
+    @staticmethod
+    def _probe_uat(subject_id: str, paper_root: Path) -> list[dict[str, object]]:
+        from .pipelines.adapters.uat.downloader.catalog import DEFAULT_ARCHIVE_URLS, discover_assets
+
+        exam = subject_id.split(":", 1)[1]
+        page = "tmua-preparation" if exam == "tmua" else "esat-preparation"
+        archive_url = next(url for url in DEFAULT_ARCHIVE_URLS if page in url)
+        assets = [asset for asset in discover_assets(archive_url) if asset.exam == exam]
+        if not assets:
+            raise RuntimeError(f"UAT-UK returned no resources for {exam}")
+        return [
+            {
+                "id": asset.stem,
+                "subject_id": subject_id,
                 "label": asset.stem,
                 "year": asset.year,
                 "document_type": asset.document_type,
@@ -182,16 +216,16 @@ class UpdateJobManager:
             for asset in assets
         ]
 
-    def _consume_progress(self, job_id: int, line: str) -> None:
+    def _consume_progress(self, job_id: int, line: str) -> str | None:
         if not line:
-            return
+            return None
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
             self._update(job_id, message=line[:500])
-            return
+            return line[:500]
         if not isinstance(payload, dict):
-            return
+            return None
         allowed_stages = {"checking", "downloading", "splitting", "cataloging", "classifying"}
         stage = str(payload.get("stage", ""))
         progress = payload.get("progress")
@@ -201,6 +235,7 @@ class UpdateJobManager:
             progress=max(0, min(99, int(progress))) if isinstance(progress, (int, float)) else None,
             message=str(payload.get("message", ""))[:500] or None,
         )
+        return str(payload.get("message", ""))[:500] or None
 
     def _update(
         self,
