@@ -44,10 +44,12 @@ def split_downloaded(
     completed = _completed_assets(report_path) if not overwrite else set()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with report_path.open("a", encoding="utf-8") as report:
-        for asset in assets:
+        for index, asset in enumerate(assets, start=1):
             output_dir = processed_root / asset.output_relative_dir
             if not overwrite and asset.stem in completed and any(output_dir.glob(f"{asset.stem}_*.json")):
                 counts["skipped"] += 1
+                if progress:
+                    progress({"asset": asset.stem, "status": "skipped", "index": index, "total": len(assets)})
                 continue
             if overwrite:
                 shutil.rmtree(output_dir, ignore_errors=True)
@@ -63,6 +65,7 @@ def split_downloaded(
                 status = "failed"
                 record = {"asset": asset.stem, "status": status, "message": str(exc)}
             counts[status] += 1
+            record.update({"index": index, "total": len(assets)})
             report.write(json.dumps(record, ensure_ascii=False) + "\n")
             report.flush()
             if progress:

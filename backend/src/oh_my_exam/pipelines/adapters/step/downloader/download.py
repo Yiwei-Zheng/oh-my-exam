@@ -6,6 +6,7 @@ import os
 import shutil
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -82,29 +83,47 @@ def download_assets(
     delay_seconds: float = 0.2,
     timeout_seconds: float = 60.0,
     progress: ProgressCallback | None = None,
+    workers: int = 1,
     overwrite: bool = False,
 ) -> dict[str, int]:
+    assets = list(assets)
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
-    source_paths: dict[str, Path] = {}
+    groups: dict[str, list[StepAsset]] = {}
     for asset in assets:
-        try:
-            path, status = download_asset(
-                asset,
-                raw_root,
-                timeout_seconds=timeout_seconds,
-                reuse_from=source_paths.get(asset.source_url),
-                overwrite=overwrite,
-            )
-            source_paths[asset.source_url] = path
-            record: dict[str, object] = {"asset": asset.stem, "status": status, "path": path.as_posix()}
-        except Exception as exc:
-            status = "failed"
-            record = {"asset": asset.stem, "status": status, "message": str(exc)}
-        counts[status] += 1
-        if progress:
-            progress(record)
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)
+        groups.setdefault(asset.source_url, []).append(asset)
+
+    def run_group(group: list[StepAsset]) -> list[dict[str, object]]:
+        records: list[dict[str, object]] = []
+        reuse_from: Path | None = None
+        for asset in group:
+            try:
+                path, status = download_asset(
+                    asset,
+                    raw_root,
+                    timeout_seconds=timeout_seconds,
+                    reuse_from=reuse_from,
+                    overwrite=overwrite,
+                )
+                reuse_from = path
+                records.append({"asset": asset.stem, "status": status, "path": path.as_posix()})
+            except Exception as exc:
+                records.append({"asset": asset.stem, "status": "failed", "message": str(exc)})
+            if delay_seconds > 0:
+                time.sleep(delay_seconds)
+        return records
+
+    completed = 0
+    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as executor:
+        futures = [executor.submit(run_group, group) for group in groups.values()]
+        for future in as_completed(futures):
+            records = future.result()
+            for record in records:
+                completed += 1
+                status = str(record["status"])
+                record.update({"index": completed, "total": len(assets)})
+                counts[status] += 1
+                if progress:
+                    progress(record)
     return counts
 
 

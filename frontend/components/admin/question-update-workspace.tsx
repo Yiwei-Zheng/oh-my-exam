@@ -53,6 +53,8 @@ interface UpdateJob {
   message: string
   action: PipelineAction
   result: ProbeResult | null
+  elapsed_seconds: number
+  eta_seconds: number | null
 }
 
 type PipelineAction =
@@ -80,8 +82,9 @@ const copy = {
       '没有发现需要下载的新资源。你仍可以重新运行切题、盘点和索引流程。',
     newFound: '发现可下载的新资源',
     newFoundHint: '确认并发数后开始下载。下载完成后会自动进入后续工作流。',
-    concurrency: '并发下载数',
-    concurrencyHint: '范围 1–12。来源限流时建议使用 2–4。',
+    concurrency: '流水线并行度',
+    concurrencyHint:
+      '已按本机逻辑处理器自动设置。范围 1–32，数值越高会并行发现、下载和切分 CIE 资源。',
     start: '下载并进入工作流',
     rerun: '重新盘点并入库',
     backgroundHint: '任务由后端 CLI 在后台运行，启动后可以离开此页。',
@@ -89,6 +92,19 @@ const copy = {
     complete: '题库更新完成',
     failed: '工作流未完成',
     retry: '重新嗅探',
+    currentWork: '当前处理',
+    elapsed: '已用时间',
+    remaining: '预计剩余',
+    estimating: '正在估算',
+    stageDescriptions: {
+      checking: '检查来源和本地资源状态',
+      downloading: '发现、下载并校验原始 PDF',
+      splitting: '切分题目与答案 JPG',
+      cataloging: '盘点资源并写入科目数据库',
+      classifying: '建立搜索索引并发布题库',
+      completed: '全部处理已经完成',
+      failed: '处理已停止，请查看当前信息',
+    },
     empty: '请至少选择一个科目',
     unavailable: '更新流水线尚未配置',
     probeFailed: '资源嗅探失败，请检查来源网络后重试。',
@@ -122,8 +138,9 @@ const copy = {
     newFound: 'New resources are ready to download',
     newFoundHint:
       'Confirm concurrency to begin. The remaining workflow runs automatically after downloading.',
-    concurrency: 'Concurrent downloads',
-    concurrencyHint: 'Choose 1–12. Use 2–4 when a source rate-limits requests.',
+    concurrency: 'Pipeline parallelism',
+    concurrencyHint:
+      'Automatically matched to this machine. Choose 1–32; higher values parallelize CIE discovery, downloads, and splitting.',
     start: 'Download and continue',
     rerun: 'Rebuild inventory and index',
     backgroundHint:
@@ -132,6 +149,19 @@ const copy = {
     complete: 'Library update complete',
     failed: 'Workflow did not complete',
     retry: 'Probe again',
+    currentWork: 'Processing now',
+    elapsed: 'Elapsed',
+    remaining: 'Estimated remaining',
+    estimating: 'Estimating',
+    stageDescriptions: {
+      checking: 'Checking sources and local resource state',
+      downloading: 'Discovering, downloading, and validating source PDFs',
+      splitting: 'Splitting question and answer JPGs',
+      cataloging: 'Inventorying resources and writing subject databases',
+      classifying: 'Building the search index and publishing the library',
+      completed: 'All processing is complete',
+      failed: 'Processing stopped; review the current details',
+    },
     empty: 'Choose at least one subject',
     unavailable: 'The update pipeline is not configured',
     probeFailed:
@@ -186,11 +216,13 @@ export function QuestionUpdateWorkspace() {
   useEffect(() => {
     apiRequest<{
       configured: boolean
+      recommended_concurrency: number
       workflows: WorkflowSubject[]
       job: UpdateJob | null
     }>('/api/v1/admin/question-update')
       .then((result) => {
         setConfigured(result.configured)
+        setConcurrency(result.recommended_concurrency)
         setSubjects(result.workflows)
         setSelected(result.workflows.map((item) => item.id))
         setExpandedFamilies(
@@ -482,23 +514,23 @@ export function QuestionUpdateWorkspace() {
                   )}
                   <div>
                     <label
-                      htmlFor="download-concurrency"
+                      htmlFor="pipeline-concurrency"
                       className="text-sm font-medium"
                     >
                       {c.concurrency}
                     </label>
                     <div className="mt-2 flex items-center gap-3">
                       <Input
-                        id="download-concurrency"
+                        id="pipeline-concurrency"
                         type="number"
                         min={1}
-                        max={12}
+                        max={32}
                         value={concurrency}
                         onChange={(event) =>
                           setConcurrency(
                             Math.max(
                               1,
-                              Math.min(12, Number(event.target.value) || 1),
+                              Math.min(32, Number(event.target.value) || 1),
                             ),
                           )
                         }
@@ -535,7 +567,7 @@ export function QuestionUpdateWorkspace() {
             className="update-card-enter mt-6 rounded-3xl border bg-card p-5 md:p-6"
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="font-semibold">
                   {job.status === 'completed'
                     ? c.complete
@@ -544,7 +576,9 @@ export function QuestionUpdateWorkspace() {
                       : c.running}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {job.message}
+                  {c.stageDescriptions[
+                    job.stage as keyof typeof c.stageDescriptions
+                  ] || job.stage}
                 </p>
               </div>
               <span className="font-mono text-2xl font-semibold tabular-nums">
@@ -558,6 +592,23 @@ export function QuestionUpdateWorkspace() {
                   transform: `scaleX(${job.progress / 100})`,
                   transformOrigin: 'left',
                 }}
+              />
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <StatusDetail label={c.currentWork} value={job.message} />
+              <StatusDetail
+                label={c.elapsed}
+                value={formatDuration(job.elapsed_seconds, locale)}
+              />
+              <StatusDetail
+                label={c.remaining}
+                value={
+                  job.status === 'completed'
+                    ? '—'
+                    : job.eta_seconds === null
+                      ? c.estimating
+                      : formatDuration(job.eta_seconds, locale)
+                }
               />
             </div>
             {job.status === 'failed' && (
@@ -574,6 +625,31 @@ export function QuestionUpdateWorkspace() {
       </main>
     </div>
   )
+}
+
+function StatusDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-2xl bg-muted/55 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium" title={value}>
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function formatDuration(seconds: number, locale: 'zh-CN' | 'en') {
+  const roundedMinutes = Math.max(1, Math.round(seconds / 60))
+  if (roundedMinutes < 60) {
+    return locale === 'zh-CN'
+      ? `约 ${roundedMinutes} 分钟`
+      : `about ${roundedMinutes} min`
+  }
+  const hours = Math.floor(roundedMinutes / 60)
+  const minutes = roundedMinutes % 60
+  return locale === 'zh-CN'
+    ? `约 ${hours} 小时${minutes ? ` ${minutes} 分钟` : ''}`
+    : `about ${hours} hr${minutes ? ` ${minutes} min` : ''}`
 }
 
 function WorkflowSubjectTree({

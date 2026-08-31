@@ -146,3 +146,46 @@ def test_job_progress_does_not_move_backwards(tmp_path: Path) -> None:
     job = manager.get(job_id)
     assert job["stage"] == "classifying"
     assert job["progress"] == 82
+
+
+def test_update_subprocess_uses_utf8_and_reports_eta(monkeypatch, tmp_path: Path) -> None:
+    manager = UpdateJobManager(tmp_path / "app.sqlite3", ("update",))
+    with manager._connect() as connection:
+        connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO users (id) VALUES (1)")
+        cursor = connection.execute(
+            """
+            INSERT INTO question_update_jobs
+                (requested_by, status, stage, action, progress, message, started_at)
+            VALUES (1, 'running', 'downloading', 'all', 25, '', datetime('now', '-100 seconds'))
+            """
+        )
+        job_id = int(cursor.lastrowid)
+
+    captured: dict[str, object] = {}
+
+    class Process:
+        stdout = [json.dumps({"stage": "downloading", "progress": 25, "message": "正在下载试卷"}, ensure_ascii=False)]
+
+        @staticmethod
+        def wait() -> int:
+            return 0
+
+    def popen(*_args, **kwargs):
+        captured.update(kwargs)
+        return Process()
+
+    monkeypatch.setattr("oh_my_exam.update_jobs.subprocess.Popen", popen)
+
+    running = manager.get(job_id)
+    manager._run(job_id, ["cie:9709"], 16, "all", "update")
+
+    environment = captured["env"]
+    assert isinstance(environment, dict)
+    assert environment["PYTHONUTF8"] == "1"
+    assert environment["PYTHONIOENCODING"] == "utf-8"
+    assert captured["encoding"] == "utf-8"
+    assert captured["errors"] == "strict"
+    assert 95 <= running["elapsed_seconds"] <= 105
+    assert 285 <= running["eta_seconds"] <= 315
+    assert manager.get(job_id)["message"] == "正在下载试卷"

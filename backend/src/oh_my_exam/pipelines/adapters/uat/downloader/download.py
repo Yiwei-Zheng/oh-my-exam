@@ -4,6 +4,7 @@ import hashlib
 import json
 import time
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -63,10 +64,13 @@ def download_assets(
     delay_seconds: float = 0.2,
     timeout_seconds: float = 60.0,
     progress: ProgressCallback | None = None,
+    workers: int = 1,
     overwrite: bool = False,
 ) -> dict[str, int]:
+    assets = list(assets)
     counts = {"downloaded": 0, "skipped": 0, "failed": 0}
-    for asset in assets:
+
+    def run(asset: ArchiveAsset) -> dict[str, object]:
         try:
             path, status = download_asset(
                 asset,
@@ -74,15 +78,21 @@ def download_assets(
                 timeout_seconds=timeout_seconds,
                 overwrite=overwrite,
             )
-            record: dict[str, object] = {"asset": asset.stem, "status": status, "path": path.as_posix()}
+            return {"asset": asset.stem, "status": status, "path": path.as_posix()}
         except Exception as exc:
-            status = "failed"
-            record = {"asset": asset.stem, "status": status, "message": str(exc)}
-        counts[status] += 1
-        if progress:
-            progress(record)
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)
+            return {"asset": asset.stem, "status": "failed", "message": str(exc)}
+
+    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as executor:
+        futures = [executor.submit(run, asset) for asset in assets]
+        for index, future in enumerate(as_completed(futures), start=1):
+            record = future.result()
+            status = str(record["status"])
+            record.update({"index": index, "total": len(assets)})
+            counts[status] += 1
+            if progress:
+                progress(record)
+            if delay_seconds > 0:
+                time.sleep(delay_seconds)
     return counts
 
 

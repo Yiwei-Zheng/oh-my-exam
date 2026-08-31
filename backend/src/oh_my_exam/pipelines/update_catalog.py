@@ -39,7 +39,7 @@ def update_catalog(
     stage: str = "all",
     mode: str = "update",
 ) -> Path:
-    workers = max(1, min(12, int(workers)))
+    workers = max(1, min(32, int(workers)))
     if stage not in {"all", *STAGES}:
         raise ValueError(f"unsupported update stage: {stage}")
     if mode not in {"update", "overwrite"}:
@@ -60,7 +60,7 @@ def update_catalog(
             active = build_and_activate_release(data_root)
             continue
         completed = 0
-        for subject_id in subject_ids:
+        for subject_index, subject_id in enumerate(subject_ids):
             try:
                 _run_subject_stage(
                     current_stage,
@@ -71,6 +71,8 @@ def update_catalog(
                     database_root,
                     workers,
                     overwrite,
+                    subject_index,
+                    len(subject_ids),
                 )
                 completed += 1
             except Exception as exc:
@@ -94,10 +96,25 @@ def _run_subject_stage(
     database_root: Path,
     workers: int,
     overwrite: bool,
+    subject_index: int,
+    subject_count: int,
 ) -> None:
+    stage_ranges = {"download": (8, 40), "split": (40, 68), "inventory": (68, 82)}
+    lower, upper = stage_ranges[stage]
+
+    def emit(fraction: float, message: str) -> None:
+        overall = (subject_index + max(0.0, min(1.0, fraction))) / subject_count
+        _progress(_stage_name(stage), round(lower + (upper - lower) * overall), message)
+
+    def admission_progress(record: dict[str, object], operation: str) -> None:
+        completed = int(record.get("index") or 0)
+        total = max(1, int(record.get("total") or 1))
+        emit(completed / total, f"{subject_id}: {operation} {record.get('asset', '')} ({completed}/{total})")
+
     if subject_id.startswith("cie:"):
         code = subject_id.split(":", 1)[1]
         if stage == "download":
+            emit(0, f"{subject_id}: 正在发现可下载资源")
             assets = discover_frank_assets(
                 qualification="a_level",
                 subject_codes={code},
@@ -108,7 +125,14 @@ def _run_subject_stage(
             )
             if not assets:
                 raise RuntimeError("Frank returned no resources")
-            _progress("downloading", 20, f"{subject_id}: 发现 {len(assets)} 份 Frank 资源")
+            emit(0, f"{subject_id}: 发现 {len(assets)} 份 Frank 资源")
+
+            def download_progress(record: dict[str, object]) -> None:
+                counts = record.get("counts") or {}
+                completed = sum(int(value) for value in counts.values()) if isinstance(counts, dict) else 0
+                total = max(1, int(record.get("total") or len(assets)))
+                emit(completed / total, f"{subject_id}: 正在下载 {record.get('asset', '')} ({completed}/{total})")
+
             counts = crawl_assets(
                 assets,
                 raw_root,
@@ -116,20 +140,28 @@ def _run_subject_stage(
                 delay_seconds=0.2,
                 resume=False,
                 max_workers=workers,
+                progress=download_progress,
                 overwrite=overwrite,
             )
         elif stage == "split":
-            _progress("splitting", 45, f"{subject_id}: 正在切题")
+            emit(0, f"{subject_id}: 正在准备题目和答案切图")
+
+            def split_progress(record: dict[str, object]) -> None:
+                completed = int(record.get("index") or 0)
+                total = max(1, int(record.get("total") or 1))
+                emit(completed / total, f"{subject_id}: 正在切分 {record.get('key', '')} ({completed}/{total})")
+
             counts = split_installed_paper_sets(
                 raw_root,
                 processed_root,
                 report_root / f"web_update_cie_{code}_split.jsonl",
                 subject_codes={code},
                 workers=workers,
+                progress=split_progress,
                 overwrite=overwrite,
             )
         else:
-            _progress("cataloging", 70, f"{subject_id}: 正在盘点入库")
+            emit(0, f"{subject_id}: 正在盘点入库")
             pack_subject_database(PackOptions(
                 metadata_root=processed_root,
                 output_dir=database_root / "a_level" / "cie",
@@ -139,22 +171,31 @@ def _run_subject_stage(
                 course_display_name=CIE_NAMES[code],
                 overwrite=overwrite,
             ))
+            emit(1, f"{subject_id}: 已完成盘点入库")
             return
     elif subject_id == "ocr:step":
         if stage == "download":
             assets = discover_step_assets()
-            _progress("downloading", 20, f"{subject_id}: 发现 {len(assets)} 份 PMT 资源")
-            counts = download_step_assets(assets, raw_root, delay_seconds=0, overwrite=overwrite)
+            emit(0, f"{subject_id}: 发现 {len(assets)} 份 PMT 资源，正在下载")
+            counts = download_step_assets(
+                assets,
+                raw_root,
+                delay_seconds=0,
+                workers=workers,
+                progress=lambda record: admission_progress(record, "正在下载"),
+                overwrite=overwrite,
+            )
         elif stage == "split":
-            _progress("splitting", 45, f"{subject_id}: 正在切题")
+            emit(0, f"{subject_id}: 正在切分题目和答案图片")
             counts = split_step_downloads(
                 raw_root,
                 processed_root,
                 report_root / "web_update_step_split.jsonl",
+                progress=lambda record: admission_progress(record, "正在切分"),
                 overwrite=overwrite,
             )
         else:
-            _progress("cataloging", 70, f"{subject_id}: 正在盘点入库")
+            emit(0, f"{subject_id}: 正在盘点入库")
             pack_subject_database(PackOptions(
                 metadata_root=processed_root,
                 output_dir=database_root / "admissions" / "ocr",
@@ -164,6 +205,7 @@ def _run_subject_stage(
                 course_display_name="Sixth Term Examination Paper",
                 overwrite=overwrite,
             ))
+            emit(1, f"{subject_id}: 已完成盘点入库")
             return
     else:
         exam = subject_id.split(":", 1)[1]
@@ -173,19 +215,27 @@ def _run_subject_stage(
             assets = [asset for asset in discover_assets(archive_url) if asset.exam == exam]
             if not assets:
                 raise RuntimeError("UAT-UK returned no resources")
-            _progress("downloading", 20, f"{subject_id}: 发现 {len(assets)} 份 UAT-UK 资源")
-            counts = download_uat_assets(assets, raw_root, delay_seconds=0, overwrite=overwrite)
+            emit(0, f"{subject_id}: 发现 {len(assets)} 份 UAT-UK 资源，正在下载")
+            counts = download_uat_assets(
+                assets,
+                raw_root,
+                delay_seconds=0,
+                workers=workers,
+                progress=lambda record: admission_progress(record, "正在下载"),
+                overwrite=overwrite,
+            )
         elif stage == "split":
-            _progress("splitting", 45, f"{subject_id}: 正在切题")
+            emit(0, f"{subject_id}: 正在切分题目和答案图片")
             counts = split_uat_downloads(
                 raw_root,
                 processed_root,
                 report_root / f"web_update_{exam}_split.jsonl",
                 exams={exam},
+                progress=lambda record: admission_progress(record, "正在切分"),
                 overwrite=overwrite,
             )
         else:
-            _progress("cataloging", 70, f"{subject_id}: 正在盘点入库")
+            emit(0, f"{subject_id}: 正在盘点入库")
             pack_subject_database(PackOptions(
                 metadata_root=processed_root,
                 output_dir=database_root / "admissions" / "uat",
@@ -195,6 +245,7 @@ def _run_subject_stage(
                 course_display_name=UAT_NAMES[exam],
                 overwrite=overwrite,
             ))
+            emit(1, f"{subject_id}: 已完成盘点入库")
             return
     if counts["failed"]:
         raise RuntimeError(f"{stage} failed for {counts['failed']} assets")

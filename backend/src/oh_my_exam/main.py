@@ -418,6 +418,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def latest_question_update(_: User = Depends(admin_user)) -> dict[str, object]:
         return {
             "configured": updates.configured,
+            "recommended_concurrency": updates.recommended_concurrency,
             "workflows": updates.workflows(),
             "job": updates.latest(),
         }
@@ -444,7 +445,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "job": updates.start(
                     user.id,
                     subject_ids=payload.subjects if payload else None,
-                    concurrency=payload.concurrency if payload else 4,
+                    concurrency=payload.concurrency if payload else None,
                     stage=payload.stage if payload else "all",
                     mode=payload.mode if payload else "update",
                 )

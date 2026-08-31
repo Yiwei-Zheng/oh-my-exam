@@ -29,6 +29,7 @@ JOB_STAGE = {
     "search": "classifying",
 }
 STAGE_ORDER = {"checking": 0, "downloading": 1, "splitting": 2, "cataloging": 3, "classifying": 4}
+MAX_PIPELINE_WORKERS = 32
 
 
 class UpdateJobManager:
@@ -47,6 +48,10 @@ class UpdateJobManager:
     @property
     def configured(self) -> bool:
         return bool(self.command)
+
+    @property
+    def recommended_concurrency(self) -> int:
+        return min(MAX_PIPELINE_WORKERS, max(4, os.cpu_count() or 4))
 
     def workflows(self) -> list[dict[str, object]]:
         return [{**item, "status": "ready"} for item in WORKFLOWS]
@@ -98,14 +103,14 @@ class UpdateJobManager:
         self,
         requested_by: int,
         subject_ids: Sequence[str] | None = None,
-        concurrency: int = 4,
+        concurrency: int | None = None,
         stage: str = "all",
         mode: str = "update",
     ) -> dict[str, object]:
         if not self.configured:
             raise RuntimeError("question update pipeline is not configured")
         selected = self._validate_subjects(subject_ids or tuple(WORKFLOW_IDS))
-        concurrency = max(1, min(12, int(concurrency)))
+        concurrency = max(1, min(MAX_PIPELINE_WORKERS, int(concurrency or self.recommended_concurrency)))
         if stage not in UPDATE_STAGES:
             raise ValueError(f"unknown_update_stage: {stage}")
         if mode not in UPDATE_MODES:
@@ -189,6 +194,8 @@ class UpdateJobManager:
             environment["OME_UPDATE_CONCURRENCY"] = str(concurrency)
             environment["OME_UPDATE_STAGE"] = stage
             environment["OME_UPDATE_MODE"] = mode
+            environment["PYTHONUTF8"] = "1"
+            environment["PYTHONIOENCODING"] = "utf-8"
             process = subprocess.Popen(
                 self.command,
                 cwd=self.database_path.parent,
@@ -197,7 +204,7 @@ class UpdateJobManager:
                 stderr=subprocess.STDOUT,
                 text=True,
                 encoding="utf-8",
-                errors="replace",
+                errors="strict",
                 shell=False,
             )
             assert process.stdout is not None
@@ -381,9 +388,21 @@ class UpdateJobManager:
     @staticmethod
     def _serialize(row: sqlite3.Row) -> dict[str, object]:
         result = json.loads(row["result_json"]) if row["result_json"] else None
+        started_at = datetime.fromisoformat(row["started_at"])
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        finished_at = datetime.fromisoformat(row["finished_at"]) if row["finished_at"] else None
+        if finished_at is not None and finished_at.tzinfo is None:
+            finished_at = finished_at.replace(tzinfo=timezone.utc)
+        elapsed_seconds = max(0, round(((finished_at or datetime.now(timezone.utc)) - started_at).total_seconds()))
+        progress = int(row["progress"])
+        eta_seconds = None
+        if row["status"] == "running" and 5 <= progress < 100:
+            eta_seconds = max(0, round(elapsed_seconds * (100 - progress) / progress))
         return {
             "id": int(row["id"]), "status": row["status"], "stage": row["stage"],
             "action": row["action"], "result": result,
-            "progress": int(row["progress"]), "message": row["message"],
+            "progress": progress, "message": row["message"],
             "started_at": row["started_at"], "finished_at": row["finished_at"],
+            "elapsed_seconds": elapsed_seconds, "eta_seconds": eta_seconds,
         }

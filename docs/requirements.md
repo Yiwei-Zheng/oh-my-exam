@@ -66,13 +66,16 @@ architecture must allow new exam families without global rewrites.
 - The question-bank update page lists only subjects with an end-to-end workflow.
   Administrators select subjects with grouped tree checkboxes, probe fixed upstream sources, compare the
   result with local immutable PDFs, confirm newly discovered resources, and set
-  download concurrency before processing begins.
+  pipeline parallelism before processing begins. Parallelism defaults to the
+  server's logical processor count and is bounded from 1 to 32.
 - Probe, download, split, inventory, and search publication are individually
   runnable from the workflow track. Each stage offers incremental update and
   overwrite modes; the same modes are available for the complete pipeline.
 - Web requests create durable job records and start the pipeline in an isolated
   subprocess; source probing also runs as a durable background job so slow
   upstream sites never hold the Web request open.
+- The subprocess boundary uses UTF-8 explicitly. Running jobs report the current
+  stage and resource, elapsed time, and an estimated remaining duration.
 - Every step has explicit inputs, outputs, status, logs, and artifact identity.
 - Steps are idempotent and retryable. A failed run keeps its logs and may be
   restarted by an administrator.

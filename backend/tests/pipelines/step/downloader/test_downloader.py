@@ -4,7 +4,7 @@ from io import BytesIO
 import json
 
 from oh_my_exam.pipelines.adapters.step.downloader.catalog import parse_archive_html
-from oh_my_exam.pipelines.adapters.step.downloader.download import _pdf_looks_complete, download_asset
+from oh_my_exam.pipelines.adapters.step.downloader.download import _pdf_looks_complete, download_asset, download_assets
 from oh_my_exam.pipelines.adapters.step.downloader.models import StepAsset
 
 
@@ -69,3 +69,32 @@ def test_download_metadata_separates_exam_board_from_source_provider(tmp_path, m
     assert status == "downloaded"
     assert metadata["exam_board"] == "ocr"
     assert metadata["source_provider"] == "pmt"
+
+
+def test_parallel_download_groups_reuse_shared_step_sources(tmp_path, monkeypatch) -> None:
+    assets = [
+        StepAsset(2017, 1, "ms", "https://pmt.example/bundle.pdf"),
+        StepAsset(2017, 2, "ms", "https://pmt.example/bundle.pdf"),
+        StepAsset(2024, 1, "qp", "https://pmt.example/paper.pdf"),
+    ]
+    reused_by_asset: dict[str, object] = {}
+    progress: list[dict[str, object]] = []
+
+    def fake_download(asset, _raw_root, *, reuse_from=None, **_kwargs):
+        path = tmp_path / f"{asset.stem}.pdf"
+        path.write_bytes(b"%PDF-1.7\n%%EOF\n")
+        reused_by_asset[asset.stem] = reuse_from
+        return path, "downloaded"
+
+    monkeypatch.setattr(
+        "oh_my_exam.pipelines.adapters.step.downloader.download.download_asset",
+        fake_download,
+    )
+
+    counts = download_assets(assets, tmp_path, delay_seconds=0, workers=3, progress=progress.append)
+
+    assert counts == {"downloaded": 3, "skipped": 0, "failed": 0}
+    assert reused_by_asset["step_2017_s1_ms"] is None
+    assert reused_by_asset["step_2017_s2_ms"] is not None
+    assert sorted(int(item["index"]) for item in progress) == [1, 2, 3]
+    assert {item["total"] for item in progress} == {3}

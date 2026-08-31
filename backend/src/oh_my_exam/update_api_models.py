@@ -11,6 +11,6 @@ class QuestionUpdateProbeRequest(BaseModel):
 
 class QuestionUpdateStartRequest(BaseModel):
     subjects: list[str] = Field(min_length=1, max_length=20)
-    concurrency: int = Field(default=4, ge=1, le=12)
+    concurrency: int | None = Field(default=None, ge=1, le=32)
     stage: Literal["all", "download", "split", "inventory", "search"] = "all"
     mode: Literal["update", "overwrite"] = "update"
