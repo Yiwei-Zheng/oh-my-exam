@@ -218,9 +218,19 @@ def test_catalog_question_and_local_pdf_endpoints(tmp_path: Path) -> None:
     assert answer_image.status_code == 200
     assert answer_image.content.startswith(b"\xff\xd8")
 
+    exported = client.get("/api/v1/exams/admissions:uat:engaa/questions/7/export.pdf")
+    assert exported.status_code == 200
+    assert exported.headers["content-type"] == "application/pdf"
+    assert exported.headers["content-disposition"] == (
+        'attachment; filename="engaa_2023_s1_qp_q07_question_and_answer.pdf"'
+    )
+    with pymupdf.open(stream=exported.content, filetype="pdf") as document:
+        assert document.page_count == 2
+
     paper = client.get("/api/v1/exams/admissions:uat:engaa/papers/1/question")
     assert paper.status_code == 200
     assert paper.headers["content-type"] == "application/pdf"
+    assert paper.headers["content-disposition"] == 'inline; filename="engaa_2023_s1_qp.pdf"'
     assert paper.content.startswith(b"%PDF")
 
     paper_range = client.get(

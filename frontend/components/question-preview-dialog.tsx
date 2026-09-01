@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
+import { Download01Icon, LinkSquare02Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 
 import { useLocale } from '@/components/locale-provider'
 import { Badge } from '@/components/ui/badge'
@@ -60,14 +62,12 @@ export function QuestionPreviewDialog({
   open,
   onOpenChange,
   similar = [],
-  onChooseSimilar,
   textPanel,
 }: {
   question: Question | null
   open: boolean
   onOpenChange: (open: boolean) => void
   similar?: Question[]
-  onChooseSimilar?: (question: Question) => void
   textPanel?: ReactNode
 }) {
   return (
@@ -76,7 +76,6 @@ export function QuestionPreviewDialog({
         <QuestionPreview
           question={question}
           similar={similar}
-          onChooseSimilar={onChooseSimilar}
           textPanel={textPanel}
           dialogTitle
         />
@@ -88,24 +87,38 @@ export function QuestionPreviewDialog({
 export function QuestionPreview({
   question,
   similar = [],
-  onChooseSimilar,
   textPanel,
   dialogTitle = false,
+  exportUrl,
+  showSimilar = true,
 }: {
   question: Question | null
   similar?: Question[]
-  onChooseSimilar?: (question: Question) => void
   textPanel?: ReactNode
   dialogTitle?: boolean
+  exportUrl?: string
+  showSimilar?: boolean
 }) {
   const { t } = useLocale()
   const [similarOpen, setSimilarOpen] = useState(false)
+  const [selectedSimilar, setSelectedSimilar] = useState<Question | null>(null)
+  const [activeTab, setActiveTab] = useState<'question' | 'answer' | 'text'>(
+    'question',
+  )
 
   if (!question) return null
-  const chooseSimilar = (item: Question) => {
-    setSimilarOpen(false)
-    onChooseSimilar?.(item)
-  }
+  const sourceType = activeTab === 'answer' ? 'answer' : 'question'
+  const sourceIndex = sourceType === 'question' ? 0 : 1
+  const sourcePage =
+    question.crop_regions?.find((region) => region.source_type === sourceIndex)
+      ?.page_index ??
+    (sourceType === 'question'
+      ? question.question_page_index
+      : question.answer_page_index) ??
+    0
+  const sourcePdfUrl = question.exam_id
+    ? `/api/v1/exams/${encodeURIComponent(question.exam_id)}/papers/${question.paper_id}/${sourceType}#page=${sourcePage + 1}`
+    : ''
   return (
     <div className="flex h-full min-h-0 flex-col">
       <DialogHeader className="border-b px-5 py-4 pr-16">
@@ -125,16 +138,31 @@ export function QuestionPreview({
               <Badge variant="secondary">Q{question.question_number}</Badge>
             </h2>
           )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-11"
-            onClick={() => setSimilarOpen(true)}
-          >
-            {t('similar')}
-            <Badge variant="secondary">{similar.length}</Badge>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {exportUrl && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                render={<a href={exportUrl} download />}
+              >
+                <HugeiconsIcon icon={Download01Icon} data-icon="inline-start" />
+                {t('exportQuestionAnswer')}
+              </Button>
+            )}
+            {showSimilar && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={() => setSimilarOpen(true)}
+              >
+                {t('similar')}
+                <Badge variant="secondary">{similar.length}</Badge>
+              </Button>
+            )}
+          </div>
         </div>
         {dialogTitle ? (
           <DialogDescription>{t('questionPreview')}</DialogDescription>
@@ -144,13 +172,33 @@ export function QuestionPreview({
           </p>
         )}
       </DialogHeader>
-      <Tabs defaultValue="question" className="flex min-h-0 flex-1 flex-col">
-        <div className="border-b px-4 py-2">
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as 'question' | 'answer' | 'text')
+        }
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2">
           <TabsList>
             <TabsTrigger value="question">{t('question')}</TabsTrigger>
             <TabsTrigger value="answer">{t('answer')}</TabsTrigger>
             {textPanel && <TabsTrigger value="text">{t('text')}</TabsTrigger>}
           </TabsList>
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            disabled={!sourcePdfUrl}
+            render={
+              sourcePdfUrl ? (
+                <a href={sourcePdfUrl} target="_blank" rel="noreferrer" />
+              ) : undefined
+            }
+          >
+            <HugeiconsIcon icon={LinkSquare02Icon} data-icon="inline-start" />
+            {t('viewInSourcePaper')}
+          </Button>
         </div>
         <TabsContent value="question" className="m-0 min-h-0 flex-1">
           <DocumentFrame
@@ -193,7 +241,7 @@ export function QuestionPreview({
           <span className="text-xs text-muted-foreground">—</span>
         )}
       </div>
-      <Dialog open={similarOpen} onOpenChange={setSimilarOpen}>
+      <Dialog open={showSimilar && similarOpen} onOpenChange={setSimilarOpen}>
         <DialogContent className="max-h-[min(80dvh,720px)] gap-4 overflow-hidden sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t('similar')}</DialogTitle>
@@ -205,7 +253,7 @@ export function QuestionPreview({
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => chooseSimilar(item)}
+                  onClick={() => setSelectedSimilar(item)}
                   className="ui-interactive flex min-h-14 w-full items-start gap-3 rounded-xl border bg-background p-3 text-left hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className="font-mono text-xs text-muted-foreground">
@@ -241,6 +289,21 @@ export function QuestionPreview({
               </p>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={selectedSimilar !== null}
+        onOpenChange={(open) => !open && setSelectedSimilar(null)}
+      >
+        <DialogContent className="h-[92dvh] max-w-[calc(100%-1rem)] gap-0 overflow-hidden p-0 duration-[var(--motion-smooth)] [animation-timing-function:var(--motion-spring)] data-open:zoom-in-75 sm:max-w-[min(1200px,calc(100%-2rem))]">
+          {selectedSimilar && (
+            <QuestionPreview
+              question={selectedSimilar}
+              dialogTitle
+              showSimilar={false}
+              exportUrl={`/api/v1/exams/${encodeURIComponent(selectedSimilar.exam_id || question.exam_id || '')}/questions/${selectedSimilar.id}/export.pdf`}
+            />
+          )}
         </DialogContent>
       </Dialog>
     </div>

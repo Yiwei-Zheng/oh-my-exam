@@ -372,7 +372,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
     return () => document.removeEventListener('paste', onPaste)
   }, [acceptImage, mode])
 
-  const selectedExamId = selected?.exam_id || (examId === 'all' ? '' : examId)
   const topicTree = useMemo(() => buildTopicTree(topics), [topics])
   const visibleTopicTree = useMemo(
     () => filterTopicTree(topicTree, topicFilter),
@@ -776,9 +775,6 @@ export function QuestionSearch({ compact = false }: { compact?: boolean }) {
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
         similar={similar}
-        onChooseSimilar={(item) =>
-          choose({ ...item, exam_id: item.exam_id || selectedExamId })
-        }
       />
     </section>
   )

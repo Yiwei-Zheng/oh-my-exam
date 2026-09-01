@@ -381,6 +381,11 @@ class GlobalCatalog:
                        p.id AS paper_id, p.source_key AS paper_key, qt.content,
                        ql.code AS qualification, eb.code AS exam_board, ep.code AS course_code,
                        qs.rank, qs.score,
+                       (SELECT MIN(qr.page_index) FROM question_regions qr
+                        WHERE qr.question_id = target.id) AS question_page_index,
+                       (SELECT MIN(ar.page_index) FROM answers a
+                        JOIN answer_regions ar ON ar.answer_id = a.id
+                        WHERE a.question_id = target.id) AS answer_page_index,
                        GROUP_CONCAT(DISTINCT target_labels.name) AS topics,
                        GROUP_CONCAT(DISTINCT shared_labels.name) AS shared_topics
                 FROM question_similarities qs
@@ -648,4 +653,7 @@ class GlobalCatalog:
             if not topics and "course_code" in keys:
                 topics = [str(row["course_code"]).upper()]
             result["topics"] = topics
+        for key in ("question_page_index", "answer_page_index"):
+            if key in keys:
+                result[key] = row[key]
         return result

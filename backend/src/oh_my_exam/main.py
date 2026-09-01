@@ -28,6 +28,7 @@ from .image_search import (
 from .login_security import LoginRateLimited, LoginRateLimiter
 from .paper_store import FileSystemPaperStore, PaperNotFoundError
 from .question_image_store import FileSystemQuestionImageStore, QuestionImageNotFoundError
+from .question_export import build_question_answer_pdf
 from .system_monitor import SystemMonitor
 from .update_api_models import QuestionUpdateProbeRequest, QuestionUpdateStartRequest
 from .update_jobs import UpdateJobManager
@@ -284,6 +285,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
+    @app.get("/api/v1/exams/{exam_id}/questions/{question_id}/export.pdf")
+    def export_question(exam_id: str, question_id: int) -> Response:
+        try:
+            question = catalog.get_question_image(exam_id, question_id, "question")
+            answer = catalog.get_question_image(exam_id, question_id, "answer")
+            content = build_question_answer_pdf(
+                question_images.find_by_storage_key(question.storage_key),
+                question_images.find_by_storage_key(answer.storage_key),
+            )
+        except (CatalogNotFoundError, QuestionImageNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        filename = f"{Path(question.filename).stem}_question_and_answer.pdf"
+        return Response(
+            content=content,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @app.get("/api/v1/exams/{exam_id}/papers/{paper_id}/{kind}")
     def get_paper(exam_id: str, paper_id: int, kind: str) -> FileResponse:
         try:
@@ -291,7 +310,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             path = papers.find_by_storage_key(storage_key)
         except (CatalogNotFoundError, PaperNotFoundError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-        return FileResponse(path, media_type="application/pdf", filename=path.name)
+        return FileResponse(
+            path,
+            media_type="application/pdf",
+            filename=path.name,
+            content_disposition_type="inline",
+        )
 
     @app.post("/api/v1/auth/login")
     def login(payload: LoginRequest, request: Request, response: Response) -> dict[str, object]:

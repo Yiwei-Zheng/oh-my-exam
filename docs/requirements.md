@@ -62,7 +62,11 @@ architecture must allow new exam families without global rewrites.
   opening a modal. The viewer loads only the catalog-owned pre-rendered JPG and
   reports a missing asset instead of rendering or embedding a PDF.
 - Every question has similar-question recommendations available in a separate
-  dialog; selecting one replaces the current preview and refreshes its recommendations.
+  dialog. Selecting one opens an animated detail dialog above the list, so closing
+  the nested dialogs returns to the original question. The detail dialog can export
+  the selected question and answer images as one two-page PDF.
+- Every original and similar-question preview links to the corresponding page in
+  the source question paper or answer paper for the active document tab.
 - Every question preview shows its topic tags below the document. Similarity
   candidates span A Level and admissions programs instead of being isolated by course.
   When no syllabus topic is available, the exam program code is shown as a

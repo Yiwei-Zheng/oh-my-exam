@@ -38,6 +38,8 @@ export interface Question {
   score?: number
   shared_topics?: string[]
   answer_structured?: AnswerStructured | null
+  question_page_index?: number | null
+  answer_page_index?: number | null
   crop_regions?: Array<{
     source_type: 0 | 1
     page_index: number

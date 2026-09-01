@@ -362,9 +362,6 @@ export function AssetsPanel({
               <QuestionPreview
                 question={selected}
                 similar={similar}
-                onChooseSimilar={(question) =>
-                  chooseQuestion(question, question.exam_id || selected.exam_id)
-                }
                 textPanel={
                   readOnly ? (
                     <div className="space-y-6">
