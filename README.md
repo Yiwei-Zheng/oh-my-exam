@@ -4,7 +4,7 @@
 
 [简体中文](README_CN.md) · **English**
 
-![Question browser showing a precisely cropped mathematics question](docs/readme-assets/question-browser.png)
+![Question browser showing a precisely cropped mathematics question](docs/readme-assets/question-browser-en.png)
 
 ---
 
@@ -20,7 +20,7 @@ Oh My Exam turns exam papers with inconsistent sources, ages, layouts, and scan 
 
 The local catalog shown in the screenshots contains 24,136 questions, 1,333 papers, and 2,557 source documents. Runtime data is not committed to Git; actual counts depend on the locally built catalog.
 
-![Administrator overview](docs/readme-assets/admin-overview.png)
+![Administrator overview](docs/readme-assets/admin-overview-en.png)
 
 ## The complete pipeline
 
@@ -45,7 +45,7 @@ Atomic publication
 
 Every stage can run independently, incrementally, or in overwrite mode. Web requests create durable job records while the real work runs in an isolated subprocess. Jobs remain inspectable after a browser disconnect, support pause/resume, and continuously report stage, current resource, elapsed time, and estimated time remaining.
 
-![Pipeline workspace](docs/readme-assets/pipeline-workspace.png)
+![Pipeline workspace](docs/readme-assets/pipeline-workspace-en.png)
 
 ## Fast downloading without abusing upstream servers
 
@@ -101,7 +101,7 @@ The current implementation intentionally avoids pretending that a small, OCR-noi
 
 Topics come from a maintained syllabus hierarchy and a question may carry multiple tags. Ranking uses one global corpus, enabling cross-program recommendations between A Level and admissions questions when their mathematical language and topics overlap. The schema already includes embedding-model and question-embedding tables, so neural retrieval can be introduced later without breaking the current API.
 
-![Explainable similar-question recommendations](docs/readme-assets/similar-questions.png)
+![Explainable similar-question recommendations](docs/readme-assets/similar-questions-en.png)
 
 ## Search and image search
 
